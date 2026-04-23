@@ -13,7 +13,7 @@ Polyceph allows you to transcend single-message AI interaction by constructing *
 ## Usage Guide
 
 1. **Open Settings**: Locate **Polyceph** in the SillyTavern extensions menu (Puzzle icon).
-2. **Enable Interception**: Toggle **Enable Polyceph Pipeline Interception**. When active, your normal "Send" button will instead fire the Polyceph engine.
+2. **Enable Interception**: Toggle **Enable Polyceph**. When active, your normal "Send" button will instead fire the Polyceph engine.
 3. **Build your Pipeline**: Add one or more **Steps**. Each step contains one or more **Profile Targets**.
 
 ### 1. Placeholders & Macros
