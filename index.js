@@ -24,8 +24,58 @@ function interceptSend(e) {
     e.stopImmediatePropagation();
     textarea.value = '';
 
-    SillyTavern.getContext().executeSlashCommandsWithOptions(`/echo ${text}`, {});
+    const context = SillyTavern.getContext();
+    const userName = context.name1 || 'User';
+    const avatarStr = typeof context.getThumbnailUrl === 'function' && context.userAvatar ?
+        context.getThumbnailUrl('avatar', context.userAvatar) : '';
+
+    const message = {
+        name: userName,
+        is_user: true,
+        is_system: false,
+        send_date: typeof context.humanizedDateTime === 'function' ? context.humanizedDateTime() : new Date().toLocaleString(),
+        mes: text,
+        force_avatar: avatarStr,
+        extra: {}
+    };
+
+    context.chat.push(message);
+    if (context.eventSource && context.eventTypes) {
+        context.eventSource.emit(context.eventTypes.MESSAGE_RECEIVED, context.chat.length - 1);
+    }
+    if (typeof context.addOneMessage === 'function') context.addOneMessage(message);
+    if (typeof context.saveChat === 'function') context.saveChat();
+
     runPipeline(text);
+}
+
+function interceptSwipe(e) {
+    if (!settings.enabled) return;
+    
+    if (!e.target.classList.contains('swipe_right')) return;
+    
+    const mesBlock = e.target.closest('.mes');
+    if (!mesBlock) return;
+    
+    const mesId = parseInt(mesBlock.getAttribute('mesid'));
+    const context = SillyTavern.getContext();
+    const chatMsg = context.chat[mesId];
+    
+    if (!chatMsg || !chatMsg.extra || chatMsg.extra.model !== 'polyceph') return;
+
+    const swipeId = chatMsg.swipe_id || 0;
+    const swipesLen = chatMsg.swipes ? chatMsg.swipes.length : 1;
+    
+    if (swipeId === swipesLen - 1) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        
+        const batchId = chatMsg.extra.polyceph_batch;
+        const userInput = chatMsg.extra.polyceph_input || '';
+        
+        runPipeline(userInput, batchId);
+    }
 }
 
 function setupIntercepts() {
@@ -34,6 +84,7 @@ function setupIntercepts() {
 
     if (sendBtn) sendBtn.addEventListener('click', interceptSend, true);
     if (textArea) textArea.addEventListener('keydown', interceptSend, true);
+    document.body.addEventListener('click', interceptSwipe, true);
 }
 
 // -------------------------------------------------------------------------

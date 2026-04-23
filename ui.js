@@ -226,7 +226,15 @@ export function createSettingsHTML() {
                     <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
                         <label for="polyceph_delay"><b>Request Delay (ms):</b></label>
                         <input type="number" id="polyceph_delay" value="${settings.delayMs || 0}" min="0" step="50" style="width: 80px; padding: 2px;" />
-                        <small style="opacity: 0.7;">Pause between pipeline API requests</small>
+                        <label for="polyceph_generation_timeout" style="margin-left: 10px;"><b>Model Timeout (ms):</b></label>
+                        <input type="number" id="polyceph_generation_timeout" value="${settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 60000}" min="0" step="1000" style="width: 80px; padding: 2px;" />
+                    </div>
+
+                    <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
+                        <label for="polyceph_max_retries"><b>Max Retries:</b></label>
+                        <input type="number" id="polyceph_max_retries" value="${settings.maxRetries !== undefined ? settings.maxRetries : 3}" min="0" step="1" style="width: 60px; padding: 2px;" />
+                        <label for="polyceph_retry_delay" style="margin-left: 10px;"><b>Retry Delay (ms):</b></label>
+                        <input type="number" id="polyceph_retry_delay" value="${settings.retryDelayMs !== undefined ? settings.retryDelayMs : 2000}" min="0" step="100" style="width: 80px; padding: 2px;" />
                     </div>
 
                     <div id="polyceph_steps_container" class="polyceph-step-list"></div>
@@ -270,6 +278,21 @@ export function addSettingsUI() {
 
     document.getElementById('polyceph_delay')?.addEventListener('change', (e) => {
         settings.delayMs = parseInt(e.target.value) || 0;
+        SillyTavern.getContext().saveSettingsDebounced();
+    });
+
+    document.getElementById('polyceph_generation_timeout')?.addEventListener('change', (e) => {
+        settings.generationTimeoutMs = parseInt(e.target.value) || 0;
+        SillyTavern.getContext().saveSettingsDebounced();
+    });
+
+    document.getElementById('polyceph_max_retries')?.addEventListener('change', (e) => {
+        settings.maxRetries = parseInt(e.target.value) || 0;
+        SillyTavern.getContext().saveSettingsDebounced();
+    });
+
+    document.getElementById('polyceph_retry_delay')?.addEventListener('change', (e) => {
+        settings.retryDelayMs = parseInt(e.target.value) || 0;
         SillyTavern.getContext().saveSettingsDebounced();
     });
 

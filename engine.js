@@ -1,5 +1,6 @@
 import { MODULE_NAME } from './constants.js';
 import { settings, switchProfile } from './state.js';
+import { generateId } from './utils.js';
 
 export async function generateQuietly(profileName, prompt, useSystem) {
     if (!profileName || profileName === 'none') return prompt;
@@ -9,20 +10,33 @@ export async function generateQuietly(profileName, prompt, useSystem) {
 
         let responseData = "";
 
+        let apiPromise;
+
         if (useSystem && typeof context.generateQuietPrompt === 'function') {
-            responseData = await context.generateQuietPrompt({ quietPrompt: prompt });
+            apiPromise = context.generateQuietPrompt({ quietPrompt: prompt });
         } else if (!useSystem && typeof context.generateRaw === 'function') {
-            responseData = await context.generateRaw({ prompt: prompt, systemPrompt: '' });
+            apiPromise = context.generateRaw({ prompt: prompt, systemPrompt: '' });
         } else if (typeof context.generateQuietPrompt === 'function') {
             console.warn(`[${MODULE_NAME}] generateRaw not found, falling back to generateQuietPrompt.`);
-            responseData = await context.generateQuietPrompt({ quietPrompt: prompt });
+            apiPromise = context.generateQuietPrompt({ quietPrompt: prompt });
         } else {
             console.warn(`[${MODULE_NAME}] generateQuietPrompt not found, falling back to basic command execution.`);
             // Fallback for older ST versions
             const escaped = prompt.replace(/"/g, '\\"').replace(/\n/g, '\\n');
-            responseData = await context.executeSlashCommandsWithOptions(`/gen ${escaped}`, {
+            apiPromise = context.executeSlashCommandsWithOptions(`/gen ${escaped}`, {
                 handleExecutionErrors: false, handleParserErrors: false
             });
+        }
+
+        const timeoutMs = settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 60000;
+
+        if (timeoutMs > 0) {
+            responseData = await Promise.race([
+                apiPromise,
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Generation Timeout')), timeoutMs))
+            ]);
+        } else {
+            responseData = await apiPromise;
         }
 
         if (responseData) return responseData;
@@ -33,9 +47,16 @@ export async function generateQuietly(profileName, prompt, useSystem) {
     }
 }
 
-export async function runPipeline(userInput) {
-    toastr.info('Starting Polyceph Pipeline...', 'Polyceph');
+export async function runPipeline(userInput, generateSwipesForBatchId) {
+    //toastr.info('Starting Polyceph Pipeline...', 'Polyceph');
     const contextVault = { 'user_input': userInput };
+    const batchId = generateSwipesForBatchId || 'batch_' + generateId();
+    const stContext = SillyTavern.getContext();
+    
+    let cleanMessagesArr = [];
+    if (generateSwipesForBatchId) {
+        cleanMessagesArr = stContext.chat.filter(m => m.extra && m.extra.polyceph_batch === generateSwipesForBatchId);
+    }
 
     try {
         for (let i = 0; i < settings.steps.length; i++) {
@@ -86,7 +107,24 @@ export async function runPipeline(userInput) {
                         prompt = prompt.replace(regex, val);
                     }
 
-                    const res = await generateQuietly(node.profile, prompt, !!node.useSystem);
+                    let res = null;
+                    const maxAttempts = (settings.maxRetries !== undefined) ? settings.maxRetries : 0;
+
+                    for (let attempt = 0; attempt <= maxAttempts; attempt++) {
+                        res = await generateQuietly(node.profile, prompt, !!node.useSystem);
+
+                        const isEmpty = !res || res.trim() === "" || res === "(Generation returned empty)" || res === "(Error during generation)";
+
+                        if (!isEmpty) {
+                            break; // Success
+                        }
+
+                        if (attempt < maxAttempts) {
+                            toastr.warning(`Node failed or returned empty. Retrying (${attempt + 1}/${maxAttempts})...`, 'Polyceph');
+                            const delayWait = settings.retryDelayMs !== undefined ? settings.retryDelayMs : 2000;
+                            await new Promise(r => setTimeout(r, delayWait));
+                        }
+                    }
 
                     const sIdIndx = i + 1;
                     const tIdIndx = nodeIndex + 1;
@@ -98,8 +136,8 @@ export async function runPipeline(userInput) {
                         contextVault[node.label.trim()] = res;
                     }
 
-                    if (node.profile === 'none') {
-                        // Keep text completely clean for template-only nodes
+                    if (node.profile === 'none' || step.cleanPersist) {
+                        // Keep text completely clean for template-only and cleanPersist nodes
                         resultsByIndex[nodeIndex] = res;
                     } else {
                         // Wrap normally without the gigantic API profile names
@@ -114,7 +152,7 @@ export async function runPipeline(userInput) {
                 }
             }
 
-            const combinedResult = resultsByIndex.join('\n\n---\n\n');
+            const combinedResult = step.cleanPersist ? resultsByIndex.join('\n\n') : resultsByIndex.join('\n\n---\n\n');
             const sIdIndxOuter = i + 1;
 
             contextVault[step.id] = combinedResult;
@@ -131,24 +169,55 @@ export async function runPipeline(userInput) {
                     const avatarStr = typeof context.getThumbnailUrl === 'function' && context.characters?.[context.characterId] ?
                         context.getThumbnailUrl('avatar', context.characters[context.characterId].avatar) : '';
 
-                    const message = {
-                        name: charName,
-                        is_user: false,
-                        is_system: false,
-                        send_date: typeof context.humanizedDateTime === 'function' ? context.humanizedDateTime() : new Date().toLocaleString(),
-                        mes: combinedResult,
-                        force_avatar: avatarStr,
-                        extra: { api: 'manual', model: 'polyceph' }
-                    };
-                    context.chat.push(message);
-                    if (context.eventSource && context.eventTypes) {
-                        await context.eventSource.emit(context.eventTypes.MESSAGE_RECEIVED, context.chat.length - 1);
+                    const extraData = { api: 'manual', model: 'polyceph', polyceph_batch: batchId, polyceph_input: userInput, polyceph_step_id: step.id };
+
+                    let targetSwipeId = -1;
+                    if (generateSwipesForBatchId) {
+                        targetSwipeId = cleanMessagesArr.findIndex(m => m.extra && m.extra.polyceph_step_id === step.id);
                     }
-                    if (typeof context.addOneMessage === 'function') context.addOneMessage(message);
-                    if (context.eventSource && context.eventTypes) {
-                        await context.eventSource.emit(context.eventTypes.CHARACTER_MESSAGE_RENDERED, context.chat.length - 1);
+
+                    if (targetSwipeId !== -1) {
+                        const targetMessage = cleanMessagesArr[targetSwipeId];
+                        const actualMesId = context.chat.indexOf(targetMessage);
+
+                        if (!Array.isArray(targetMessage.swipes)) {
+                            targetMessage.swipes = [targetMessage.mes];
+                            targetMessage.swipe_info = [{}];
+                            targetMessage.swipe_id = 0;
+                        }
+
+                        targetMessage.swipes.push(combinedResult);
+                        targetMessage.swipe_id = targetMessage.swipes.length - 1;
+                        targetMessage.swipe_info.push({ extra: extraData });
+                        targetMessage.mes = combinedResult;
+
+                        if (typeof context.updateMessageBlock === 'function') {
+                            context.updateMessageBlock(actualMesId, targetMessage);
+                        }
+                        if (context.eventSource && context.eventTypes) {
+                            context.eventSource.emit(context.eventTypes.MESSAGE_SWIPED, actualMesId);
+                        }
+                        if (typeof context.saveChat === 'function') context.saveChat();
+                    } else {
+                        const message = {
+                            name: charName,
+                            is_user: false,
+                            is_system: false,
+                            send_date: typeof context.humanizedDateTime === 'function' ? context.humanizedDateTime() : new Date().toLocaleString(),
+                            mes: combinedResult,
+                            force_avatar: avatarStr,
+                            extra: extraData
+                        };
+                        context.chat.push(message);
+                        if (context.eventSource && context.eventTypes) {
+                            await context.eventSource.emit(context.eventTypes.MESSAGE_RECEIVED, context.chat.length - 1);
+                        }
+                        if (typeof context.addOneMessage === 'function') context.addOneMessage(message);
+                        if (context.eventSource && context.eventTypes) {
+                            await context.eventSource.emit(context.eventTypes.CHARACTER_MESSAGE_RENDERED, context.chat.length - 1);
+                        }
+                        if (typeof context.saveChat === 'function') context.saveChat();
                     }
-                    if (typeof context.saveChat === 'function') context.saveChat();
                 } else {
                     const stepHeader = step.label ? `[${step.label}]` : `[Polyceph Output: Step ${sIdIndxOuter}]`;
                     await context.executeSlashCommandsWithOptions(`/sys ${stepHeader}\n${combinedResult}`, {
@@ -164,7 +233,7 @@ export async function runPipeline(userInput) {
                 });
             }
         }
-        toastr.success('Pipeline finished.', 'Polyceph');
+        //toastr.success('Pipeline finished.', 'Polyceph');
     } catch (e) {
         toastr.error('Pipeline execution encountered an error.', 'Polyceph');
         console.error(`[${MODULE_NAME}] Pipeline Error`, e);
