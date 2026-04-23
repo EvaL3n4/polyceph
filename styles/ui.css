@@ -1,0 +1,60 @@
+/* Generic UI layout classes for Polyceph */
+
+.polyceph-settings {
+    margin-bottom: 10px;
+}
+
+.polyceph-header {
+    margin-bottom: 15px;
+    font-size: 0.9em;
+    color: var(--greyLight);
+}
+
+.polyceph-placeholders-container {
+    margin-bottom: 15px;
+    background: var(--black30a);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.polyceph-placeholders-header {
+    padding: 8px;
+    cursor: pointer;
+    font-size: 0.85em;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--black10a);
+}
+
+.polyceph-placeholders-header:hover {
+    background: var(--black40a);
+}
+
+.polyceph-placeholders-content {
+    padding: 8px;
+    font-size: 0.85em;
+    display: none;
+}
+
+.polyceph-placeholders-content.active {
+    display: block;
+}
+
+/* Global Intercept Indicator */
+#polyceph-status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.8em;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--smartThemeKeyColor);
+    color: var(--white);
+    margin-left: 10px;
+    display: none;
+}
+
+#polyceph-status-indicator.active {
+    display: inline-flex;
+}

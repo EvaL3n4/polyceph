@@ -1,0 +1,69 @@
+/* Pipeline steps and nodes layout elements */
+
+.polyceph-step-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.polyceph-step-card {
+    background-color: var(--black50a);
+    border: 1px solid var(--black30a);
+    border-radius: 5px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.polyceph-step-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: bold;
+    border-bottom: 1px solid var(--black30a);
+    padding-bottom: 5px;
+}
+
+.polyceph-nodes-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.polyceph-node-card {
+    background: var(--black30a);
+    padding: 8px;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.polyceph-node-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85em;
+}
+
+.polyceph-node-header select {
+    flex: 1;
+    margin-right: 10px;
+}
+
+.polyceph-node-card textarea {
+    width: 100%;
+    resize: vertical;
+    min-height: 60px;
+    font-family: monospace;
+    font-size: 0.85em;
+    line-height: 1.4;
+}
+
+.polyceph-add-node-btn,
+#polyceph_add_step_btn,
+#polyceph_refresh_profiles {
+    width: 100%;
+}

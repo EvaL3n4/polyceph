@@ -1,0 +1,92 @@
+import { MODULE_NAME, defaultSettings } from './constants.js';
+
+export let settings = { ...defaultSettings };
+export let availableProfiles = []; // Array of {id, name}
+
+/**
+ * Switch ST to a specific profile by ID or Name
+ */
+export async function switchProfile(profileId) {
+    if (!profileId) return false;
+    const context = SillyTavern.getContext();
+
+    // Find the readable name since `/profile` usually expects the UI name
+    const prof = availableProfiles.find(p => p.id === profileId);
+    const profileName = prof ? prof.name : profileId;
+
+    const quotedName = profileName.includes(' ') ? `"${profileName}"` : profileName;
+    try {
+        await context.executeSlashCommandsWithOptions(`/profile ${quotedName}`, {
+            handleExecutionErrors: false, handleParserErrors: false,
+        });
+        return true;
+    } catch (e) {
+        console.error(`[${MODULE_NAME}] Error switching profile to ${profileName}:`, e);
+        return false;
+    }
+}
+
+/**
+ * Fetch available connection profiles from ST.
+ */
+export async function getAvailableProfiles() {
+    try {
+        // Method 1: Check ST DOM directly
+        const profileSelect = document.querySelector('#api_profiles, #connection_profiles, select[name="api_profiles"]');
+        if (profileSelect) {
+            availableProfiles = Array.from(profileSelect.options)
+                .map(opt => ({ id: opt.value, name: opt.text }))
+                .filter(v => v.id && v.id !== 'default');
+            if (availableProfiles.length > 0) return availableProfiles;
+        }
+
+        // Method 2: Try settings
+        const response = await fetch('/api/settings/get', { method: 'POST' });
+        const data = await response.json();
+        const possibleLocs = [
+            data?.connectionManager?.profiles, data?.connection_profiles,
+            data?.profiles, data?.api?.profiles, data?.connectionProfiles
+        ];
+
+        for (const loc of possibleLocs) {
+            if (loc) {
+                if (Array.isArray(loc)) {
+                    availableProfiles = loc.map(p => {
+                        if (typeof p === 'string') return { id: p, name: p };
+                        return { id: p.id || p.name, name: p.name || p.id };
+                    });
+                } else if (typeof loc === 'object') {
+                    availableProfiles = Object.keys(loc).map(key => ({
+                        id: key,
+                        name: loc[key].name || key
+                    }));
+                }
+                if (availableProfiles.length > 0) return availableProfiles;
+            }
+        }
+    } catch (e) {
+        console.error(`[${MODULE_NAME}] Error fetching profiles:`, e);
+    }
+    return [];
+}
+
+export function saveSettings() {
+    const context = SillyTavern.getContext();
+    if (!context.extensionSettings) context.extensionSettings = {};
+    context.extensionSettings[MODULE_NAME] = settings;
+    context.saveSettingsDebounced();
+}
+
+export function loadSettings() {
+    const context = SillyTavern.getContext();
+    const saved = context.extensionSettings?.[MODULE_NAME];
+    if (saved) {
+        settings = { ...defaultSettings, ...saved };
+        // Migration safeguard
+        settings.steps.forEach(s => {
+            if (!s.nodes) {
+                s.nodes = [{ id: 'node_' + Math.random().toString(36).substring(2, 9), profile: s.models?.[0] || '', template: s.template || '{{user_input}}' }];
+            }
+        });
+    }
+}
