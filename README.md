@@ -1,6 +1,6 @@
 # Polyceph
 
-An advanced multi-model orchestration extension for SillyTavern. Define complex, user-governed reasoning pipelines that leverage multiple API profiles, sequential chain-of-thought, and batch swiping.
+An advanced multi-model orchestration extension for SillyTavern. Define complex, user-governed reasoning pipelines that allow a single user message to trigger a multi-step, multi-connection chain-of-thought process.
 
 ## Overview
 Polyceph allows you to transcend single-message AI interaction by constructing **Pipelines**. A single prompt from you can trigger a series of intermediate steps—where models can critique their own work, summarize chat history, or cross-reference multiple different API endpoints—before finally delivering a polished response into your chat.
