@@ -71,6 +71,7 @@ function interceptSwipe(e) {
         e.stopPropagation();
         e.stopImmediatePropagation();
         
+        toastr.info('Polyceph generation running...', 'Polyceph');
         const batchId = chatMsg.extra.polyceph_batch;
         const userInput = chatMsg.extra.polyceph_input || '';
         

@@ -47,6 +47,53 @@ export async function generateQuietly(profileName, prompt, useSystem) {
     }
 }
 
+async function startTypingIndicator() {
+    const context = SillyTavern.getContext();
+    const charName = context.characters?.[context.characterId]?.name || context.name2 || 'Assistant';
+    const avatarStr = typeof context.getThumbnailUrl === 'function' && context.characters?.[context.characterId] ?
+        context.getThumbnailUrl('avatar', context.characters[context.characterId].avatar) : '';
+
+    const typingMsg = {
+        name: charName,
+        is_user: false,
+        is_system: false,
+        send_date: typeof context.humanizedDateTime === 'function' ? context.humanizedDateTime() : new Date().toLocaleString(),
+        mes: '...',
+        force_avatar: avatarStr,
+        extra: { polyceph_typing: true }
+    };
+    context.chat.push(typingMsg);
+    if (context.eventSource && context.eventTypes) {
+        await context.eventSource.emit(context.eventTypes.MESSAGE_RECEIVED, context.chat.length - 1);
+    }
+    if (typeof context.addOneMessage === 'function') context.addOneMessage(typingMsg);
+}
+
+async function ensureTypingIndicatorAtEnd() {
+    const context = SillyTavern.getContext();
+    const idx = context.chat.findIndex(m => m.extra && m.extra.polyceph_typing);
+    if (idx === -1) return;
+
+    if (idx === context.chat.length - 1) return;
+
+    const msg = context.chat.splice(idx, 1)[0];
+    context.chat.push(msg);
+
+    if (typeof context.renderChat === 'function') await context.renderChat();
+}
+
+async function removeTypingIndicator() {
+    const context = SillyTavern.getContext();
+    const idx = context.chat.findIndex(m => m.extra && m.extra.polyceph_typing);
+    if (idx === -1) return;
+
+    context.chat.splice(idx, 1);
+    if (typeof context.renderChat === 'function') await context.renderChat();
+    // No saveChat here to avoid persisting the removal alone if not needed, 
+    // although it's safer to just do it.
+    if (typeof context.saveChat === 'function') context.saveChat();
+}
+
 export async function runPipeline(userInput, generateSwipesForBatchId) {
     //toastr.info('Starting Polyceph Pipeline...', 'Polyceph');
     const contextVault = { 'user_input': userInput };
@@ -57,6 +104,8 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
     if (generateSwipesForBatchId) {
         cleanMessagesArr = stContext.chat.filter(m => m.extra && m.extra.polyceph_batch === generateSwipesForBatchId);
     }
+
+    await startTypingIndicator();
 
     try {
         for (let i = 0; i < settings.steps.length; i++) {
@@ -193,6 +242,16 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
 
                         if (typeof context.updateMessageBlock === 'function') {
                             context.updateMessageBlock(actualMesId, targetMessage);
+                            
+                            // Manually update ST swipe UI state
+                            const mesBlock = document.querySelector(`.mes[mesid="${actualMesId}"]`);
+                            if (mesBlock) {
+                                const counter = mesBlock.querySelector('.swipes-counter');
+                                if (counter) counter.textContent = `${targetMessage.swipes.length}/${targetMessage.swipes.length}`;
+                                
+                                const swipeLeft = mesBlock.querySelector('.swipe_left');
+                                if (swipeLeft) swipeLeft.style.display = 'flex';
+                            }
                         }
                         if (context.eventSource && context.eventTypes) {
                             context.eventSource.emit(context.eventTypes.MESSAGE_SWIPED, actualMesId);
@@ -218,6 +277,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                         }
                         if (typeof context.saveChat === 'function') context.saveChat();
                     }
+                    await ensureTypingIndicatorAtEnd();
                 } else {
                     const stepHeader = step.label ? `[${step.label}]` : `[Polyceph Output: Step ${sIdIndxOuter}]`;
                     await context.executeSlashCommandsWithOptions(`/sys ${stepHeader}\n${combinedResult}`, {
@@ -237,5 +297,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
     } catch (e) {
         toastr.error('Pipeline execution encountered an error.', 'Polyceph');
         console.error(`[${MODULE_NAME}] Pipeline Error`, e);
+    } finally {
+        await removeTypingIndicator();
     }
 }
