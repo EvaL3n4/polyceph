@@ -26,6 +26,6 @@ For each pipeline Step, you can define:
 - **Persist output**: If enabled, the results of this step will be injected into your visible chat history as a "System Note" so you can visually verify the intermediate reasoning. If visually unchecked, the data only exists in memory to be passed down the pipeline.
 
 ### Running the Extension
-Once your pipeline steps are built, toggle on the **Enable Polyceph Pipeline Interception** checkbox at the top of the settings panel.
+Once your pipeline steps are built, toggle on the **Enable Polyceph** checkbox at the top of the settings panel.
 
 When enabled, simply type your message into the main SillyTavern text box and hit "Send". Polyceph will intercept the input, pass it through your custom pipeline, and push the final terminus output directly into the chat!

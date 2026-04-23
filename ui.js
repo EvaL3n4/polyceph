@@ -220,7 +220,7 @@ export function createSettingsHTML() {
                     
                     <div style="margin-bottom: 15px; display: flex; align-items: center; gap: 10px;">
                         <input type="checkbox" id="polyceph_enabled" ${settings.enabled ? 'checked' : ''}>
-                        <label for="polyceph_enabled"><b>Enable Polyceph Pipeline Interception</b></label>
+                        <label for="polyceph_enabled"><b>Enable Polyceph</b></label>
                     </div>
 
                     <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
