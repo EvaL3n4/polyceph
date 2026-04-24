@@ -15,9 +15,9 @@ export function generateThoughtsHTML(thoughtsArray) {
             contentHtml = contentHtml.replace(/\n/g, '<br>');
         }
         
-        const silentClass = t.isSilent ? 'polyceph-silent-thought' : '';
+        const openClass = t.isSilent ? '' : 'polyceph-item-open';
         
-        return `<div class="polyceph-generated-thought polyceph-item-open ${silentClass}">
+        return `<div class="polyceph-generated-thought ${openClass} ${silentClass}">
             <div class="polyceph-generated-thought-name" style="cursor:pointer;" onclick="this.parentElement.classList.toggle('polyceph-item-open');">
                 <span class="polyceph-item-toggle-icon">▶</span> ${t.title}
             </div>
@@ -26,7 +26,7 @@ export function generateThoughtsHTML(thoughtsArray) {
     }).join('\n<div class="polyceph-thought-separator"></div>\n');
 
     return `<div id="${thoughtsId}" class="polyceph-thoughts">
-        <div class="polyceph-thoughts-details polyceph-thoughts-open">
+        <div class="polyceph-thoughts-details">
             <div class="polyceph-thought-summary">
                 <div class="polyceph-thought-summary-container" onclick="this.parentElement.parentElement.classList.toggle('polyceph-thoughts-open');">
                     <div class="polyceph-thought-summary-title"><b>Polyceph Reasoning</b></div>
@@ -48,13 +48,20 @@ export function renderPolycephThoughts() {
             const thoughtsId = messageElement.getAttribute('polyceph_thoughts_id');
             if (thoughtsId) {
                 const container = document.getElementById(thoughtsId);
-                // Reattach if it was detached by an ST re-render
                 if (container) {
-                    const $mesText = $(messageElement).find('.mes_text').first();
-                    if ($mesText.length > 0 && container.nextElementSibling !== $mesText[0]) {
-                        $mesText.before(container);
-                    } else if ($mesText.length === 0 && container.parentElement !== messageElement) {
-                        $(messageElement).append(container);
+                    try {
+                        // If it's already inside this message, we don't need to do anything
+                        if (messageElement.contains(container)) return;
+
+                        // Otherwise, reattach if it was moved/detached by an ST re-render
+                        const $mesText = $(messageElement).find('.mes_text').first();
+                        if ($mesText.length > 0) {
+                            $mesText.before(container);
+                        } else {
+                            $(messageElement).append(container);
+                        }
+                    } catch (e) {
+                        console.warn('[polyceph] Failed to reattach thoughts container:', e);
                     }
                 }
             }
