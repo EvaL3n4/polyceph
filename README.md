@@ -50,7 +50,7 @@ Polyceph leverages SillyTavern's built-in **Connection Profiles**.
 1. Open the **Extensions** menu (puzzle icon) and select **Polyceph**.
 2. Create a new Pipeline and add **Steps**.
 3. Add **Tasks** to each step. Assign a **Connection Profile** and write a **Prompt Template** for each task.
-4. Choose options such as "Pre-message" to show the user the prompt response as reasoning, or "Character Message" to display the result as the character.
+4. Choose options such as "Reasoning" to show the user the prompt response as reasoning, or "Character Message" to display the result as the character.
 
 ### Step 3: Use in Chat
 1. Locate the **Pipeline Selector** (☍ icon) next to the chat send button.
@@ -68,13 +68,26 @@ Route data between tasks using these handlebars placeholders/macros:
 - `{{char}}`, `{{user}}`, `{{persona}}`, `{{personality}}`, etc.: All standard SillyTavern macros.
 - `{{wi}}` or `{{world_info}}`: Automatically scans chat context and injects relevant Lorebook entries.
 
+## Postprocessing Tags
+
+Polyceph automatically parses and processes specific tags in LLM outputs to manage context and chat history:
+
+| Tag | Passed to Next Step? | Persisted to Chat? | Visible to User? |
+|-----|----------------------|-------------------|------------------|
+| `<think>` | **No** | **No** | Yes (Reasoning UI) |
+| `<ramble>` | **Yes** | **No** | Yes (Reasoning UI) |
+| `<background>` | **Yes** | **Yes** (Hidden) | Toggleable (Separator) |
+
+- **`<think>`**: Traditional reasoning/CoT. It is stripped from the text passed to later steps to save tokens, but displayed in the collapsible reasoning block at the top of the message.
+- **`<ramble>`**: Internal monologues or planning data you want the next step to have access to. Useful for passing information between pipeline steps that you *don't* want to save in the permanent chat history.
+- **`<background>`**: "hidden" output which is saved in the chat history as a hidden system message. Future chat turns will "remember" this information, but it remains invisible to you unless the **"Show Hidden Background Messages"** setting is enabled. Useful for having characters continue to act or react outside of the user's perception.
+
 ## Task Options
 
 | Option | Description |
 |--------|-------------|
-| **Strip Think** | Removes `<think>...</think>` tags from output before passing to next steps. |
-| **Pre-message** | Posts the result to chat as a system note immediately upon task completion. |
-| **Character Message** | Posts using the character's name and avatar. |
+| **Reasoning** | Posts the task result to chat as a reasoning block immediately upon completion. |
+| **Character Message** | Posts the result using the character's name and avatar (ideal for final responses). |
 
 ## Engine Controls
 

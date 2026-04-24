@@ -17,7 +17,7 @@ export function generateSingleThoughtHTML(t) {
             <span class="polyceph-item-toggle-icon">▶</span> ${t.title}
             ${t.profile ? `<span class="polyceph-item-metadata">${t.profile}</span>` : ''}
         </div>
-        <div class="polyceph-generated-thought-content mes_text">${contentHtml}</div>
+        <div class="polyceph-generated-thought-content">${contentHtml}</div>
     </div>`;
 }
 
@@ -75,19 +75,45 @@ export function renderPolycephThoughts() {
         const thoughtsHtml = generateThoughtsHTML(thoughts, pipelineName);
         const $thoughtsContainer = $(thoughtsHtml);
         const thoughtsId = $thoughtsContainer.attr('id');
-        
+
         const $mesText = $(messageElement).find('.mes_text').first();
         if ($mesText.length > 0) {
             $mesText.before($thoughtsContainer);
         } else {
             $(messageElement).append($thoughtsContainer);
         }
-        
+
         messageElement.setAttribute('polyceph_thoughts_rendered', 'true');
         messageElement.setAttribute('polyceph_thoughts_id', thoughtsId);
-        
+
+        // Handle Hidden Background Messages
+        if (chatMsg.extra && chatMsg.extra.polyceph_hidden) {
+            messageElement.setAttribute('polyceph_hidden', 'true');
+
+            // Inject separator if not already there
+            if (!messageElement.querySelector('.polyceph-background-separator')) {
+                const $separator = $(`
+                    <div class="polyceph-background-separator">
+                        <div class="polyceph-background-label">Background Message</div>
+                    </div>
+                `);
+                $separator.on('click', () => {
+                    messageElement.classList.toggle('polyceph-hidden-open');
+                });
+                $(messageElement).prepend($separator);
+            }
+        }
+
         if (chatMsg.is_system && chatMsg.mes === '') {
             messageElement.style.display = 'none';
         }
     });
 }
+
+// Initial state for hidden messages
+$(document).ready(() => {
+    const { settings } = SillyTavern.getContext();
+    if (settings && settings.showHiddenMessages) {
+        document.body.classList.add('polyceph-show-hidden');
+    }
+});

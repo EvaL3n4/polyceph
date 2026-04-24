@@ -7,6 +7,7 @@ export const defaultSettings = {
     maxRetries: 3,
     retryDelayMs: 2000,
     activePipelineId: 'default',
+    showHiddenMessages: false,
     pipelines: [
         {
             id: 'default',

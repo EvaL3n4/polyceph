@@ -258,3 +258,79 @@
     background-color: var(--SmartThemeBotMesBlurTintColor, rgba(0, 0, 0, 0.4));
     opacity: 1;
 }
+
+/* Hidden Background Messages */
+.mes[polyceph_hidden="true"] {
+    display: none !important;
+}
+
+body.polyceph-show-hidden .mes[polyceph_hidden="true"] {
+    display: flex !important;
+    flex-direction: column;
+    padding: 0 !important;
+    margin: 5px 0 !important;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    min-height: auto !important;
+}
+
+body.polyceph-show-hidden .mes[polyceph_hidden="true"] .mes_block {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+/* Background Separator Header */
+.polyceph-background-separator {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    margin: 10px 0;
+    cursor: pointer;
+    user-select: none;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+.polyceph-background-separator:hover {
+    opacity: 1;
+}
+
+.polyceph-background-separator::before,
+.polyceph-background-separator::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--SmartThemeBorderColor, #444);
+}
+
+.polyceph-background-label {
+    padding: 0 10px;
+    font-size: 0.8em;
+    font-weight: bold;
+    color: var(--SmartThemeKeyColor);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Hidden Content State */
+.mes[polyceph_hidden="true"] .mes_text {
+    display: none;
+    padding: 10px;
+    background: var(--SmartThemeBotMesBlurTintColor, rgba(0, 0, 0, 0.1));
+    border-radius: 5px;
+    margin-top: 5px;
+    font-style: italic;
+    font-size: 0.9em;
+}
+
+.mes[polyceph_hidden="true"].polyceph-hidden-open .mes_text {
+    display: block !important;
+}
+
+/* Hide metadata and avatars for hidden messages */
+body.polyceph-show-hidden .mes[polyceph_hidden="true"] .message_header,
+body.polyceph-show-hidden .mes[polyceph_hidden="true"] .avatar {
+    display: none !important;
+}

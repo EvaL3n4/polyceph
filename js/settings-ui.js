@@ -19,12 +19,8 @@ export function renderTask(stepId, task) {
                 <div style="display: flex; align-items: center; gap: 15px; padding-left: 2px; flex-wrap: wrap;">
 
                     <div style="display: flex; align-items: center; gap: 4px;">
-                        <input type="checkbox" class="polyceph-node-strip-think-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.stripThink ? 'checked' : ''} title="Strip <think> tags from output">
-                        <label style="font-size: 0.8em; cursor: pointer;" title="Strip <think> tags from output">Strip Think</label>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 4px;">
-                        <input type="checkbox" class="polyceph-node-persist-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.persist ? 'checked' : ''} title="Post this result to chat during execution">
-                        <label style="font-size: 0.8em; cursor: pointer;" title="Post this result to chat during execution">Pre-message</label>
+                        <input type="checkbox" class="polyceph-node-persist-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.persist ? 'checked' : ''} title="Display this task result as reasoning">
+                        <label style="font-size: 0.8em; cursor: pointer;" title="Display this task result as reasoning">Reasoning</label>
                     </div>
                     <div style="display: flex; align-items: center; gap: 4px;">
                         <input type="checkbox" class="polyceph-node-character-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.isCharacter ? 'checked' : ''} title="If persisted, use character name/avatar">
@@ -74,13 +70,13 @@ export function updateUI() {
 
         bindStepEvents();
     }
-    
+
     // Update pipeline selector
     const selector = document.getElementById('polyceph_pipeline_selector');
     if (selector) {
         const noneSelected = settings.activePipelineId === 'none' ? 'selected' : '';
-        selector.innerHTML = `<option value="none" ${noneSelected}>None (Disabled)</option>` + 
-            settings.pipelines.map(p => 
+        selector.innerHTML = `<option value="none" ${noneSelected}>None (Disabled)</option>` +
+            settings.pipelines.map(p =>
                 `<option value="${p.id}" ${p.id === settings.activePipelineId ? 'selected' : ''}>${p.name}</option>`
             ).join('');
     }
@@ -176,16 +172,7 @@ export function bindStepEvents() {
     // Checkboxes
 
 
-    document.querySelectorAll('.polyceph-node-strip-think-checkbox').forEach(cb => {
-        cb.addEventListener('change', (e) => {
-            const nodeId = e.target.getAttribute('data-node-id');
-            for (const step of activePipeline.steps) {
-                const task = step.tasks.find(n => n.id === nodeId);
-                if (task) { task.stripThink = e.target.checked; break; }
-            }
-            saveSettings();
-        });
-    });
+
 
     document.querySelectorAll('.polyceph-node-persist-checkbox').forEach(cb => {
         cb.addEventListener('change', (e) => {
@@ -245,9 +232,28 @@ export function createSettingsHTML() {
                 </div>
                 <div class="inline-drawer-content">
                     <div class="polyceph-header">
-                        Configure complex multi-model reasoning pipelines.
+                        Reasoning pipeline options:
                     </div>
                     
+                    <div style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="polyceph_show_hidden_checkbox" ${settings.showHiddenMessages ? 'checked' : ''}>
+                        <label for="polyceph_show_hidden_checkbox" style="cursor: pointer;">Show Hidden Background Messages</label>
+                    </div>
+                    
+                    <div style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 15px;">
+                        ${renderNeoSlider('Request Delay (ms)', 'polyceph_delay', settings.delayMs || 0, 0, 5000, 50)}
+                        ${renderNeoSlider('Model Timeout (ms)', 'polyceph_generation_timeout', settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 60000, 0, 300000, 1000)}
+                    </div>
+
+                    <div style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 15px;">
+                        ${renderNeoSlider('Max Retries', 'polyceph_max_retries', settings.maxRetries !== undefined ? settings.maxRetries : 3, 0, 10, 1)}
+                        ${renderNeoSlider('Retry Delay (ms)', 'polyceph_retry_delay', settings.retryDelayMs !== undefined ? settings.retryDelayMs : 2000, 0, 10000, 100)}
+                    </div>
+
+                    <button id="polyceph_refresh_profiles" class="menu_button" style="margin-bottom: 15px;">
+                        <i class="fa-solid fa-refresh"></i> Refresh Profiles
+                    </button>
+
                     <div class="polyceph-placeholders-container">
                         <div class="polyceph-placeholders-header" id="polyceph_placeholders_toggle">
                             <b>Available Placeholders</b>
@@ -264,22 +270,6 @@ export function createSettingsHTML() {
                                 <li><code>{{wi}}</code> or <code>{{world_info}}</code> - Relevant Lorebook entries based on chat context.</li>
                             </ul>
                         </div>
-                    </div>
-                    
-                    <button id="polyceph_refresh_profiles" class="menu_button" style="margin-bottom: 15px;">
-                        <i class="fa-solid fa-refresh"></i> Refresh Profiles
-                    </button>
-                    
-
-
-                    <div style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 15px;">
-                        ${renderNeoSlider('Request Delay (ms)', 'polyceph_delay', settings.delayMs || 0, 0, 5000, 50)}
-                        ${renderNeoSlider('Model Timeout (ms)', 'polyceph_generation_timeout', settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 60000, 0, 300000, 1000)}
-                    </div>
-
-                    <div style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 15px;">
-                        ${renderNeoSlider('Max Retries', 'polyceph_max_retries', settings.maxRetries !== undefined ? settings.maxRetries : 3, 0, 10, 1)}
-                        ${renderNeoSlider('Retry Delay (ms)', 'polyceph_retry_delay', settings.retryDelayMs !== undefined ? settings.retryDelayMs : 2000, 0, 10000, 100)}
                     </div>
 
                     <div class="polyceph-step-card polyceph-pipeline-manager" style="margin-top: 20px;">
@@ -349,6 +339,17 @@ export function addSettingsUI() {
     bindSlider('polyceph_retry_delay', 'retryDelayMs');
 
 
+
+    // Global settings
+    document.getElementById('polyceph_show_hidden_checkbox')?.addEventListener('change', (e) => {
+        settings.showHiddenMessages = e.target.checked;
+        if (settings.showHiddenMessages) {
+            document.body.classList.add('polyceph-show-hidden');
+        } else {
+            document.body.classList.remove('polyceph-show-hidden');
+        }
+        saveSettings();
+    });
 
     // Pipeline Manager Events
     document.getElementById('polyceph_pipeline_selector')?.addEventListener('change', (e) => {
