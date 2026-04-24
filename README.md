@@ -2,45 +2,76 @@
 
 An advanced multi-model orchestration extension for SillyTavern. Define complex, user-governed reasoning pipelines that allow a single user message to trigger a multi-step, multi-connection chain-of-thought process.
 
-## Overview
-Polyceph allows you to transcend single-message AI interaction by constructing **Pipelines**. A single prompt from you can trigger a series of intermediate steps—where models can critique their own work, summarize chat history, or cross-reference multiple different API endpoints—before finally delivering a polished response into your chat.
+## The Problem
+
+Standard AI interaction is linear: you send a prompt, and a single model responds. This limits you to the strengths (and weaknesses) of a single API connection:
+- You can't have a smarter model "plan" a response before a creative model writes it.
+- You can't cross-reference multiple models to reduce hallucinations or "consensus" check.
+- You can't easily perform intermediate summaries or data extraction during the generation flow without manual intervention.
+
+## The Solution
+
+**Polyceph** (meaning "many-headed") allows you to construct **Pipelines**. A single message from you can trigger an asynchronous, multi-step series of tasks. Models can critique their own work, summarize chat history, or cross-reference multiple API endpoints—delivering a final, polished response into your chat only after the reasoning chain is complete.
+
+## Features
+
+- **Multi-Step Pipelines**: Chain multiple LLM calls and output collection templates together in sequential steps.
+- **Parallel Tasking**: Run multiple models simultaneously within a single step to gather diverse perspectives.
+- **In-Chat Selector**: Switch between logic pipelines or bypass Polyceph entirely directly from the chat input bar.
+- **Custom Macros**: Use the output of any previous step or task in subsequent prompts using `{{handlebars}}` placeholders/macros.
+- **Silent Reasoning**: Optionally show pipeline tasks blocks in a dedicated, collapsible "Reasoning" UI element.
+- **Native Swipe Support**: Swiping a Polyceph message reruns the entire pipeline batch, keeping all multi-step results in sync.
 
 ## Installation
-1. Navigate to your SillyTavern `public/scripts/extensions` folder.
-2. Clone or copy this repository into a folder named `polyceph`.
+
+### Manual Installation
+
+1. Navigate to your SillyTavern installation's `public/scripts/extensions` folder.
+2. Clone this repository or download the ZIP into a folder named `polyceph`.
 3. Restart SillyTavern or refresh your browser.
 
-## Usage Guide
+## Setup Guide
 
-1. **Open Settings**: Locate **Polyceph** in the SillyTavern extensions menu (Puzzle icon).
-2. **Enable Interception**: Toggle **Enable Polyceph**. When active, your normal "Send" button will instead fire the Polyceph engine.
-3. **Build your Pipeline**: Add one or more **Steps**. Each step contains one or more **Profile Targets**.
+### Step 1: Configure Connection Profiles
+Polyceph leverages SillyTavern's built-in **Connection Profiles**. 
+1. Open the **API Connections** menu (plug icon).
+2. Configure a model and click **Save** in the Connection Profiles section.
+3. Repeat for each model you want to use in your pipelines.
 
-### 1. Placeholders & Macros
-Use these dynamic tags inside your node templates to route data:
-- `{{user_input}}`: The original text you typed into the send box.
-- `{{chat_history:N}}`: The last **N** messages of the current chat (formatted as `Name: Message`).
-- `{{s1}}`, `{{s2}}`: The combined output of a specific previous Step.
-- `{{s1t1}}`, `{{s2t3}}`: The output of a specific individual Target Node (Step 1, Target 1).
-- `{{CustomLabel}}`: Use any custom node or step label as a macro!
-- `{{char}}`, `{{user}}`, `{{personality}}`, `{{description}}`, `{{scenario}}`, `{{persona}}`: Standard SillyTavern character card placeholders.
-- `{{wi}}` or `{{world_info}}`: Automatically scans the chat and injects relevant Lorebook (World Info) entries.
+### Step 2: Build a Pipeline
+1. Open the **Extensions** menu (puzzle icon) and select **Polyceph**.
+2. Create a new Pipeline and add **Steps**.
+3. Add **Tasks** to each step. Assign a **Connection Profile** and write a **Prompt Template** for each task.
+4. Choose options such as "Pre-message" to show the user the prompt response as reasoning, or "Character Message" to display the result as the character.
 
-### 2. Output Formatting
-- **Persist Output**: When checked, the results of that step are written to the chat.
-- **Clean Mode**: When checked along with Persist, the output is injected as a **standard character message** (using the active character's name and avatar) instead of a System Note. This is ideal for final responses.
-- **System Prompt Toggle (Sys)**: Toggle whether a specific node should include the full SillyTavern System Prompt and Character Definition, or just the raw template text.
-- **Strip Think**: When enabled for a node, any `<think>...</think>` reasoning blocks (common in models like DeepSeek-R1) will be stripped from the output before it is saved or passed to the next step.
+### Step 3: Use in Chat
+1. Locate the **Pipeline Selector** (☍ icon) next to the chat send button.
+2. Select your desired pipeline (or "None" to chat normally).
+3. Type a message and hit send!
 
-### 3. Engine Controls
-- **Request Delay (ms)**: Pause between individual API calls to respect rate limits.
-- **Model Timeout (ms)**: How long to wait for a slow model before giving up.
-- **Max Retries**: If a model fails or returns empty, Polyceph will automatically attempt the request again.
+## Macro & Placeholder Reference
 
-### 4. Native Swipe Integration
-Polyceph hooks directly into SillyTavern's **Swipe Right** button. 
-- Swiping a Polyceph-generated message will **rerun the entire original pipeline batch**.
-- All messages associated with that specific generation run will update their swipe counters (e.g., `2/2`) and refresh in unison.
+Route data between tasks using these dynamic tags:
+- `{{user_input}}`: The original text from the chat box.
+- `{{chat_history:N}}`: The last **N** messages of the chat (Name: Message).
+- `{{s1}}`, `{{s2}}`: The combined output of all tasks in a previous Step.
+- `{{TaskLabel}}`: The output of a specific task (uses the custom label you assigned to the task).
+- `{{char}}`, `{{user}}`, `{{personality}}`, etc.: All standard SillyTavern macros.
+- `{{wi}}` or `{{world_info}}`: Automatically scans chat context and injects relevant Lorebook entries.
 
-### 5. Template-Only Nodes
-Select `(Template Only - No LLM)` as a profile to perform pure text manipulation. This is useful for combining the outputs of multiple previous steps into a single block without calling an external API.
+## Task Options
+
+| Option | Description |
+|--------|-------------|
+| **Strip Think** | Removes `<think>...</think>` tags from output before passing to next steps. |
+| **Pre-message** | Posts the result to chat as a system note immediately upon task completion. |
+| **Character Message** | Posts using the character's name and avatar. |
+
+## Engine Controls
+
+- **Request Delay**: Pause between API calls to avoid rate limits.
+- **Max Retries**: Automatically retry failed or empty model responses.
+- **Timeout**: Prevents the pipeline from hanging on slow or stuck connections.
+
+---
+*Polyceph: Because one head isn't always enough.*

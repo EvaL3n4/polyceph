@@ -2,7 +2,7 @@ import { MODULE_NAME } from './constants.js';
 import { settings, switchProfile, getActivePipeline, availableProfiles } from './state.js';
 import { generateId } from './utils.js';
 
-export async function generateQuietly(profileName, prompt, useSystem) {
+export async function generateQuietly(profileName, prompt) {
     if (!profileName || profileName === 'none') return prompt;
 
     try {
@@ -12,9 +12,7 @@ export async function generateQuietly(profileName, prompt, useSystem) {
 
         let apiPromise;
 
-        if (useSystem && typeof context.generateQuietPrompt === 'function') {
-            apiPromise = context.generateQuietPrompt({ quietPrompt: prompt });
-        } else if (!useSystem && typeof context.generateRaw === 'function') {
+        if (typeof context.generateRaw === 'function') {
             apiPromise = context.generateRaw({ prompt: prompt, systemPrompt: '' });
         } else if (typeof context.generateQuietPrompt === 'function') {
             console.warn(`[${MODULE_NAME}] generateRaw not found, falling back to generateQuietPrompt.`);
@@ -131,6 +129,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
 
     contextVault['wi'] = wiPrompt;
     contextVault['world_info'] = wiPrompt;
+    contextVault['system_prompt'] = stContext.extension_settings?.formatting?.main_prompt || '';
 
     let cleanMessagesArr = [];
     if (generateSwipesForBatchId) {
@@ -223,7 +222,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                     const maxAttempts = (settings.maxRetries !== undefined) ? settings.maxRetries : 0;
 
                     for (let attempt = 0; attempt <= maxAttempts; attempt++) {
-                        let rawRes = await generateQuietly(node.profile, prompt, !!node.useSystem);
+                        let rawRes = await generateQuietly(node.profile, prompt);
                         res = rawRes;
                         let localThoughts = [];
 

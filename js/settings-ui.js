@@ -17,10 +17,7 @@ export function renderTask(stepId, task) {
                     <i class="fa-solid fa-times polyceph-del-node" data-node-id="${task.id}" data-step-id="${stepId}"></i>
                 </div>
                 <div style="display: flex; align-items: center; gap: 15px; padding-left: 2px; flex-wrap: wrap;">
-                    <div style="display: flex; align-items: center; gap: 4px;">
-                        <input type="checkbox" class="polyceph-node-system-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.useSystem ? 'checked' : ''} title="Include System Prompt + Context">
-                        <label style="font-size: 0.8em; cursor: pointer;" title="Include System Prompt + Context">Include Sys</label>
-                    </div>
+
                     <div style="display: flex; align-items: center; gap: 4px;">
                         <input type="checkbox" class="polyceph-node-strip-think-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.stripThink ? 'checked' : ''} title="Strip <think> tags from output">
                         <label style="font-size: 0.8em; cursor: pointer;" title="Strip <think> tags from output">Strip Think</label>
@@ -177,16 +174,7 @@ export function bindStepEvents() {
     });
 
     // Checkboxes
-    document.querySelectorAll('.polyceph-node-system-checkbox').forEach(cb => {
-        cb.addEventListener('change', (e) => {
-            const nodeId = e.target.getAttribute('data-node-id');
-            for (const step of activePipeline.steps) {
-                const task = step.tasks.find(n => n.id === nodeId);
-                if (task) { task.useSystem = e.target.checked; break; }
-            }
-            saveSettings();
-        });
-    });
+
 
     document.querySelectorAll('.polyceph-node-strip-think-checkbox').forEach(cb => {
         cb.addEventListener('change', (e) => {
