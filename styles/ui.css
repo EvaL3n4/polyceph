@@ -1,5 +1,19 @@
 /* Generic UI layout classes for Polyceph */
 
+/* Pipeline Manager Styling */
+.polyceph-pipeline-manager {
+    margin-bottom: 20px;
+}
+
+.polyceph-pipeline-manager .small_button {
+    padding: 5px 10px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+
 .polyceph-settings {
     margin-bottom: 10px;
 }

@@ -13,7 +13,7 @@ export async function switchProfile(profileId) {
     const prof = availableProfiles.find(p => p.id === profileId);
     const profileName = prof ? prof.name : profileId;
 
-    if (profileName === 'Target' || profileName === 'none') {
+    if (profileName === 'Task' || profileName === 'none') {
         console.log(`[${MODULE_NAME}] switchProfile: skipping for ${profileName}`);
         return true;
     }
@@ -31,6 +31,40 @@ export async function switchProfile(profileId) {
         console.error(`[${MODULE_NAME}] Error switching profile to ${profileName}:`, e);
         return false;
     }
+}
+
+/**
+ * Pipeline Management
+ */
+export function getActivePipeline() {
+    return settings.pipelines.find(p => p.id === settings.activePipelineId) || settings.pipelines[0];
+}
+
+export function createPipeline(name = 'New Pipeline') {
+    const id = 'pipeline_' + Math.random().toString(36).substring(2, 9);
+    const newPipeline = {
+        id,
+        name,
+        steps: JSON.parse(JSON.stringify(defaultSettings.pipelines[0].steps))
+    };
+    settings.pipelines.push(newPipeline);
+    settings.activePipelineId = id;
+    saveSettings();
+    return newPipeline;
+}
+
+export function deletePipeline(id) {
+    if (settings.pipelines.length <= 1) return false;
+    const index = settings.pipelines.findIndex(p => p.id === id);
+    if (index !== -1) {
+        settings.pipelines.splice(index, 1);
+        if (settings.activePipelineId === id) {
+            settings.activePipelineId = settings.pipelines[0].id;
+        }
+        saveSettings();
+        return true;
+    }
+    return false;
 }
 
 /**
@@ -88,38 +122,58 @@ export function loadSettings() {
     const context = SillyTavern.getContext();
     const saved = context.extensionSettings?.[MODULE_NAME];
     if (saved) {
+        // Migration: top-level steps -> pipelines
+        if (saved.steps && !saved.pipelines) {
+            saved.pipelines = [{
+                id: 'default',
+                name: 'Default Pipeline',
+                steps: saved.steps
+            }];
+            saved.activePipelineId = 'default';
+            delete saved.steps;
+        }
+
         settings = { ...defaultSettings, ...saved };
-        // Migration safeguard & property initialization
-        settings.steps.forEach(s => {
-            // Migration: nodes -> tasks
-            if (s.nodes && !s.tasks) {
-                s.tasks = s.nodes;
-                delete s.nodes;
-            }
+        
+        // Ensure activePipelineId is valid
+        if (!settings.pipelines.find(p => p.id === settings.activePipelineId)) {
+            settings.activePipelineId = settings.pipelines[0]?.id || 'default';
+        }
 
-            if (!s.tasks) {
-                s.tasks = [{ 
-                    id: 'task_' + Math.random().toString(36).substring(2, 9), 
-                    profile: s.models?.[0] || '', 
-                    template: s.template || '{{user_input}}' 
-                }];
-            }
+        // Migration safeguard & property initialization for ALL pipelines
+        settings.pipelines.forEach(p => {
+            if (!p.steps) p.steps = [];
+            p.steps.forEach(s => {
+                // Migration: nodes -> tasks
+                if (s.nodes && !s.tasks) {
+                    s.tasks = s.nodes;
+                    delete s.nodes;
+                }
 
-            // Migration: Move step settings to tasks
-            if (s.persist !== undefined || s.cleanPersist !== undefined) {
+                if (!s.tasks) {
+                    s.tasks = [{ 
+                        id: 'task_' + Math.random().toString(36).substring(2, 9), 
+                        profile: s.models?.[0] || '', 
+                        template: s.template || '{{user_input}}' 
+                    }];
+                }
+
+                // Migration: Move step settings to tasks
+                if (s.persist !== undefined || s.cleanPersist !== undefined) {
+                    s.tasks.forEach(n => {
+                        if (n.persist === undefined) n.persist = !!s.persist;
+                        if (n.isCharacter === undefined) n.isCharacter = !!s.cleanPersist;
+                    });
+                    delete s.persist;
+                    delete s.cleanPersist;
+                }
+
+                // Ensure all tasks have new properties
                 s.tasks.forEach(n => {
-                    if (n.persist === undefined) n.persist = !!s.persist;
-                    if (n.isCharacter === undefined) n.isCharacter = !!s.cleanPersist;
+                    if (n.persist === undefined) n.persist = false;
+                    if (n.isCharacter === undefined) n.isCharacter = false;
+                    if (n.stripThink === undefined) n.stripThink = false;
                 });
-                delete s.persist;
-                delete s.cleanPersist;
-            }
-
-            // Ensure all tasks have new properties
-            s.tasks.forEach(n => {
-                if (n.persist === undefined) n.persist = false;
-                if (n.isCharacter === undefined) n.isCharacter = false;
-                if (n.stripThink === undefined) n.stripThink = false;
             });
         });
     }

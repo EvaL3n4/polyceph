@@ -1,6 +1,7 @@
 import { MODULE_NAME, VERSION } from './constants.js';
 import { loadSettings, getAvailableProfiles, settings } from './state.js';
-import { addSettingsUI, renderPolycephThoughts } from './ui.js';
+import { renderPolycephThoughts } from './ui.js';
+import { addSettingsUI } from './settings-ui.js';
 import { startPipeline } from './engine.js';
 
 // -------------------------------------------------------------------------

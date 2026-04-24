@@ -1,5 +1,5 @@
 import { MODULE_NAME } from './constants.js';
-import { settings, switchProfile } from './state.js';
+import { settings, switchProfile, getActivePipeline } from './state.js';
 import { generateId } from './utils.js';
 
 export async function generateQuietly(profileName, prompt, useSystem) {
@@ -140,14 +140,15 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
     console.log(`[${MODULE_NAME}] Typing indicator started.`);
 
     try {
-        const totalSteps = settings.steps.length;
+        const activePipeline = getActivePipeline();
+        const totalSteps = activePipeline.steps.length;
 
-        for (let i = 0; i < settings.steps.length; i++) {
-            const step = settings.steps[i];
+        for (let i = 0; i < activePipeline.steps.length; i++) {
+            const step = activePipeline.steps[i];
             const stepIdx = i + 1;
             const totalNodesInStep = step.tasks ? step.tasks.length : 0;
             let nodesCompletedInStep = 0;
-            const isLastStep = i === settings.steps.length - 1;
+            const isLastStep = i === activePipeline.steps.length - 1;
 
             if (!step.tasks || step.tasks.length === 0) continue;
 
