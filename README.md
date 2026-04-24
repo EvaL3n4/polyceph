@@ -30,6 +30,7 @@ Use these dynamic tags inside your node templates to route data:
 - **Persist Output**: When checked, the results of that step are written to the chat.
 - **Clean Mode**: When checked along with Persist, the output is injected as a **standard character message** (using the active character's name and avatar) instead of a System Note. This is ideal for final responses.
 - **System Prompt Toggle (Sys)**: Toggle whether a specific node should include the full SillyTavern System Prompt and Character Definition, or just the raw template text.
+- **Strip Think**: When enabled for a node, any `<think>...</think>` reasoning blocks (common in models like DeepSeek-R1) will be stripped from the output before it is saved or passed to the next step.
 
 ### 3. Engine Controls
 - **Request Delay (ms)**: Pause between individual API calls to respect rate limits.

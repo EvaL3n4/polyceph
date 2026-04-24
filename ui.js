@@ -7,16 +7,24 @@ export function renderNode(stepId, node) {
 
     return `
         <div class="polyceph-node-card" data-node-id="${node.id}">
-            <div class="polyceph-node-header" style="gap: 5px;">
-                <input type="text" class="polyceph-node-label-input text_pole" data-node-id="${node.id}" placeholder="Target Label..." value="${node.label || ''}" style="flex: 1; min-width: 100px; padding: 2px 5px;" />
-                <select class="polyceph-profile-select text_pole" data-node-id="${node.id}" style="flex: 2; max-width: 250px;">
-                    ${profileOptions}
-                </select>
-                <div style="display: flex; align-items: center; gap: 4px;">
-                    <input type="checkbox" class="polyceph-node-system-checkbox" data-step-id="${stepId}" data-node-id="${node.id}" ${node.useSystem ? 'checked' : ''} title="Include System Prompt + Context">
-                    <label style="font-size: 0.8em;" title="Include System Prompt + Context">Sys</label>
+            <div class="polyceph-node-header" style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; gap: 5px; align-items: center;">
+                    <input type="text" class="polyceph-node-label-input text_pole" data-node-id="${node.id}" placeholder="Target Label..." value="${node.label || ''}" style="flex: 1; min-width: 100px; padding: 2px 5px;" />
+                    <select class="polyceph-profile-select text_pole" data-node-id="${node.id}" style="flex: 2; max-width: 250px;">
+                        ${profileOptions}
+                    </select>
+                    <i class="fa-solid fa-times polyceph-del-node" data-node-id="${node.id}" data-step-id="${stepId}"></i>
                 </div>
-                <i class="fa-solid fa-times polyceph-del-node" data-node-id="${node.id}" data-step-id="${stepId}"></i>
+                <div style="display: flex; align-items: center; gap: 15px; padding-left: 2px;">
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        <input type="checkbox" class="polyceph-node-system-checkbox" data-step-id="${stepId}" data-node-id="${node.id}" ${node.useSystem ? 'checked' : ''} title="Include System Prompt + Context">
+                        <label style="font-size: 0.8em; cursor: pointer;" title="Include System Prompt + Context">Include Sys</label>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        <input type="checkbox" class="polyceph-node-strip-think-checkbox" data-step-id="${stepId}" data-node-id="${node.id}" ${node.stripThink ? 'checked' : ''} title="Strip <think> tags from output">
+                        <label style="font-size: 0.8em; cursor: pointer;" title="Strip <think> tags from output">Strip Think</label>
+                    </div>
+                </div>
             </div>
             <textarea class="polyceph-node-template text_pole" data-step="${stepId}" data-node="${node.id}" placeholder="Use {{user_input}} or {{chat_history:2}}...">${node.template || ''}</textarea>
         </div>
@@ -28,17 +36,21 @@ export function renderStep(step, index) {
 
     return `
         <div class="polyceph-step-card" data-step-id="${step.id}">
-            <div class="polyceph-step-header">
-                <b>Step ${index + 1} </b>
-                <input type="text" class="polyceph-step-label-input text_pole" data-step-id="${step.id}" placeholder="Custom Label..." value="${step.label || ''}" style="margin-right: auto; margin-left: 10px; max-width: 150px; padding: 2px 5px;" />
-                
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <input type="checkbox" class="polyceph-clean-checkbox" data-step-id="${step.id}" ${step.cleanPersist ? 'checked' : ''} title="Make output look like standard character message">
-                    <label style="font-size: 0.85em;" title="Make output look like standard character message">Clean</label>
-                    
-                    <input type="checkbox" class="polyceph-persist-checkbox" data-step-id="${step.id}" ${step.persist ? 'checked' : ''}>
-                    <label style="font-size: 0.85em;">Persist output</label>
-                    <i class="fa-solid fa-trash polyceph-del-step" data-step-id="${step.id}"></i>
+            <div class="polyceph-step-header" style="display: flex; flex-direction: column; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <b>Step ${index + 1} </b>
+                    <input type="text" class="polyceph-step-label-input text_pole" data-step-id="${step.id}" placeholder="Custom Label..." value="${step.label || ''}" style="flex: 1; max-width: 200px; padding: 2px 5px;" />
+                    <i class="fa-solid fa-trash polyceph-del-step" data-step-id="${step.id}" style="margin-left: auto;"></i>
+                </div>
+                <div style="display: flex; align-items: center; gap: 15px; padding-left: 2px;">
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        <input type="checkbox" class="polyceph-clean-checkbox" data-step-id="${step.id}" ${step.cleanPersist ? 'checked' : ''} title="Make output look like standard character message">
+                        <label style="font-size: 0.85em; cursor: pointer;" title="Make output look like standard character message">Clean Mode</label>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        <input type="checkbox" class="polyceph-persist-checkbox" data-step-id="${step.id}" ${step.persist ? 'checked' : ''}>
+                        <label style="font-size: 0.85em; cursor: pointer;">Persist Output</label>
+                    </div>
                 </div>
             </div>
             <div class="polyceph-nodes-list">
@@ -143,6 +155,17 @@ export function bindStepEvents() {
             for (const step of settings.steps) {
                 const node = step.nodes.find(n => n.id === nodeId);
                 if (node) { node.useSystem = e.target.checked; break; }
+            }
+            SillyTavern.getContext().saveSettingsDebounced();
+        });
+    });
+
+    document.querySelectorAll('.polyceph-node-strip-think-checkbox').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+            const nodeId = e.target.getAttribute('data-node-id');
+            for (const step of settings.steps) {
+                const node = step.nodes.find(n => n.id === nodeId);
+                if (node) { node.stripThink = e.target.checked; break; }
             }
             SillyTavern.getContext().saveSettingsDebounced();
         });

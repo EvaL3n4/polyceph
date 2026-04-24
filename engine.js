@@ -170,6 +170,11 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                     for (let attempt = 0; attempt <= maxAttempts; attempt++) {
                         res = await generateQuietly(node.profile, prompt, !!node.useSystem);
 
+                        if (node.stripThink && res) {
+                            // Strip multiple <think> blocks and handle unclosed tags at the end
+                            res = res.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<think>[\s\S]*$/gi, '').trim();
+                        }
+
                         const isEmpty = !res || res.trim() === "" || res === "(Generation returned empty)" || res === "(Error during generation)";
 
                         if (!isEmpty) {
