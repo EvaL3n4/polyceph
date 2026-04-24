@@ -207,7 +207,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                     for (let attempt = 0; attempt <= maxAttempts; attempt++) {
                         let rawRes = await generateQuietly(node.profile, prompt, !!node.useSystem);
                         res = rawRes;
-                        displayRes = rawRes;
+                        let localThoughts = [];
 
                         // Silent Thought logic
                         if (node.stripThink && rawRes) {
@@ -218,7 +218,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                                 if (segment.toLowerCase().startsWith('<think>')) {
                                     const content = segment.replace(/<\/?think>/gi, '').trim();
                                     if (content) {
-                                        accumulatedThoughts.push({
+                                        localThoughts.push({
                                             title: node.label ? `${node.label} (Silent)` : `Task ${taskIdIndx} (Silent)`,
                                             content: content,
                                             isSilent: true
@@ -230,7 +230,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                                         cleanParts.push(segment);
                                         // If this is a persist-to-thoughts task, push segment in order
                                         if (node.persist && !node.isCharacter) {
-                                            accumulatedThoughts.push({
+                                            localThoughts.push({
                                                 title: node.label || `Task ${taskIdIndx}`,
                                                 content: content
                                             });
@@ -241,7 +241,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                             res = cleanParts.join('').trim();
                         } else if (node.persist && !node.isCharacter && res) {
                             // Non-stripped regular persistence
-                            accumulatedThoughts.push({
+                            localThoughts.push({
                                 title: node.label || `Task ${taskIdIndx}`,
                                 content: res
                             });
@@ -250,6 +250,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                         const isEmpty = !res || res.trim() === "" || res === "(Generation returned empty)" || res === "(Error during generation)";
 
                         if (!isEmpty) {
+                            accumulatedThoughts.push(...localThoughts);
                             break; // Success
                         }
 
