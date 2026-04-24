@@ -1,5 +1,5 @@
 import { MODULE_NAME } from './constants.js';
-import { settings, switchProfile, getActivePipeline } from './state.js';
+import { settings, switchProfile, getActivePipeline, availableProfiles } from './state.js';
 import { generateId } from './utils.js';
 
 export async function generateQuietly(profileName, prompt, useSystem) {
@@ -109,6 +109,9 @@ export async function startPipeline(text) {
 export async function runPipeline(userInput, generateSwipesForBatchId) {
     console.log(`[${MODULE_NAME}] runPipeline started`, { userInput: userInput?.substring(0, 50), batchId: generateSwipesForBatchId });
     //toastr.info('Starting Polyceph Pipeline...', 'Polyceph');
+    const activePipeline = getActivePipeline();
+    const pipelineName = activePipeline?.name || 'Default';
+    
     const contextVault = {
         'user_input': userInput,
         'input': userInput
@@ -147,6 +150,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
             const step = activePipeline.steps[i];
             const stepIdx = i + 1;
             const totalNodesInStep = step.tasks ? step.tasks.length : 0;
+            let nodesStartedInStep = 0;
             let nodesCompletedInStep = 0;
             const isLastStep = i === activePipeline.steps.length - 1;
 
@@ -181,6 +185,20 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                     if (k > 0 && settings.delayMs > 0) {
                         await new Promise(r => setTimeout(r, k * settings.delayMs));
                     }
+
+                    // Update Progress (Work started)
+                    nodesStartedInStep++;
+                    const progressText = `... (Step ${stepIdx}/${totalSteps} - Task ${nodesStartedInStep}/${totalNodesInStep})`;
+                    const typingIdx = stContext.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
+                    if (typingIdx !== -1) {
+                        stContext.chat[typingIdx].mes = progressText;
+                        if (typeof stContext.updateMessageBlock === 'function') {
+                            stContext.updateMessageBlock(typingIdx, stContext.chat[typingIdx]);
+                        }
+                    }
+
+                    const prof = availableProfiles.find(p => p.id === node.profile);
+                    const profileDisplayName = prof ? prof.name : (node.profile || 'Default');
 
                     let prompt = node.template || '';
 
@@ -221,7 +239,8 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                                         localThoughts.push({
                                             title: node.label ? `${node.label} (Silent)` : `Task ${taskIdIndx} (Silent)`,
                                             content: content,
-                                            isSilent: true
+                                            isSilent: true,
+                                            profile: profileDisplayName
                                         });
                                     }
                                 } else {
@@ -232,7 +251,8 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                                         if (node.persist && !node.isCharacter) {
                                             localThoughts.push({
                                                 title: node.label || `Task ${taskIdIndx}`,
-                                                content: content
+                                                content: content,
+                                                profile: profileDisplayName
                                             });
                                         }
                                     }
@@ -243,7 +263,8 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                             // Non-stripped regular persistence
                             localThoughts.push({
                                 title: node.label || `Task ${taskIdIndx}`,
-                                content: res
+                                content: res,
+                                profile: node.profile || 'Default'
                             });
                         }
 
@@ -281,14 +302,6 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
 
                     // Task-Level Persistence
                     nodesCompletedInStep++;
-                    const progressText = `... (Step ${stepIdx}/${totalSteps} - Task ${nodesCompletedInStep}/${totalNodesInStep})`;
-                    const typingIdx = stContext.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
-                    if (typingIdx !== -1) {
-                        stContext.chat[typingIdx].mes = progressText;
-                        if (typeof stContext.updateMessageBlock === 'function') {
-                            stContext.updateMessageBlock(typingIdx, stContext.chat[typingIdx]);
-                        }
-                    }
 
                     if (res && (node.persist || node.isCharacter)) {
                         let postedAsCharacter = false;
@@ -305,7 +318,13 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                             const avatarStr = typeof stContext.getThumbnailUrl === 'function' && stContext.characters?.[stContext.characterId] ?
                                 stContext.getThumbnailUrl('avatar', stContext.characters[stContext.characterId].avatar) : '';
 
-                            const extraData = { model: 'polyceph', polyceph_batch: batchId, polyceph_input: userInput, polyceph_task_id: node.id };
+                            const extraData = { 
+                                model: 'polyceph', 
+                                polyceph_batch: batchId, 
+                                polyceph_input: userInput, 
+                                polyceph_task_id: node.id,
+                                polyceph_pipeline: pipelineName 
+                            };
                             if (nodeThoughts) {
                                 extraData.polyceph_thoughts = nodeThoughts;
                             }

@@ -15,12 +15,13 @@ export function generateSingleThoughtHTML(t) {
     return `<div class="polyceph-generated-thought ${openClass} ${silentClass}">
         <div class="polyceph-generated-thought-name" style="cursor:pointer;" onclick="this.parentElement.classList.toggle('polyceph-item-open');">
             <span class="polyceph-item-toggle-icon">▶</span> ${t.title}
+            ${t.profile ? `<span class="polyceph-item-metadata">${t.profile}</span>` : ''}
         </div>
         <div class="polyceph-generated-thought-content mes_text">${contentHtml}</div>
     </div>`;
 }
 
-export function generateThoughtsHTML(thoughtsArray) {
+export function generateThoughtsHTML(thoughtsArray, pipelineName) {
     if (!thoughtsArray || thoughtsArray.length === 0) return '';
 
     const thoughtsId = `polyceph_thoughts_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -31,7 +32,10 @@ export function generateThoughtsHTML(thoughtsArray) {
         <div class="polyceph-thoughts-details">
             <div class="polyceph-thought-summary">
                 <div class="polyceph-thought-summary-container" onclick="this.parentElement.parentElement.classList.toggle('polyceph-thoughts-open');">
-                    <div class="polyceph-thought-summary-title"><b>Polyceph Reasoning</b></div>
+                    <div class="polyceph-thought-summary-title">
+                        <b>Polyceph Reasoning</b>
+                        ${pipelineName ? `<span class="polyceph-header-metadata">${pipelineName}</span>` : ''}
+                    </div>
                 </div>
             </div>
             <div class="polyceph-thought-items">
@@ -53,11 +57,14 @@ export function renderPolycephThoughts() {
         if (!chatMsg) return;
 
         let thoughts = null;
+        let pipelineName = null;
         if (chatMsg.swipe_info && chatMsg.swipe_id !== undefined && chatMsg.swipe_info[chatMsg.swipe_id]) {
             thoughts = chatMsg.swipe_info[chatMsg.swipe_id]?.extra?.polyceph_thoughts;
+            pipelineName = chatMsg.swipe_info[chatMsg.swipe_id]?.extra?.polyceph_pipeline;
         }
         if (!thoughts && chatMsg.extra) {
             thoughts = chatMsg.extra.polyceph_thoughts;
+            pipelineName = chatMsg.extra.polyceph_pipeline;
         }
 
         if (!thoughts || thoughts.length === 0) {
@@ -65,7 +72,7 @@ export function renderPolycephThoughts() {
             return;
         }
 
-        const thoughtsHtml = generateThoughtsHTML(thoughts);
+        const thoughtsHtml = generateThoughtsHTML(thoughts, pipelineName);
         const $thoughtsContainer = $(thoughtsHtml);
         const thoughtsId = $thoughtsContainer.attr('id');
         

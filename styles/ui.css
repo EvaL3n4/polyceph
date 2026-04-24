@@ -188,3 +188,30 @@
     margin: 15px 0;
     opacity: 0.5;
 }
+
+/* Metadata Labels */
+.polyceph-header-metadata, .polyceph-item-metadata {
+    float: right;
+    font-size: 0.75em;
+    font-weight: normal;
+    opacity: 0.5;
+    text-transform: none;
+    letter-spacing: normal;
+    margin-left: auto;
+    padding-right: 10px;
+}
+
+.polyceph-thought-summary-title {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    align-items: center;
+}
+
+.polyceph-generated-thought-name {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    box-sizing: border-box;
+}
