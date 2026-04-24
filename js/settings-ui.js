@@ -255,12 +255,12 @@ export function createSettingsHTML() {
                         </div>
                         <div class="polyceph-placeholders-content" id="polyceph_placeholders_content">
                             <ul style="margin: 0; padding-left: 20px;">
-                                <li><code>{{user_input}}</code> - The original user text.</li>
-                                <li><code>{{chat_history:N}}</code> - Retrieves the last N messages from chat.</li>
-                                <li><code>{{s1}}</code>, <code>{{s2}}</code> - Combined output of a step. (Alias: <code>{{step_1}}</code>)</li>
-                                <li><code>{{s1k1}}</code>, <code>{{s2k1}}</code> - Output of an individual Task. (Legacy: <code>{{s1t1}}</code>)</li>
-                                <li><code>{{YourCustomLabel}}</code> - Binds to any custom Task/Step label.</li>
-                                <li><code>{{char}}</code>, <code>{{user}}</code>, <code>{{personality}}</code>, <code>{{description}}</code> - Standard character card macros.</li>
+                                <li><code>{{user_input}}</code> - The original user text from the send box.</li>
+                                <li><code>{{chat_history:N}}</code> - Retrieves the last N messages from chat (Name: Message).</li>
+                                <li><code>{{s1}}</code>, <code>{{s2}}</code> - Combined output of all tasks in a previous Step.</li>
+                                <li><code>{{TaskLabel}}</code> - Output of a specific task (using its custom label).</li>
+                                <li><code>{{system_prompt}}</code> - The Main Prompt from SillyTavern Advanced Formatting.</li>
+                                <li><code>{{char}}</code>, <code>{{user}}</code>, <code>{{persona}}</code>, <code>{{personality}}</code> - Standard character macros.</li>
                                 <li><code>{{wi}}</code> or <code>{{world_info}}</code> - Relevant Lorebook entries based on chat context.</li>
                             </ul>
                         </div>
