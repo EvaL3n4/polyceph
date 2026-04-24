@@ -107,46 +107,46 @@ export function renderPolycephThoughts() {
     });
 }
 
-export function renderNode(stepId, node) {
+export function renderTask(stepId, task) {
     const profileOptions = `<option value="none">(Template Only - No LLM)</option>` +
-        availableProfiles.map(p => `<option value="${p.id}" ${p.id === node.profile ? 'selected' : ''}>${p.name}</option>`).join('');
+        availableProfiles.map(p => `<option value="${p.id}" ${p.id === task.profile ? 'selected' : ''}>${p.name}</option>`).join('');
 
     return `
-        <div class="polyceph-node-card" data-node-id="${node.id}">
+        <div class="polyceph-node-card" data-node-id="${task.id}">
             <div class="polyceph-node-header" style="display: flex; flex-direction: column; gap: 8px;">
                 <div style="display: flex; gap: 5px; align-items: center;">
-                    <input type="text" class="polyceph-node-label-input text_pole" data-node-id="${node.id}" placeholder="Target Label..." value="${node.label || ''}" style="flex: 1; min-width: 100px; padding: 2px 5px;" />
-                    <select class="polyceph-profile-select text_pole" data-node-id="${node.id}" style="flex: 2; max-width: 250px;">
+                    <input type="text" class="polyceph-node-label-input text_pole" data-node-id="${task.id}" placeholder="Task Label..." value="${task.label || ''}" style="flex: 1; min-width: 100px; padding: 2px 5px;" />
+                    <select class="polyceph-profile-select text_pole" data-node-id="${task.id}" style="flex: 2; max-width: 250px;">
                         ${profileOptions}
                     </select>
-                    <i class="fa-solid fa-times polyceph-del-node" data-node-id="${node.id}" data-step-id="${stepId}"></i>
+                    <i class="fa-solid fa-times polyceph-del-node" data-node-id="${task.id}" data-step-id="${stepId}"></i>
                 </div>
                 <div style="display: flex; align-items: center; gap: 15px; padding-left: 2px; flex-wrap: wrap;">
                     <div style="display: flex; align-items: center; gap: 4px;">
-                        <input type="checkbox" class="polyceph-node-system-checkbox" data-step-id="${stepId}" data-node-id="${node.id}" ${node.useSystem ? 'checked' : ''} title="Include System Prompt + Context">
+                        <input type="checkbox" class="polyceph-node-system-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.useSystem ? 'checked' : ''} title="Include System Prompt + Context">
                         <label style="font-size: 0.8em; cursor: pointer;" title="Include System Prompt + Context">Include Sys</label>
                     </div>
                     <div style="display: flex; align-items: center; gap: 4px;">
-                        <input type="checkbox" class="polyceph-node-strip-think-checkbox" data-step-id="${stepId}" data-node-id="${node.id}" ${node.stripThink ? 'checked' : ''} title="Strip <think> tags from output">
+                        <input type="checkbox" class="polyceph-node-strip-think-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.stripThink ? 'checked' : ''} title="Strip <think> tags from output">
                         <label style="font-size: 0.8em; cursor: pointer;" title="Strip <think> tags from output">Strip Think</label>
                     </div>
                     <div style="display: flex; align-items: center; gap: 4px;">
-                        <input type="checkbox" class="polyceph-node-persist-checkbox" data-step-id="${stepId}" data-node-id="${node.id}" ${node.persist ? 'checked' : ''} title="Post this result to chat during execution">
+                        <input type="checkbox" class="polyceph-node-persist-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.persist ? 'checked' : ''} title="Post this result to chat during execution">
                         <label style="font-size: 0.8em; cursor: pointer;" title="Post this result to chat during execution">Pre-message</label>
                     </div>
                     <div style="display: flex; align-items: center; gap: 4px;">
-                        <input type="checkbox" class="polyceph-node-character-checkbox" data-step-id="${stepId}" data-node-id="${node.id}" ${node.isCharacter ? 'checked' : ''} title="If persisted, use character name/avatar">
+                        <input type="checkbox" class="polyceph-node-character-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.isCharacter ? 'checked' : ''} title="If persisted, use character name/avatar">
                         <label style="font-size: 0.8em; cursor: pointer;" title="If persisted, use character name/avatar">Character Message</label>
                     </div>
                 </div>
             </div>
-            <textarea class="polyceph-node-template text_pole" data-step="${stepId}" data-node="${node.id}" placeholder="Use {{user_input}} or {{chat_history:2}}...">${node.template || ''}</textarea>
+            <textarea class="polyceph-node-template text_pole" data-step="${stepId}" data-node="${task.id}" placeholder="Use {{user_input}} or {{chat_history:2}}...">${task.template || ''}</textarea>
         </div>
     `;
 }
 
 export function renderStep(step, index) {
-    const nodesHtml = step.nodes.map(n => renderNode(step.id, n)).join('');
+    const tasksHtml = step.tasks.map(n => renderTask(step.id, n)).join('');
 
     return `
         <div class="polyceph-step-card" data-step-id="${step.id}">
@@ -158,10 +158,10 @@ export function renderStep(step, index) {
                 </div>
             </div>
             <div class="polyceph-nodes-list">
-                ${nodesHtml}
+                ${tasksHtml}
             </div>
             <button class="menu_button polyceph-add-node-btn" data-step="${step.id}">
-                <i class="fa-solid fa-plus"></i> Add Profile Target
+                <i class="fa-solid fa-plus"></i> Add Profile Task
             </button>
         </div>
     `;
@@ -192,8 +192,8 @@ export function bindStepEvents() {
         select.addEventListener('change', (e) => {
             const nodeId = e.target.getAttribute('data-node-id');
             for (const step of settings.steps) {
-                const node = step.nodes.find(n => n.id === nodeId);
-                if (node) { node.profile = e.target.value; break; }
+                const task = step.tasks.find(n => n.id === nodeId);
+                if (task) { task.profile = e.target.value; break; }
             }
             saveSettings();
         });
@@ -206,9 +206,9 @@ export function bindStepEvents() {
             const stepId = e.target.getAttribute('data-step');
             const nodeId = e.target.getAttribute('data-node');
             const step = settings.steps.find(s => s.id === stepId);
-            const node = step?.nodes.find(n => n.id === nodeId);
-            if (node) {
-                node.template = e.target.value;
+            const task = step?.tasks.find(n => n.id === nodeId);
+            if (task) {
+                task.template = e.target.value;
                 saveSettings();
             }
         });
@@ -221,7 +221,7 @@ export function bindStepEvents() {
             const nodeId = e.currentTarget.getAttribute('data-node-id');
             const step = settings.steps.find(s => s.id === stepId);
             if (step) {
-                step.nodes = step.nodes.filter(n => n.id !== nodeId);
+                step.tasks = step.tasks.filter(n => n.id !== nodeId);
                 saveSettings();
                 updateUI();
             }
@@ -234,7 +234,7 @@ export function bindStepEvents() {
             const stepId = e.currentTarget.getAttribute('data-step');
             const step = settings.steps.find(s => s.id === stepId);
             if (step) {
-                step.nodes.push({ id: 'node_' + generateId(), profile: '', template: '{{user_input}}' });
+                step.tasks.push({ id: 'task_' + generateId(), profile: '', template: '{{user_input}}' });
                 saveSettings();
                 updateUI();
             }
@@ -246,8 +246,8 @@ export function bindStepEvents() {
         input.addEventListener('input', (e) => {
             const nodeId = e.target.getAttribute('data-node-id');
             for (const step of settings.steps) {
-                const node = step.nodes.find(n => n.id === nodeId);
-                if (node) { node.label = e.target.value; break; }
+                const task = step.tasks.find(n => n.id === nodeId);
+                if (task) { task.label = e.target.value; break; }
             }
             SillyTavern.getContext().saveSettingsDebounced();
         });
@@ -257,8 +257,8 @@ export function bindStepEvents() {
         cb.addEventListener('change', (e) => {
             const nodeId = e.target.getAttribute('data-node-id');
             for (const step of settings.steps) {
-                const node = step.nodes.find(n => n.id === nodeId);
-                if (node) { node.useSystem = e.target.checked; break; }
+                const task = step.tasks.find(n => n.id === nodeId);
+                if (task) { task.useSystem = e.target.checked; break; }
             }
             SillyTavern.getContext().saveSettingsDebounced();
         });
@@ -268,8 +268,8 @@ export function bindStepEvents() {
         cb.addEventListener('change', (e) => {
             const nodeId = e.target.getAttribute('data-node-id');
             for (const step of settings.steps) {
-                const node = step.nodes.find(n => n.id === nodeId);
-                if (node) { node.stripThink = e.target.checked; break; }
+                const task = step.tasks.find(n => n.id === nodeId);
+                if (task) { task.stripThink = e.target.checked; break; }
             }
             SillyTavern.getContext().saveSettingsDebounced();
         });
@@ -288,8 +288,8 @@ export function bindStepEvents() {
         cb.addEventListener('change', (e) => {
             const nodeId = e.target.getAttribute('data-node-id');
             for (const step of settings.steps) {
-                const node = step.nodes.find(n => n.id === nodeId);
-                if (node) { node.persist = e.target.checked; break; }
+                const task = step.tasks.find(n => n.id === nodeId);
+                if (task) { task.persist = e.target.checked; break; }
             }
             SillyTavern.getContext().saveSettingsDebounced();
         });
@@ -299,8 +299,8 @@ export function bindStepEvents() {
         cb.addEventListener('change', (e) => {
             const nodeId = e.target.getAttribute('data-node-id');
             for (const step of settings.steps) {
-                const node = step.nodes.find(n => n.id === nodeId);
-                if (node) { node.isCharacter = e.target.checked; break; }
+                const task = step.tasks.find(n => n.id === nodeId);
+                if (task) { task.isCharacter = e.target.checked; break; }
             }
             SillyTavern.getContext().saveSettingsDebounced();
         });
@@ -351,8 +351,8 @@ export function createSettingsHTML() {
                                 <li><code>{{user_input}}</code> - The original user text.</li>
                                 <li><code>{{chat_history:N}}</code> - Retrieves the last N messages from chat.</li>
                                 <li><code>{{s1}}</code>, <code>{{s2}}</code> - Combined output of a step. (Alias: <code>{{step_1}}</code>)</li>
-                                <li><code>{{s1t2}}</code>, <code>{{s2t1}}</code> - Output of an individual target node.</li>
-                                <li><code>{{YourCustomLabel}}</code> - Binds to any custom node/step label.</li>
+                                <li><code>{{s1k1}}</code>, <code>{{s2k1}}</code> - Output of an individual Task. (Legacy: <code>{{s1t1}}</code>)</li>
+                                <li><code>{{YourCustomLabel}}</code> - Binds to any custom Task/Step label.</li>
                                 <li><code>{{char}}</code>, <code>{{user}}</code>, <code>{{personality}}</code>, <code>{{description}}</code> - Standard character card macros.</li>
                                 <li><code>{{wi}}</code> or <code>{{world_info}}</code> - Relevant Lorebook entries based on chat context.</li>
                             </ul>
@@ -448,8 +448,7 @@ export function addSettingsUI() {
     document.getElementById('polyceph_add_step_btn')?.addEventListener('click', () => {
         settings.steps.push({
             id: 'step_' + generateId(),
-            persist: false,
-            nodes: [{ id: 'node_' + generateId(), profile: '', template: '{{user_input}}' }]
+            tasks: [{ id: 'task_' + generateId(), profile: '', template: '{{user_input}}' }]
         });
         saveSettings();
         updateUI();

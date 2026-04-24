@@ -12,9 +12,9 @@ export const defaultSettings = {
         {
             id: 'step_1',
             label: '',
-            nodes: [
+            tasks: [
                 { 
-                    id: 'node_1', 
+                    id: 'task_1', 
                     label: '', 
                     profile: 'none', 
                     useSystem: false, 

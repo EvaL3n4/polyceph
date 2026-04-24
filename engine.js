@@ -145,16 +145,16 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
         for (let i = 0; i < settings.steps.length; i++) {
             const step = settings.steps[i];
             const stepIdx = i + 1;
-            const totalNodesInStep = step.nodes ? step.nodes.length : 0;
+            const totalNodesInStep = step.tasks ? step.tasks.length : 0;
             let nodesCompletedInStep = 0;
             const isLastStep = i === settings.steps.length - 1;
 
-            if (!step.nodes || step.nodes.length === 0) continue;
+            if (!step.tasks || step.tasks.length === 0) continue;
 
-            // Group nodes by profile to minimize ST global switches and race conditions
+            // Group tasks by profile to minimize ST global switches and race conditions
             const profileGroups = {};
-            step.nodes.forEach((node, nodeIndex) => {
-                const pName = node.profile || 'Target';
+            step.tasks.forEach((node, nodeIndex) => {
+                const pName = node.profile || 'Task';
                 if (!profileGroups[pName]) profileGroups[pName] = [];
                 profileGroups[pName].push({ node, nodeIndex });
             });
@@ -163,17 +163,22 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
 
             // Process each profile group sequentially
             for (const [profileId, groupNodes] of Object.entries(profileGroups)) {
-                if (profileId !== 'none' && profileId !== 'Target') {
+                if (profileId !== 'none' && profileId !== 'Task') {
                     console.log(`[${MODULE_NAME}] Switching to profile group: ${profileId}`);
                     await switchProfile(profileId);
                     // Allow ST UI state to settle profile load
                     await new Promise(r => setTimeout(r, 1000));
                 }
 
-                // Process nodes sequentially to strictly respect rate-limiting
-                for (let k = 0; k < groupNodes.length; k++) {
-                    const item = groupNodes[k];
+                // Process tasks in parallel (staggered by delayMs)
+                await Promise.all(groupNodes.map(async (item, k) => {
                     const { node, nodeIndex } = item;
+
+                    // Stagger start to respect rate limits while allowing parallel execution
+                    if (k > 0 && settings.delayMs > 0) {
+                        await new Promise(r => setTimeout(r, k * settings.delayMs));
+                    }
+
                     let prompt = node.template || '';
 
                     // Polyceph-specific: {{chat_history}} and {{chat_history:X}}
@@ -205,7 +210,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                                 const thinkMatches = [...rawRes.matchAll(/<think>([\s\S]*?)<\/think>/gi)].map(m => m[1].trim()).filter(Boolean);
                                 thinkMatches.forEach((thinkText) => {
                                     accumulatedThoughts.push({
-                                        title: node.label ? `${node.label} (Silent)` : `Node ${tIdIndxOuter} (Silent)`,
+                                        title: node.label ? `${node.label} (Silent)` : `Task ${nodeIndex + 1} (Silent)`,
                                         content: thinkText,
                                         isSilent: true
                                     });
@@ -218,7 +223,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                                     unclosedThought = rawRes.substring(lastOpen + 7).trim();
                                     if (unclosedThought) {
                                         accumulatedThoughts.push({
-                                            title: node.label ? `${node.label} (Silent)` : `Node ${tIdIndxOuter} (Silent)`,
+                                            title: node.label ? `${node.label} (Silent)` : `Task ${nodeIndex + 1} (Silent)`,
                                             content: unclosedThought,
                                             isSilent: true
                                         });
@@ -237,34 +242,36 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                         }
 
                         if (attempt < maxAttempts) {
-                            toastr.warning(`Node failed or returned empty. Retrying (${attempt + 1}/${maxAttempts})...`, 'Polyceph');
+                            toastr.warning(`Task failed or returned empty. Retrying (${attempt + 1}/${maxAttempts})...`, 'Polyceph');
                             const delayWait = settings.retryDelayMs !== undefined ? settings.retryDelayMs : 2000;
                             await new Promise(r => setTimeout(r, delayWait));
                         }
                     }
 
                     const sIdIndx = i + 1;
-                    const tIdIndx = nodeIndex + 1;
+                    const taskIdIndx = nodeIndex + 1;
 
                     // Assign to vault variants
-                    contextVault[`${step.id}_target_${tIdIndx}`] = res;
-                    contextVault[`s${sIdIndx}t${tIdIndx}`] = res;
+                    contextVault[`${step.id}_task_${taskIdIndx}`] = res;
+                    contextVault[`${step.id}_target_${taskIdIndx}`] = res; // Legacy support
+                    contextVault[`s${sIdIndx}k${taskIdIndx}`] = res;
+                    contextVault[`s${sIdIndx}t${taskIdIndx}`] = res; // Legacy support
                     if (node.label) {
                         contextVault[node.label.trim()] = res;
                     }
 
                     if (node.profile === 'none' || node.isCharacter) {
-                        // Keep text clean for character/template nodes
+                        // Keep text clean for character/template tasks
                         resultsByIndex[nodeIndex] = res;
                     } else {
                         // Wrap normally for system-style persistence
-                        const targetHeader = node.label ? node.label : `Target ${tIdIndx}`;
-                        resultsByIndex[nodeIndex] = `[${targetHeader}]\n${res}`;
+                        const taskHeader = node.label ? node.label : `Task ${taskIdIndx}`;
+                        resultsByIndex[nodeIndex] = `[${taskHeader}]\n${res}`;
                     }
 
-                    // Node-Level Persistence
+                    // Task-Level Persistence
                     nodesCompletedInStep++;
-                    const progressText = `... (Step ${stepIdx}/${totalSteps} - Target ${nodesCompletedInStep}/${totalNodesInStep})`;
+                    const progressText = `... (Step ${stepIdx}/${totalSteps} - Task ${nodesCompletedInStep}/${totalNodesInStep})`;
                     const typingIdx = stContext.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
                     if (typingIdx !== -1) {
                         stContext.chat[typingIdx].mes = progressText;
@@ -288,14 +295,14 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                             const avatarStr = typeof stContext.getThumbnailUrl === 'function' && stContext.characters?.[stContext.characterId] ?
                                 stContext.getThumbnailUrl('avatar', stContext.characters[stContext.characterId].avatar) : '';
 
-                            const extraData = { model: 'polyceph', polyceph_batch: batchId, polyceph_input: userInput, polyceph_node_id: node.id };
+                            const extraData = { model: 'polyceph', polyceph_batch: batchId, polyceph_input: userInput, polyceph_task_id: node.id };
                             if (nodeThoughts) {
                                 extraData.polyceph_thoughts = nodeThoughts;
                             }
 
                             let targetSwipeId = -1;
                             if (generateSwipesForBatchId) {
-                                targetSwipeId = cleanMessagesArr.findIndex(m => m.extra && m.extra.polyceph_node_id === node.id);
+                                targetSwipeId = cleanMessagesArr.findIndex(m => m.extra && m.extra.polyceph_task_id === node.id);
                             }
 
                             if (targetSwipeId !== -1) {
@@ -350,20 +357,15 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
 
                         if (node.persist && !postedAsCharacter) {
                             accumulatedThoughts.push({
-                                title: node.label || `Target ${tIdIndx}`,
+                                title: node.label || `Task ${taskIdIndx}`,
                                 content: res
                             });
                         }
 
                         if (typeof stContext.saveChat === 'function' && postedAsCharacter) stContext.saveChat();
                     }
-
-                    // Strict rate limit delay between individual requests
-                    if (settings.delayMs && settings.delayMs > 0) {
-                        await new Promise(r => setTimeout(r, settings.delayMs));
-                    }
-                }
-            }
+                })) // End Promise.all map
+            } // End profileGroups loop
 
             const combinedResult = resultsByIndex.join('\n\n---\n\n');
             const sIdIndxOuter = i + 1;
