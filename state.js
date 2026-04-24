@@ -10,15 +10,22 @@ export async function switchProfile(profileId) {
     if (!profileId) return false;
     const context = SillyTavern.getContext();
 
-    // Find the readable name since `/profile` usually expects the UI name
     const prof = availableProfiles.find(p => p.id === profileId);
     const profileName = prof ? prof.name : profileId;
 
+    if (profileName === 'Target' || profileName === 'none') {
+        console.log(`[${MODULE_NAME}] switchProfile: skipping for ${profileName}`);
+        return true;
+    }
+
+    console.log(`[${MODULE_NAME}] switchProfile: switching to "${profileName}" (id: ${profileId})`);
     const quotedName = profileName.includes(' ') ? `"${profileName}"` : profileName;
     try {
         await context.executeSlashCommandsWithOptions(`/profile ${quotedName}`, {
             handleExecutionErrors: false, handleParserErrors: false,
         });
+        // Wait a bit for ST events to fire and settings to propagate
+        await new Promise(r => setTimeout(r, 500));
         return true;
     } catch (e) {
         console.error(`[${MODULE_NAME}] Error switching profile to ${profileName}:`, e);

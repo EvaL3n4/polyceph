@@ -116,7 +116,12 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
     // Fetch World Info prompt (Lorebook)
     // Filter out typing indicator from chat for macro resolution to avoid '...' in history
     const cleanChat = stContext.chat.filter(m => !m.extra?.polyceph_typing);
-    const wiPrompt = await stContext.getWorldInfoPrompt(cleanChat, stContext.maxContext, false);
+    
+    // World Info expects a reversed array of strings (name: message)
+    const chatForWI = cleanChat.map(m => `${m.name}: ${m.mes}`).reverse();
+    const wiResult = await stContext.getWorldInfoPrompt(chatForWI, stContext.maxContext, false);
+    const wiPrompt = wiResult?.worldInfoString || '';
+    
     contextVault['wi'] = wiPrompt;
     contextVault['world_info'] = wiPrompt;
     
@@ -149,10 +154,11 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
 
             // Process each profile group sequentially
             for (const [profileId, groupNodes] of Object.entries(profileGroups)) {
-                if (profileId !== 'none') {
+                if (profileId !== 'none' && profileId !== 'Target') {
+                    console.log(`[${MODULE_NAME}] Switching to profile group: ${profileId}`);
                     await switchProfile(profileId);
                     // Allow ST UI state to settle profile load
-                    await new Promise(r => setTimeout(r, 250));
+                    await new Promise(r => setTimeout(r, 1000));
                 }
 
                 // Process nodes sequentially to strictly respect rate-limiting
