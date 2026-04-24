@@ -2,51 +2,60 @@ import { MODULE_NAME } from './constants.js';
 import { settings, switchProfile, getActivePipeline, availableProfiles } from './state.js';
 import { generateId } from './utils.js';
 
-export function parseOutputTags(rawOutput, taskId, profileDisplayName) {
+export function parseOutputTags(rawOutput, taskId, profileDisplayName, isThinkingTask) {
     const thoughts = [];
     const hiddenBackgrounds = [];
     
-    // Use regex to find all tags
-    const thinkRegex = /<think>([\s\S]*?)<\/think>/gi;
-    const rambleRegex = /<ramble>([\s\S]*?)<\/ramble>/gi;
+    // Extract backgrounds first (always extracted)
     const backgroundRegex = /<background>([\s\S]*?)<\/background>/gi;
-
-    // Extract content
-    let match;
-    while ((match = thinkRegex.exec(rawOutput)) !== null) {
-        const content = match[1].trim();
-        if (content) thoughts.push({ title: `Reasoning`, content, isSilent: true, profile: profileDisplayName });
-    }
-    while ((match = rambleRegex.exec(rawOutput)) !== null) {
-        const content = match[1].trim();
-        if (content) thoughts.push({ title: `Planning`, content, isSilent: true, profile: profileDisplayName });
-    }
-    while ((match = backgroundRegex.exec(rawOutput)) !== null) {
-        const content = match[1].trim();
+    let bgMatch;
+    while ((bgMatch = backgroundRegex.exec(rawOutput)) !== null) {
+        const content = bgMatch[1].trim();
         if (content) hiddenBackgrounds.push(content);
     }
 
-    // Process cleanOutput (passed to next steps)
-    // - Remove <think> entirely
-    // - Strip <ramble> tags but keep content
-    // - Strip <background> tags but keep content
-    let cleanOutput = rawOutput
-        .replace(thinkRegex, '')
-        .replace(/<ramble>([\s\S]*?)<\/ramble>/gi, '$1')
-        .replace(/<background>([\s\S]*?)<\/background>/gi, '$1')
-        .trim();
+    // Interleaved parsing for think/ramble and text
+    const tokenRegex = /(<think>[\s\S]*?<\/think>|<ramble>[\s\S]*?<\/ramble>)/gi;
+    const segments = rawOutput.split(tokenRegex);
+    
+    let cleanParts = [];
+    let persistentParts = [];
 
-    // Process persistentOutput (actually shown in chat)
-    // - Remove <think> entirely
-    // - Remove <ramble> entirely
-    // - Remove <background> entirely
-    let persistentOutput = rawOutput
-        .replace(thinkRegex, '')
-        .replace(rambleRegex, '')
-        .replace(backgroundRegex, '')
-        .trim();
+    segments.forEach(segment => {
+        if (!segment) return;
 
-    return { cleanOutput, persistentOutput, thoughts, hiddenBackgrounds };
+        if (segment.toLowerCase().startsWith('<think>')) {
+            const content = segment.replace(/<\/?think>/gi, '').trim();
+            if (content) {
+                thoughts.push({ title: `Thinking`, content, isSilent: true, profile: profileDisplayName });
+            }
+        } else if (segment.toLowerCase().startsWith('<ramble>')) {
+            const content = segment.replace(/<\/?ramble>/gi, '').trim();
+            if (content) {
+                thoughts.push({ title: `Rambling`, content, isSilent: true, profile: profileDisplayName });
+                cleanParts.push(content);
+            }
+        } else {
+            // Regular text (remove backgrounds from it)
+            const content = segment.replace(backgroundRegex, '').trim();
+            if (content) {
+                cleanParts.push(content);
+                persistentParts.push(content);
+                
+                // If it's a "Thinking" task, everything goes into the thoughts list in order
+                if (isThinkingTask) {
+                    thoughts.push({ title: `Task Output`, content, isSilent: false, profile: profileDisplayName });
+                }
+            }
+        }
+    });
+
+    return {
+        cleanOutput: cleanParts.join('\n\n').trim(),
+        persistentOutput: persistentParts.join('\n\n').trim(),
+        thoughts,
+        hiddenBackgrounds
+    };
 }
 
 export async function generateQuietly(profileName, prompt) {
@@ -156,7 +165,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
     //toastr.info('Starting Polyceph Pipeline...', 'Polyceph');
     const activePipeline = getActivePipeline();
     const pipelineName = activePipeline?.name || 'Default';
-    
+
     const contextVault = {
         'user_input': userInput,
         'input': userInput
@@ -273,7 +282,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                         if (!rawRes) {
                             res = rawRes;
                         } else {
-                            const { cleanOutput, persistentOutput, thoughts, hiddenBackgrounds } = parseOutputTags(rawRes, taskIdIndx, profileDisplayName);
+                            const { cleanOutput, persistentOutput, thoughts, hiddenBackgrounds } = parseOutputTags(rawRes, taskIdIndx, profileDisplayName, node.persist && !node.isCharacter);
                             res = cleanOutput;
                             displayRes = persistentOutput;
                             accumulatedThoughts.push(...thoughts);
@@ -342,12 +351,12 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                             const avatarStr = typeof stContext.getThumbnailUrl === 'function' && stContext.characters?.[stContext.characterId] ?
                                 stContext.getThumbnailUrl('avatar', stContext.characters[stContext.characterId].avatar) : '';
 
-                            const extraData = { 
-                                model: 'polyceph', 
-                                polyceph_batch: batchId, 
-                                polyceph_input: userInput, 
+                            const extraData = {
+                                model: 'polyceph',
+                                polyceph_batch: batchId,
+                                polyceph_input: userInput,
                                 polyceph_task_id: node.id,
-                                polyceph_pipeline: pipelineName 
+                                polyceph_pipeline: pipelineName
                             };
                             if (nodeThoughts) {
                                 extraData.polyceph_thoughts = nodeThoughts;
@@ -409,10 +418,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                         }
 
                         if (node.persist && !postedAsCharacter) {
-                            accumulatedThoughts.push({
-                                title: node.label || `Task ${taskIdIndx}`,
-                                content: displayRes
-                            });
+                            // Already handled by parseOutputTags when isThinkingTask was true
                         }
 
                         if (typeof stContext.saveChat === 'function' && postedAsCharacter) stContext.saveChat();
