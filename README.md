@@ -5,13 +5,13 @@ An advanced multi-model orchestration extension for SillyTavern. Define complex,
 ## The Problem
 
 Standard AI interaction is linear: you send a prompt, and a single model responds. This limits you to the strengths (and weaknesses) of a single API connection:
-- You can't have a smarter model "plan" a response before a creative model writes it.
+- You can't have a smarter model "plan" a response before a creative model writes it, or a more attentive model gather information before a smarter model considers the implications.
 - You can't cross-reference multiple models to reduce hallucinations or "consensus" check.
-- You can't easily perform intermediate summaries or data extraction during the generation flow without manual intervention.
+- You can't perform intermediate summaries or data extraction during the generation flow.
 
 ## The Solution
 
-**Polyceph** (meaning "many-headed") allows you to construct **Pipelines**. A single message from you can trigger an asynchronous, multi-step series of tasks. Models can critique their own work, summarize chat history, or cross-reference multiple API endpoints—delivering a final, polished response into your chat only after the reasoning chain is complete.
+**Polyceph** (meaning "many-headed") allows you to construct **Pipelines**. A single message from you can trigger an asynchronous, multi-step series of tasks. Models can critique their own work, summarize chat history, or anything you can write a prompt for - delivering responses into your chat at any point you choose during the reasoning chain. You can also create multiple pipelines, easily switching between them to use the best one for your message.
 
 ## Features
 
@@ -23,6 +23,14 @@ Standard AI interaction is linear: you send a prompt, and a single model respond
 - **Native Swipe Support**: Swiping a Polyceph message reruns the entire pipeline batch, keeping all multi-step results in sync.
 
 ## Installation
+
+### Via SillyTavern Extension Installer (Recommended)
+
+1. Open SillyTavern.
+2. Go to **Extensions** (puzzle icon) → **Install Extension**.
+3. Paste this repository URL: `https://github.com/nialyn-mid/polyceph`
+4. Click **Install**.
+5. Refresh the page.
 
 ### Manual Installation
 
