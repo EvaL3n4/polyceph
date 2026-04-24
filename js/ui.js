@@ -17,7 +17,7 @@ export function generateSingleThoughtHTML(t) {
             <span class="polyceph-item-toggle-icon">▶</span> ${t.title}
             ${t.profile ? `<span class="polyceph-item-metadata">${t.profile}</span>` : ''}
         </div>
-        <div class="polyceph-generated-thought-content mes_text">${contentHtml}</div>
+        <div class="polyceph-generated-thought-content">${contentHtml}</div>
     </div>`;
 }
 
@@ -75,17 +75,17 @@ export function renderPolycephThoughts() {
         const thoughtsHtml = generateThoughtsHTML(thoughts, pipelineName);
         const $thoughtsContainer = $(thoughtsHtml);
         const thoughtsId = $thoughtsContainer.attr('id');
-        
+
         const $mesText = $(messageElement).find('.mes_text').first();
         if ($mesText.length > 0) {
             $mesText.before($thoughtsContainer);
         } else {
             $(messageElement).append($thoughtsContainer);
         }
-        
+
         messageElement.setAttribute('polyceph_thoughts_rendered', 'true');
         messageElement.setAttribute('polyceph_thoughts_id', thoughtsId);
-        
+
         if (chatMsg.is_system && chatMsg.mes === '') {
             messageElement.style.display = 'none';
         }
