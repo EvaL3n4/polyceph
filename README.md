@@ -1,6 +1,6 @@
 # Polyceph
 
-An advanced multi-model orchestration extension for SillyTavern. Define complex, user-governed reasoning pipelines that allow a single user message to trigger a multi-step, multi-connection chain-of-thought process.
+A multi-model orchestration extension for SillyTavern. Define complex, user-governed reasoning pipelines that allow a single user message to trigger a multi-step, multi-connection response generation process.
 
 ## The Problem
 
