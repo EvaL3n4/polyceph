@@ -140,14 +140,13 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
     console.log(`[${MODULE_NAME}] Typing indicator started.`);
 
     try {
-        let totalNodes = 0;
-        for (const step of settings.steps) {
-            if (step.nodes) totalNodes += step.nodes.length;
-        }
-        let completedNodes = 0;
+        const totalSteps = settings.steps.length;
 
         for (let i = 0; i < settings.steps.length; i++) {
             const step = settings.steps[i];
+            const stepIdx = i + 1;
+            const totalNodesInStep = step.nodes ? step.nodes.length : 0;
+            let nodesCompletedInStep = 0;
             const isLastStep = i === settings.steps.length - 1;
 
             if (!step.nodes || step.nodes.length === 0) continue;
@@ -264,8 +263,8 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                     }
 
                     // Node-Level Persistence
-                    completedNodes++;
-                    const progressText = `... (Step ${completedNodes}/${totalNodes})`;
+                    nodesCompletedInStep++;
+                    const progressText = `... (Step ${stepIdx}/${totalSteps} - Target ${nodesCompletedInStep}/${totalNodesInStep})`;
                     const typingIdx = stContext.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
                     if (typingIdx !== -1) {
                         stContext.chat[typingIdx].mes = progressText;
