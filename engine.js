@@ -87,11 +87,14 @@ async function removeTypingIndicator() {
     const idx = context.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
     if (idx === -1) return;
 
-    context.chat.splice(idx, 1);
-    if (typeof context.renderChat === 'function') await context.renderChat();
-    // No saveChat here to avoid persisting the removal alone if not needed, 
-    // although it's safer to just do it.
-    if (typeof context.saveChat === 'function') context.saveChat();
+    if (typeof context.deleteMessage === 'function') {
+        // SillyTavern 1.11+
+        await context.deleteMessage(idx, undefined, false);
+    } else {
+        context.chat.splice(idx, 1);
+        if (typeof context.renderChat === 'function') await context.renderChat();
+        if (typeof context.saveChat === 'function') context.saveChat();
+    }
 }
 
 export async function startPipeline(text) {
@@ -106,25 +109,26 @@ export async function startPipeline(text) {
 export async function runPipeline(userInput, generateSwipesForBatchId) {
     console.log(`[${MODULE_NAME}] runPipeline started`, { userInput: userInput?.substring(0, 50), batchId: generateSwipesForBatchId });
     //toastr.info('Starting Polyceph Pipeline...', 'Polyceph');
-    const contextVault = { 
+    const contextVault = {
         'user_input': userInput,
-        'input': userInput 
+        'input': userInput
     };
     const batchId = generateSwipesForBatchId || 'batch_' + generateId();
     const stContext = SillyTavern.getContext();
-    
+    let accumulatedThoughts = [];
+
     // Fetch World Info prompt (Lorebook)
     // Filter out typing indicator from chat for macro resolution to avoid '...' in history
     const cleanChat = stContext.chat.filter(m => m && !m.extra?.polyceph_typing);
-    
+
     // World Info expects a reversed array of strings (name: message)
     const chatForWI = cleanChat.map(m => `${m.name}: ${m.mes}`).reverse();
     const wiResult = await stContext.getWorldInfoPrompt(chatForWI, stContext.maxContext, false);
     const wiPrompt = wiResult?.worldInfoString || '';
-    
+
     contextVault['wi'] = wiPrompt;
     contextVault['world_info'] = wiPrompt;
-    
+
     let cleanMessagesArr = [];
     if (generateSwipesForBatchId) {
         cleanMessagesArr = stContext.chat.filter(m => m.extra && m.extra.polyceph_batch === generateSwipesForBatchId);
@@ -136,6 +140,12 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
     console.log(`[${MODULE_NAME}] Typing indicator started.`);
 
     try {
+        let totalNodes = 0;
+        for (const step of settings.steps) {
+            if (step.nodes) totalNodes += step.nodes.length;
+        }
+        let completedNodes = 0;
+
         for (let i = 0; i < settings.steps.length; i++) {
             const step = settings.steps[i];
             const isLastStep = i === settings.steps.length - 1;
@@ -192,18 +202,29 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
 
                         // Silent Thought logic
                         if (node.stripThink && rawRes) {
-                            // Extract thinking blocks
-                            const thinkMatches = [...rawRes.matchAll(/<think>([\s\S]*?)<\/think>/gi)].map(m => m[1].trim()).filter(Boolean);
-                            const thoughtContent = thinkMatches.join('\n\n');
-                            
-                            // If thinking is unclosed at the end
-                            const unclosedMatch = rawRes.match(/<think>([\s\S]*)$/i);
-                            const unclosedThought = unclosedMatch ? unclosedMatch[1].trim() : '';
-                            
-                            const fullThought = [thoughtContent, unclosedThought].filter(Boolean).join('\n\n');
+                            if (node.persist) {
+                                const thinkMatches = [...rawRes.matchAll(/<think>([\s\S]*?)<\/think>/gi)].map(m => m[1].trim()).filter(Boolean);
+                                thinkMatches.forEach((thinkText) => {
+                                    accumulatedThoughts.push({
+                                        title: node.label ? `${node.label} (Silent)` : `Node ${tIdIndxOuter} (Silent)`,
+                                        content: thinkText,
+                                        isSilent: true
+                                    });
+                                });
 
-                            if (node.persist && fullThought) {
-                                stContext.sendSystemMessage('generic', `(silent) ${fullThought}`);
+                                let unclosedThought = '';
+                                const lastOpen = rawRes.lastIndexOf('<think>');
+                                const lastClose = rawRes.lastIndexOf('</think>');
+                                if (lastOpen !== -1 && lastOpen > lastClose) {
+                                    unclosedThought = rawRes.substring(lastOpen + 7).trim();
+                                    if (unclosedThought) {
+                                        accumulatedThoughts.push({
+                                            title: node.label ? `${node.label} (Silent)` : `Node ${tIdIndxOuter} (Silent)`,
+                                            content: unclosedThought,
+                                            isSilent: true
+                                        });
+                                    }
+                                }
                             }
 
                             // Strip for the actual result
@@ -243,14 +264,35 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                     }
 
                     // Node-Level Persistence
+                    completedNodes++;
+                    const progressText = `... (Step ${completedNodes}/${totalNodes})`;
+                    const typingIdx = stContext.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
+                    if (typingIdx !== -1) {
+                        stContext.chat[typingIdx].mes = progressText;
+                        if (typeof stContext.updateMessageBlock === 'function') {
+                            stContext.updateMessageBlock(typingIdx, stContext.chat[typingIdx]);
+                        }
+                    }
+
                     if (res && (node.persist || node.isCharacter)) {
                         let postedAsCharacter = false;
+                        let combinedRes = res;
+
                         if (node.isCharacter) {
+                            let nodeThoughts = null;
+                            if (accumulatedThoughts.length > 0) {
+                                nodeThoughts = [...accumulatedThoughts];
+                                accumulatedThoughts = [];
+                            }
+
                             const charName = stContext.characters?.[stContext.characterId]?.name || stContext.name2 || 'Assistant';
                             const avatarStr = typeof stContext.getThumbnailUrl === 'function' && stContext.characters?.[stContext.characterId] ?
                                 stContext.getThumbnailUrl('avatar', stContext.characters[stContext.characterId].avatar) : '';
-                            
+
                             const extraData = { model: 'polyceph', polyceph_batch: batchId, polyceph_input: userInput, polyceph_node_id: node.id };
+                            if (nodeThoughts) {
+                                extraData.polyceph_thoughts = nodeThoughts;
+                            }
 
                             let targetSwipeId = -1;
                             if (generateSwipesForBatchId) {
@@ -267,14 +309,14 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                                     targetMessage.swipe_id = 0;
                                 }
 
-                                targetMessage.swipes.push(res);
+                                targetMessage.swipes.push(combinedRes);
                                 targetMessage.swipe_id = targetMessage.swipes.length - 1;
                                 targetMessage.swipe_info.push({ extra: extraData });
-                                targetMessage.mes = res;
+                                targetMessage.mes = combinedRes;
 
                                 if (typeof stContext.updateMessageBlock === 'function') {
                                     stContext.updateMessageBlock(actualMesId, targetMessage);
-                                    
+
                                     // Update Swipe UI
                                     const mesBlock = document.querySelector(`.mes[mesid="${actualMesId}"]`);
                                     if (mesBlock) {
@@ -283,6 +325,10 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                                             swipeCounter.innerText = `${targetMessage.swipe_id + 1}/${targetMessage.swipes.length}`;
                                         }
                                     }
+                                    
+                                    if (stContext.eventSource && stContext.eventTypes) {
+                                        stContext.eventSource.emit(stContext.eventTypes.MESSAGE_RECEIVED, actualMesId);
+                                    }
                                 }
                             } else {
                                 const msg = {
@@ -290,21 +336,27 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                                     is_user: false,
                                     is_system: false,
                                     send_date: typeof stContext.humanizedDateTime === 'function' ? stContext.humanizedDateTime() : new Date().toLocaleString(),
-                                    mes: res,
+                                    mes: combinedRes,
                                     force_avatar: avatarStr,
                                     extra: extraData
                                 };
                                 stContext.chat.push(msg);
                                 if (typeof stContext.addOneMessage === 'function') stContext.addOneMessage(msg);
+                                if (stContext.eventSource && stContext.eventTypes) {
+                                    stContext.eventSource.emit(stContext.eventTypes.MESSAGE_RECEIVED, stContext.chat.length - 1);
+                                }
                             }
                             postedAsCharacter = true;
-                        } 
-                        
-                        if (node.persist && !postedAsCharacter) {
-                            stContext.sendSystemMessage('generic', res);
                         }
-                        
-                        if (typeof stContext.saveChat === 'function') stContext.saveChat();
+
+                        if (node.persist && !postedAsCharacter) {
+                            accumulatedThoughts.push({
+                                title: node.label || `Target ${tIdIndx}`,
+                                content: res
+                            });
+                        }
+
+                        if (typeof stContext.saveChat === 'function' && postedAsCharacter) stContext.saveChat();
                     }
 
                     // Strict rate limit delay between individual requests
@@ -322,6 +374,25 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
             if (step.label) {
                 contextVault[step.label.trim()] = combinedResult;
             }
+        }
+
+        // Handle any leftover thoughts that weren't printed because there was no final character message
+        if (accumulatedThoughts.length > 0) {
+            const extraData = { model: 'polyceph', polyceph_batch: batchId, polyceph_input: userInput, polyceph_thoughts: accumulatedThoughts };
+            const msg = {
+                name: 'Polyceph',
+                is_user: false,
+                is_system: true,
+                send_date: typeof stContext.humanizedDateTime === 'function' ? stContext.humanizedDateTime() : new Date().toLocaleString(),
+                mes: '', // Empty message, thoughts rendered in DOM
+                extra: extraData
+            };
+            stContext.chat.push(msg);
+            if (typeof stContext.addOneMessage === 'function') stContext.addOneMessage(msg);
+            if (stContext.eventSource && stContext.eventTypes) {
+                stContext.eventSource.emit(stContext.eventTypes.MESSAGE_RECEIVED, stContext.chat.length - 1);
+            }
+            if (typeof stContext.saveChat === 'function') stContext.saveChat();
         }
         //toastr.success('Pipeline finished.', 'Polyceph');
     } catch (e) {

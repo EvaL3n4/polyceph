@@ -1,6 +1,104 @@
 import { availableProfiles, settings, saveSettings, getAvailableProfiles } from './state.js';
 import { autoResizeTextarea, generateId } from './utils.js';
 
+export function generateThoughtsHTML(thoughtsArray) {
+    if (!thoughtsArray || thoughtsArray.length === 0) return '';
+    
+    const thoughtsId = `polyceph_thoughts_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    const htmlBlocks = thoughtsArray.map(t => {
+        let contentHtml = t.content;
+        const stContext = SillyTavern.getContext();
+        if (typeof stContext.messageFormatting === 'function') {
+            contentHtml = stContext.messageFormatting(contentHtml, 'Polyceph', false, false);
+        } else {
+            contentHtml = contentHtml.replace(/\n/g, '<br>');
+        }
+        
+        const silentClass = t.isSilent ? 'polyceph-silent-thought' : '';
+        
+        return `<div class="polyceph-generated-thought polyceph-item-open ${silentClass}">
+            <div class="polyceph-generated-thought-name" style="cursor:pointer;" onclick="this.parentElement.classList.toggle('polyceph-item-open');">
+                <span class="polyceph-item-toggle-icon">▶</span> ${t.title}
+            </div>
+            <div class="polyceph-generated-thought-content mes_text">${contentHtml}</div>
+        </div>`;
+    }).join('\n<div class="polyceph-thought-separator"></div>\n');
+
+    return `<div id="${thoughtsId}" class="polyceph-thoughts">
+        <div class="polyceph-thoughts-details polyceph-thoughts-open">
+            <div class="polyceph-thought-summary">
+                <div class="polyceph-thought-summary-container" onclick="this.parentElement.parentElement.classList.toggle('polyceph-thoughts-open');">
+                    <div class="polyceph-thought-summary-title"><b>Polyceph Reasoning</b></div>
+                </div>
+            </div>
+            <div class="polyceph-thought-items">
+                ${htmlBlocks}
+            </div>
+        </div>
+    </div>`;
+}
+
+export function renderPolycephThoughts() {
+    const context = SillyTavern.getContext();
+    if (!context || !context.chat) return;
+
+    $('#chat .mes').each((_, messageElement) => {
+        if (messageElement.getAttribute('polyceph_thoughts_rendered') === 'true') {
+            const thoughtsId = messageElement.getAttribute('polyceph_thoughts_id');
+            if (thoughtsId) {
+                const container = document.getElementById(thoughtsId);
+                // Reattach if it was detached by an ST re-render
+                if (container) {
+                    const $mesText = $(messageElement).find('.mes_text').first();
+                    if ($mesText.length > 0 && container.nextElementSibling !== $mesText[0]) {
+                        $mesText.before(container);
+                    } else if ($mesText.length === 0 && container.parentElement !== messageElement) {
+                        $(messageElement).append(container);
+                    }
+                }
+            }
+            return;
+        }
+
+        const mesId = messageElement.getAttribute('mesid');
+        const chatMsg = context.chat[mesId];
+        
+        if (!chatMsg) return;
+
+        let thoughts = null;
+        if (chatMsg.swipe_info && chatMsg.swipe_id !== undefined && chatMsg.swipe_info[chatMsg.swipe_id]) {
+            thoughts = chatMsg.swipe_info[chatMsg.swipe_id]?.extra?.polyceph_thoughts;
+        }
+        if (!thoughts && chatMsg.extra) {
+            thoughts = chatMsg.extra.polyceph_thoughts;
+        }
+
+        if (!thoughts || thoughts.length === 0) {
+            messageElement.setAttribute('polyceph_thoughts_rendered', 'true');
+            return;
+        }
+
+        const thoughtsHtml = generateThoughtsHTML(thoughts);
+        const $thoughtsContainer = $(thoughtsHtml);
+        const thoughtsId = $thoughtsContainer.attr('id');
+        
+        const $mesText = $(messageElement).find('.mes_text').first();
+        if ($mesText.length > 0) {
+            $mesText.before($thoughtsContainer);
+        } else {
+            $(messageElement).append($thoughtsContainer);
+        }
+        
+        messageElement.setAttribute('polyceph_thoughts_rendered', 'true');
+        messageElement.setAttribute('polyceph_thoughts_id', thoughtsId);
+        
+        if (chatMsg.is_system && chatMsg.mes === '') {
+            messageElement.style.display = 'none';
+        }
+    });
+}
+
 export function renderNode(stepId, node) {
     const profileOptions = `<option value="none">(Template Only - No LLM)</option>` +
         availableProfiles.map(p => `<option value="${p.id}" ${p.id === node.profile ? 'selected' : ''}>${p.name}</option>`).join('');

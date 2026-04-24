@@ -1,6 +1,6 @@
 import { MODULE_NAME, VERSION } from './constants.js';
 import { loadSettings, getAvailableProfiles, settings } from './state.js';
-import { addSettingsUI } from './ui.js';
+import { addSettingsUI, renderPolycephThoughts } from './ui.js';
 import { startPipeline } from './engine.js';
 
 // -------------------------------------------------------------------------
@@ -104,6 +104,12 @@ async function init() {
 
     addSettingsUI();
     setupIntercepts();
+
+    const context = SillyTavern.getContext();
+    if (context.eventSource && context.eventTypes) {
+        context.eventSource.on(context.eventTypes.CHAT_CHANGED, renderPolycephThoughts);
+        context.eventSource.on(context.eventTypes.MESSAGE_RECEIVED, renderPolycephThoughts);
+    }
 
     console.log(`[${MODULE_NAME}] Polyceph loaded.`);
 }
