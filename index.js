@@ -1,14 +1,18 @@
 import { MODULE_NAME, VERSION } from './constants.js';
 import { loadSettings, getAvailableProfiles, settings } from './state.js';
 import { addSettingsUI } from './ui.js';
-import { runPipeline } from './engine.js';
+import { startPipeline } from './engine.js';
 
 // -------------------------------------------------------------------------
 // Interception Hook
 // -------------------------------------------------------------------------
 
 function interceptSend(e) {
-    if (!settings.enabled) return;
+    console.log(`[${MODULE_NAME}] interceptSend triggered`, e.type);
+    if (!settings.enabled) {
+        console.log(`[${MODULE_NAME}] Polyceph disabled, skipping intercept.`);
+        return;
+    }
 
     const textarea = document.getElementById('send_textarea');
     if (!textarea) return;
@@ -46,7 +50,7 @@ function interceptSend(e) {
     if (typeof context.addOneMessage === 'function') context.addOneMessage(message);
     if (typeof context.saveChat === 'function') context.saveChat();
 
-    runPipeline(text);
+    startPipeline(text);
 }
 
 function interceptSwipe(e) {
@@ -75,7 +79,7 @@ function interceptSwipe(e) {
         const batchId = chatMsg.extra.polyceph_batch;
         const userInput = chatMsg.extra.polyceph_input || '';
         
-        runPipeline(userInput, batchId);
+        startPipeline(userInput, batchId);
     }
 }
 

@@ -94,7 +94,17 @@ async function removeTypingIndicator() {
     if (typeof context.saveChat === 'function') context.saveChat();
 }
 
+export async function startPipeline(text) {
+    try {
+        console.log(`[${MODULE_NAME}] Starting pipeline for text:`, text.substring(0, 50) + '...');
+        runPipeline(text);
+    } catch (err) {
+        console.error(`[${MODULE_NAME}] Error starting pipeline:`, err);
+    }
+}
+
 export async function runPipeline(userInput, generateSwipesForBatchId) {
+    console.log(`[${MODULE_NAME}] runPipeline started`, { userInput: userInput?.substring(0, 50), batchId: generateSwipesForBatchId });
     //toastr.info('Starting Polyceph Pipeline...', 'Polyceph');
     const contextVault = { 
         'user_input': userInput,
@@ -115,7 +125,10 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
         cleanMessagesArr = stContext.chat.filter(m => m.extra && m.extra.polyceph_batch === generateSwipesForBatchId);
     }
 
+    console.log(`[${MODULE_NAME}] Pipeline context initialized. Clean chat size:`, cleanChat.length);
+
     await startTypingIndicator();
+    console.log(`[${MODULE_NAME}] Typing indicator started.`);
 
     try {
         for (let i = 0; i < settings.steps.length; i++) {
