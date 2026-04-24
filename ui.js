@@ -185,6 +185,18 @@ export function bindStepEvents() {
     });
 }
 
+function renderNeoSlider(label, id, value, min, max, step) {
+    return `
+        <div class="alignitemscenter flex-container flexFlowColumn flexGrow flexShrink gap0 flexBasis48p">
+            <small>
+                <span style="font-weight: bold; margin-bottom: 2px; display: block;">${label}</span>
+            </small>
+            <input class="neo-range-slider" type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${value}">
+            <input class="neo-range-input" type="number" id="${id}_value" data-for="${id}" min="${min}" max="${max}" step="${step}" value="${value}">
+        </div>
+    `;
+}
+
 export function createSettingsHTML() {
     return `
         <div class="polyceph-settings">
@@ -223,18 +235,14 @@ export function createSettingsHTML() {
                         <label for="polyceph_enabled"><b>Enable Polyceph</b></label>
                     </div>
 
-                    <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
-                        <label for="polyceph_delay"><b>Request Delay (ms):</b></label>
-                        <input type="number" id="polyceph_delay" value="${settings.delayMs || 0}" min="0" step="50" style="width: 80px; padding: 2px;" />
-                        <label for="polyceph_generation_timeout" style="margin-left: 10px;"><b>Model Timeout (ms):</b></label>
-                        <input type="number" id="polyceph_generation_timeout" value="${settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 60000}" min="0" step="1000" style="width: 80px; padding: 2px;" />
+                    <div style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 15px;">
+                        ${renderNeoSlider('Request Delay (ms)', 'polyceph_delay', settings.delayMs || 0, 0, 5000, 50)}
+                        ${renderNeoSlider('Model Timeout (ms)', 'polyceph_generation_timeout', settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 60000, 0, 300000, 1000)}
                     </div>
 
-                    <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
-                        <label for="polyceph_max_retries"><b>Max Retries:</b></label>
-                        <input type="number" id="polyceph_max_retries" value="${settings.maxRetries !== undefined ? settings.maxRetries : 3}" min="0" step="1" style="width: 60px; padding: 2px;" />
-                        <label for="polyceph_retry_delay" style="margin-left: 10px;"><b>Retry Delay (ms):</b></label>
-                        <input type="number" id="polyceph_retry_delay" value="${settings.retryDelayMs !== undefined ? settings.retryDelayMs : 2000}" min="0" step="100" style="width: 80px; padding: 2px;" />
+                    <div style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 15px;">
+                        ${renderNeoSlider('Max Retries', 'polyceph_max_retries', settings.maxRetries !== undefined ? settings.maxRetries : 3, 0, 10, 1)}
+                        ${renderNeoSlider('Retry Delay (ms)', 'polyceph_retry_delay', settings.retryDelayMs !== undefined ? settings.retryDelayMs : 2000, 0, 10000, 100)}
                     </div>
 
                     <div id="polyceph_steps_container" class="polyceph-step-list"></div>
@@ -262,6 +270,34 @@ export function addSettingsUI() {
 
     updateUI();
 
+    // Bind Neo Sliders
+    const bindSlider = (id, settingKey) => {
+        const slider = document.getElementById(id);
+        const input = document.getElementById(id + '_value');
+        if (!slider || !input) return;
+
+        // Sync Slider -> Input & Setting
+        slider.addEventListener('input', (e) => {
+            const val = e.target.value;
+            input.value = val;
+            settings[settingKey] = parseInt(val) || 0;
+            SillyTavern.getContext().saveSettingsDebounced();
+        });
+
+        // Sync Input -> Slider & Setting
+        input.addEventListener('change', (e) => {
+            const val = e.target.value;
+            slider.value = val;
+            settings[settingKey] = parseInt(val) || 0;
+            SillyTavern.getContext().saveSettingsDebounced();
+        });
+    };
+
+    bindSlider('polyceph_delay', 'delayMs');
+    bindSlider('polyceph_generation_timeout', 'generationTimeoutMs');
+    bindSlider('polyceph_max_retries', 'maxRetries');
+    bindSlider('polyceph_retry_delay', 'retryDelayMs');
+
     // Toggle placeholders visibility
     document.getElementById('polyceph_placeholders_toggle').addEventListener('click', () => {
         const content = document.getElementById('polyceph_placeholders_content');
@@ -273,26 +309,6 @@ export function addSettingsUI() {
 
     document.getElementById('polyceph_enabled')?.addEventListener('change', (e) => {
         settings.enabled = e.target.checked;
-        SillyTavern.getContext().saveSettingsDebounced();
-    });
-
-    document.getElementById('polyceph_delay')?.addEventListener('change', (e) => {
-        settings.delayMs = parseInt(e.target.value) || 0;
-        SillyTavern.getContext().saveSettingsDebounced();
-    });
-
-    document.getElementById('polyceph_generation_timeout')?.addEventListener('change', (e) => {
-        settings.generationTimeoutMs = parseInt(e.target.value) || 0;
-        SillyTavern.getContext().saveSettingsDebounced();
-    });
-
-    document.getElementById('polyceph_max_retries')?.addEventListener('change', (e) => {
-        settings.maxRetries = parseInt(e.target.value) || 0;
-        SillyTavern.getContext().saveSettingsDebounced();
-    });
-
-    document.getElementById('polyceph_retry_delay')?.addEventListener('change', (e) => {
-        settings.retryDelayMs = parseInt(e.target.value) || 0;
         SillyTavern.getContext().saveSettingsDebounced();
     });
 
