@@ -89,11 +89,32 @@ export function loadSettings() {
     const saved = context.extensionSettings?.[MODULE_NAME];
     if (saved) {
         settings = { ...defaultSettings, ...saved };
-        // Migration safeguard
+        // Migration safeguard & property initialization
         settings.steps.forEach(s => {
             if (!s.nodes) {
-                s.nodes = [{ id: 'node_' + Math.random().toString(36).substring(2, 9), profile: s.models?.[0] || '', template: s.template || '{{user_input}}' }];
+                s.nodes = [{ 
+                    id: 'node_' + Math.random().toString(36).substring(2, 9), 
+                    profile: s.models?.[0] || '', 
+                    template: s.template || '{{user_input}}' 
+                }];
             }
+
+            // Migration: Move step settings to nodes
+            if (s.persist !== undefined || s.cleanPersist !== undefined) {
+                s.nodes.forEach(n => {
+                    if (n.persist === undefined) n.persist = !!s.persist;
+                    if (n.isCharacter === undefined) n.isCharacter = !!s.cleanPersist;
+                });
+                delete s.persist;
+                delete s.cleanPersist;
+            }
+
+            // Ensure all nodes have new properties
+            s.nodes.forEach(n => {
+                if (n.persist === undefined) n.persist = false;
+                if (n.isCharacter === undefined) n.isCharacter = false;
+                if (n.stripThink === undefined) n.stripThink = false;
+            });
         });
     }
 }

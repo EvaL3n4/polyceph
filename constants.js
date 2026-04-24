@@ -12,10 +12,17 @@ export const defaultSettings = {
         {
             id: 'step_1',
             label: '',
-            persist: false,
-            cleanPersist: false,
             nodes: [
-                { id: 'node_1', label: '', profile: 'none', useSystem: false, template: '{{user_input}}' }
+                { 
+                    id: 'node_1', 
+                    label: '', 
+                    profile: 'none', 
+                    useSystem: false, 
+                    template: '{{user_input}}',
+                    persist: false,
+                    isCharacter: false,
+                    stripThink: false
+                }
             ]
         }
     ]

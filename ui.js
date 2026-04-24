@@ -15,7 +15,7 @@ export function renderNode(stepId, node) {
                     </select>
                     <i class="fa-solid fa-times polyceph-del-node" data-node-id="${node.id}" data-step-id="${stepId}"></i>
                 </div>
-                <div style="display: flex; align-items: center; gap: 15px; padding-left: 2px;">
+                <div style="display: flex; align-items: center; gap: 15px; padding-left: 2px; flex-wrap: wrap;">
                     <div style="display: flex; align-items: center; gap: 4px;">
                         <input type="checkbox" class="polyceph-node-system-checkbox" data-step-id="${stepId}" data-node-id="${node.id}" ${node.useSystem ? 'checked' : ''} title="Include System Prompt + Context">
                         <label style="font-size: 0.8em; cursor: pointer;" title="Include System Prompt + Context">Include Sys</label>
@@ -23,6 +23,14 @@ export function renderNode(stepId, node) {
                     <div style="display: flex; align-items: center; gap: 4px;">
                         <input type="checkbox" class="polyceph-node-strip-think-checkbox" data-step-id="${stepId}" data-node-id="${node.id}" ${node.stripThink ? 'checked' : ''} title="Strip <think> tags from output">
                         <label style="font-size: 0.8em; cursor: pointer;" title="Strip <think> tags from output">Strip Think</label>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        <input type="checkbox" class="polyceph-node-persist-checkbox" data-step-id="${stepId}" data-node-id="${node.id}" ${node.persist ? 'checked' : ''} title="Post this result to chat during execution">
+                        <label style="font-size: 0.8em; cursor: pointer;" title="Post this result to chat during execution">Pre-message</label>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        <input type="checkbox" class="polyceph-node-character-checkbox" data-step-id="${stepId}" data-node-id="${node.id}" ${node.isCharacter ? 'checked' : ''} title="If persisted, use character name/avatar">
+                        <label style="font-size: 0.8em; cursor: pointer;" title="If persisted, use character name/avatar">Character Message</label>
                     </div>
                 </div>
             </div>
@@ -41,16 +49,6 @@ export function renderStep(step, index) {
                     <b>Step ${index + 1} </b>
                     <input type="text" class="polyceph-step-label-input text_pole" data-step-id="${step.id}" placeholder="Custom Label..." value="${step.label || ''}" style="flex: 1; max-width: 200px; padding: 2px 5px;" />
                     <i class="fa-solid fa-trash polyceph-del-step" data-step-id="${step.id}" style="margin-left: auto;"></i>
-                </div>
-                <div style="display: flex; align-items: center; gap: 15px; padding-left: 2px;">
-                    <div style="display: flex; align-items: center; gap: 4px;">
-                        <input type="checkbox" class="polyceph-clean-checkbox" data-step-id="${step.id}" ${step.cleanPersist ? 'checked' : ''} title="Make output look like standard character message">
-                        <label style="font-size: 0.85em; cursor: pointer;" title="Make output look like standard character message">Clean Mode</label>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 4px;">
-                        <input type="checkbox" class="polyceph-persist-checkbox" data-step-id="${step.id}" ${step.persist ? 'checked' : ''}>
-                        <label style="font-size: 0.85em; cursor: pointer;">Persist Output</label>
-                    </div>
                 </div>
             </div>
             <div class="polyceph-nodes-list">
@@ -180,21 +178,25 @@ export function bindStepEvents() {
         });
     });
 
-    document.querySelectorAll('.polyceph-clean-checkbox').forEach(cb => {
+    document.querySelectorAll('.polyceph-node-persist-checkbox').forEach(cb => {
         cb.addEventListener('change', (e) => {
-            const stepId = e.target.getAttribute('data-step-id');
-            const step = settings.steps.find(s => s.id === stepId);
-            if (step) {
-                step.cleanPersist = e.target.checked;
-                SillyTavern.getContext().saveSettingsDebounced();
+            const nodeId = e.target.getAttribute('data-node-id');
+            for (const step of settings.steps) {
+                const node = step.nodes.find(n => n.id === nodeId);
+                if (node) { node.persist = e.target.checked; break; }
             }
+            SillyTavern.getContext().saveSettingsDebounced();
         });
     });
 
-    document.querySelectorAll('.polyceph-persist-checkbox').forEach(checkbox => {
-        checkbox.addEventListener('change', (e) => {
-            const step = settings.steps.find(s => s.id === e.target.getAttribute('data-step-id'));
-            if (step) { step.persist = e.target.checked; saveSettings(); }
+    document.querySelectorAll('.polyceph-node-character-checkbox').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+            const nodeId = e.target.getAttribute('data-node-id');
+            for (const step of settings.steps) {
+                const node = step.nodes.find(n => n.id === nodeId);
+                if (node) { node.isCharacter = e.target.checked; break; }
+            }
+            SillyTavern.getContext().saveSettingsDebounced();
         });
     });
 

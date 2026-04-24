@@ -71,7 +71,7 @@ async function startTypingIndicator() {
 
 async function ensureTypingIndicatorAtEnd() {
     const context = SillyTavern.getContext();
-    const idx = context.chat.findIndex(m => m.extra && m.extra.polyceph_typing);
+    const idx = context.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
     if (idx === -1) return;
 
     if (idx === context.chat.length - 1) return;
@@ -84,7 +84,7 @@ async function ensureTypingIndicatorAtEnd() {
 
 async function removeTypingIndicator() {
     const context = SillyTavern.getContext();
-    const idx = context.chat.findIndex(m => m.extra && m.extra.polyceph_typing);
+    const idx = context.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
     if (idx === -1) return;
 
     context.chat.splice(idx, 1);
@@ -115,7 +115,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
     
     // Fetch World Info prompt (Lorebook)
     // Filter out typing indicator from chat for macro resolution to avoid '...' in history
-    const cleanChat = stContext.chat.filter(m => !m.extra?.polyceph_typing);
+    const cleanChat = stContext.chat.filter(m => m && !m.extra?.polyceph_typing);
     
     // World Info expects a reversed array of strings (name: message)
     const chatForWI = cleanChat.map(m => `${m.name}: ${m.mes}`).reverse();
@@ -187,11 +187,27 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                     const maxAttempts = (settings.maxRetries !== undefined) ? settings.maxRetries : 0;
 
                     for (let attempt = 0; attempt <= maxAttempts; attempt++) {
-                        res = await generateQuietly(node.profile, prompt, !!node.useSystem);
+                        let rawRes = await generateQuietly(node.profile, prompt, !!node.useSystem);
+                        res = rawRes;
 
-                        if (node.stripThink && res) {
-                            // Strip multiple <think> blocks and handle unclosed tags at the end
-                            res = res.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<think>[\s\S]*$/gi, '').trim();
+                        // Silent Thought logic
+                        if (node.stripThink && rawRes) {
+                            // Extract thinking blocks
+                            const thinkMatches = [...rawRes.matchAll(/<think>([\s\S]*?)<\/think>/gi)].map(m => m[1].trim()).filter(Boolean);
+                            const thoughtContent = thinkMatches.join('\n\n');
+                            
+                            // If thinking is unclosed at the end
+                            const unclosedMatch = rawRes.match(/<think>([\s\S]*)$/i);
+                            const unclosedThought = unclosedMatch ? unclosedMatch[1].trim() : '';
+                            
+                            const fullThought = [thoughtContent, unclosedThought].filter(Boolean).join('\n\n');
+
+                            if (node.persist && fullThought) {
+                                stContext.sendSystemMessage('generic', `(silent) ${fullThought}`);
+                            }
+
+                            // Strip for the actual result
+                            res = rawRes.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<think>[\s\S]*$/gi, '').trim();
                         }
 
                         const isEmpty = !res || res.trim() === "" || res === "(Generation returned empty)" || res === "(Error during generation)";
@@ -217,13 +233,78 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                         contextVault[node.label.trim()] = res;
                     }
 
-                    if (node.profile === 'none' || step.cleanPersist) {
-                        // Keep text completely clean for template-only and cleanPersist nodes
+                    if (node.profile === 'none' || node.isCharacter) {
+                        // Keep text clean for character/template nodes
                         resultsByIndex[nodeIndex] = res;
                     } else {
-                        // Wrap normally without the gigantic API profile names
+                        // Wrap normally for system-style persistence
                         const targetHeader = node.label ? node.label : `Target ${tIdIndx}`;
                         resultsByIndex[nodeIndex] = `[${targetHeader}]\n${res}`;
+                    }
+
+                    // Node-Level Persistence
+                    if (res && (node.persist || node.isCharacter)) {
+                        let postedAsCharacter = false;
+                        if (node.isCharacter) {
+                            const charName = stContext.characters?.[stContext.characterId]?.name || stContext.name2 || 'Assistant';
+                            const avatarStr = typeof stContext.getThumbnailUrl === 'function' && stContext.characters?.[stContext.characterId] ?
+                                stContext.getThumbnailUrl('avatar', stContext.characters[stContext.characterId].avatar) : '';
+                            
+                            const extraData = { model: 'polyceph', polyceph_batch: batchId, polyceph_input: userInput, polyceph_node_id: node.id };
+
+                            let targetSwipeId = -1;
+                            if (generateSwipesForBatchId) {
+                                targetSwipeId = cleanMessagesArr.findIndex(m => m.extra && m.extra.polyceph_node_id === node.id);
+                            }
+
+                            if (targetSwipeId !== -1) {
+                                const targetMessage = cleanMessagesArr[targetSwipeId];
+                                const actualMesId = stContext.chat.indexOf(targetMessage);
+
+                                if (!Array.isArray(targetMessage.swipes)) {
+                                    targetMessage.swipes = [targetMessage.mes];
+                                    targetMessage.swipe_info = [{}];
+                                    targetMessage.swipe_id = 0;
+                                }
+
+                                targetMessage.swipes.push(res);
+                                targetMessage.swipe_id = targetMessage.swipes.length - 1;
+                                targetMessage.swipe_info.push({ extra: extraData });
+                                targetMessage.mes = res;
+
+                                if (typeof stContext.updateMessageBlock === 'function') {
+                                    stContext.updateMessageBlock(actualMesId, targetMessage);
+                                    
+                                    // Update Swipe UI
+                                    const mesBlock = document.querySelector(`.mes[mesid="${actualMesId}"]`);
+                                    if (mesBlock) {
+                                        const swipeCounter = mesBlock.querySelector('.swipe_counter');
+                                        if (swipeCounter) {
+                                            swipeCounter.innerText = `${targetMessage.swipe_id + 1}/${targetMessage.swipes.length}`;
+                                        }
+                                    }
+                                }
+                            } else {
+                                const msg = {
+                                    name: charName,
+                                    is_user: false,
+                                    is_system: false,
+                                    send_date: typeof stContext.humanizedDateTime === 'function' ? stContext.humanizedDateTime() : new Date().toLocaleString(),
+                                    mes: res,
+                                    force_avatar: avatarStr,
+                                    extra: extraData
+                                };
+                                stContext.chat.push(msg);
+                                if (typeof stContext.addOneMessage === 'function') stContext.addOneMessage(msg);
+                            }
+                            postedAsCharacter = true;
+                        } 
+                        
+                        if (node.persist && !postedAsCharacter) {
+                            stContext.sendSystemMessage('generic', res);
+                        }
+                        
+                        if (typeof stContext.saveChat === 'function') stContext.saveChat();
                     }
 
                     // Strict rate limit delay between individual requests
@@ -233,96 +314,13 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                 }
             }
 
-            const combinedResult = step.cleanPersist ? resultsByIndex.join('\n\n') : resultsByIndex.join('\n\n---\n\n');
+            const combinedResult = resultsByIndex.join('\n\n---\n\n');
             const sIdIndxOuter = i + 1;
 
             contextVault[step.id] = combinedResult;
             contextVault[`s${sIdIndxOuter}`] = combinedResult;
             if (step.label) {
                 contextVault[step.label.trim()] = combinedResult;
-            }
-
-            if (step.persist) {
-                const context = SillyTavern.getContext();
-                if (step.cleanPersist) {
-                    // Send directly into the chat buffer as a character message
-                    const charName = context.characters?.[context.characterId]?.name || context.name2 || 'Assistant';
-                    const avatarStr = typeof context.getThumbnailUrl === 'function' && context.characters?.[context.characterId] ?
-                        context.getThumbnailUrl('avatar', context.characters[context.characterId].avatar) : '';
-
-                    const extraData = { api: 'manual', model: 'polyceph', polyceph_batch: batchId, polyceph_input: userInput, polyceph_step_id: step.id };
-
-                    let targetSwipeId = -1;
-                    if (generateSwipesForBatchId) {
-                        targetSwipeId = cleanMessagesArr.findIndex(m => m.extra && m.extra.polyceph_step_id === step.id);
-                    }
-
-                    if (targetSwipeId !== -1) {
-                        const targetMessage = cleanMessagesArr[targetSwipeId];
-                        const actualMesId = context.chat.indexOf(targetMessage);
-
-                        if (!Array.isArray(targetMessage.swipes)) {
-                            targetMessage.swipes = [targetMessage.mes];
-                            targetMessage.swipe_info = [{}];
-                            targetMessage.swipe_id = 0;
-                        }
-
-                        targetMessage.swipes.push(combinedResult);
-                        targetMessage.swipe_id = targetMessage.swipes.length - 1;
-                        targetMessage.swipe_info.push({ extra: extraData });
-                        targetMessage.mes = combinedResult;
-
-                        if (typeof context.updateMessageBlock === 'function') {
-                            context.updateMessageBlock(actualMesId, targetMessage);
-                            
-                            // Manually update ST swipe UI state
-                            const mesBlock = document.querySelector(`.mes[mesid="${actualMesId}"]`);
-                            if (mesBlock) {
-                                const counter = mesBlock.querySelector('.swipes-counter');
-                                if (counter) counter.textContent = `${targetMessage.swipes.length}/${targetMessage.swipes.length}`;
-                                
-                                const swipeLeft = mesBlock.querySelector('.swipe_left');
-                                if (swipeLeft) swipeLeft.style.display = 'flex';
-                            }
-                        }
-                        if (context.eventSource && context.eventTypes) {
-                            context.eventSource.emit(context.eventTypes.MESSAGE_SWIPED, actualMesId);
-                        }
-                        if (typeof context.saveChat === 'function') context.saveChat();
-                    } else {
-                        const message = {
-                            name: charName,
-                            is_user: false,
-                            is_system: false,
-                            send_date: typeof context.humanizedDateTime === 'function' ? context.humanizedDateTime() : new Date().toLocaleString(),
-                            mes: combinedResult,
-                            force_avatar: avatarStr,
-                            extra: extraData
-                        };
-                        context.chat.push(message);
-                        if (context.eventSource && context.eventTypes) {
-                            await context.eventSource.emit(context.eventTypes.MESSAGE_RECEIVED, context.chat.length - 1);
-                        }
-                        if (typeof context.addOneMessage === 'function') context.addOneMessage(message);
-                        if (context.eventSource && context.eventTypes) {
-                            await context.eventSource.emit(context.eventTypes.CHARACTER_MESSAGE_RENDERED, context.chat.length - 1);
-                        }
-                        if (typeof context.saveChat === 'function') context.saveChat();
-                    }
-                    await ensureTypingIndicatorAtEnd();
-                } else {
-                    const stepHeader = step.label ? `[${step.label}]` : `[Polyceph Output: Step ${sIdIndxOuter}]`;
-                    await context.executeSlashCommandsWithOptions(`/sys ${stepHeader}\n${combinedResult}`, {
-                        handleExecutionErrors: false, handleParserErrors: false
-                    });
-                }
-            }
-
-            if (isLastStep) {
-                const stContext = SillyTavern.getContext();
-                await stContext.executeSlashCommandsWithOptions(`/echo ${combinedResult}`, {
-                    handleExecutionErrors: false, handleParserErrors: false
-                });
             }
         }
         //toastr.success('Pipeline finished.', 'Polyceph');
