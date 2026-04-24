@@ -2,7 +2,6 @@ export const MODULE_NAME = 'polyceph';
 export const VERSION = '0.2.0';
 
 export const defaultSettings = {
-    enabled: false,
     delayMs: 250,
     generationTimeoutMs: 60000,
     maxRetries: 3,

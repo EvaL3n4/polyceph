@@ -81,9 +81,11 @@ export function updateUI() {
     // Update pipeline selector
     const selector = document.getElementById('polyceph_pipeline_selector');
     if (selector) {
-        selector.innerHTML = settings.pipelines.map(p => 
-            `<option value="${p.id}" ${p.id === settings.activePipelineId ? 'selected' : ''}>${p.name}</option>`
-        ).join('');
+        const noneSelected = settings.activePipelineId === 'none' ? 'selected' : '';
+        selector.innerHTML = `<option value="none" ${noneSelected}>None (Disabled)</option>` + 
+            settings.pipelines.map(p => 
+                `<option value="${p.id}" ${p.id === settings.activePipelineId ? 'selected' : ''}>${p.name}</option>`
+            ).join('');
     }
 
     // Update active pipeline name input
@@ -280,10 +282,7 @@ export function createSettingsHTML() {
                         <i class="fa-solid fa-refresh"></i> Refresh Profiles
                     </button>
                     
-                    <div style="margin-bottom: 15px; display: flex; align-items: center; gap: 10px;">
-                        <input type="checkbox" id="polyceph_enabled" ${settings.enabled ? 'checked' : ''}>
-                        <label for="polyceph_enabled"><b>Enable Polyceph</b></label>
-                    </div>
+
 
                     <div style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 15px;">
                         ${renderNeoSlider('Request Delay (ms)', 'polyceph_delay', settings.delayMs || 0, 0, 5000, 50)}
@@ -361,10 +360,7 @@ export function addSettingsUI() {
     bindSlider('polyceph_max_retries', 'maxRetries');
     bindSlider('polyceph_retry_delay', 'retryDelayMs');
 
-    document.getElementById('polyceph_enabled')?.addEventListener('change', (e) => {
-        settings.enabled = e.target.checked;
-        saveSettings();
-    });
+
 
     // Pipeline Manager Events
     document.getElementById('polyceph_pipeline_selector')?.addEventListener('change', (e) => {

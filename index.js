@@ -1,8 +1,9 @@
-import { MODULE_NAME, VERSION } from './constants.js';
-import { loadSettings, getAvailableProfiles, settings } from './state.js';
-import { renderPolycephThoughts } from './ui.js';
-import { addSettingsUI } from './settings-ui.js';
-import { startPipeline } from './engine.js';
+import { MODULE_NAME, VERSION } from './js/constants.js';
+import { loadSettings, getAvailableProfiles, settings } from './js/state.js';
+import { renderPolycephThoughts } from './js/ui.js';
+import { addSettingsUI } from './js/settings-ui.js';
+import { startPipeline } from './js/engine.js';
+import { injectChatPipelineSelector, updateChatSelectorOptions } from './js/chat-ui.js';
 
 // -------------------------------------------------------------------------
 // Interception Hook
@@ -10,8 +11,8 @@ import { startPipeline } from './engine.js';
 
 function interceptSend(e) {
     console.log(`[${MODULE_NAME}] interceptSend triggered`, e.type);
-    if (!settings.enabled) {
-        console.log(`[${MODULE_NAME}] Polyceph disabled, skipping intercept.`);
+    if (settings.activePipelineId === 'none') {
+        console.log(`[${MODULE_NAME}] Polyceph set to 'None', skipping intercept.`);
         return;
     }
 
@@ -55,31 +56,31 @@ function interceptSend(e) {
 }
 
 function interceptSwipe(e) {
-    if (!settings.enabled) return;
-    
+    if (settings.activePipelineId === 'none') return;
+
     if (!e.target.classList.contains('swipe_right')) return;
-    
+
     const mesBlock = e.target.closest('.mes');
     if (!mesBlock) return;
-    
+
     const mesId = parseInt(mesBlock.getAttribute('mesid'));
     const context = SillyTavern.getContext();
     const chatMsg = context.chat[mesId];
-    
+
     if (!chatMsg || !chatMsg.extra || chatMsg.extra.model !== 'polyceph') return;
 
     const swipeId = chatMsg.swipe_id || 0;
     const swipesLen = chatMsg.swipes ? chatMsg.swipes.length : 1;
-    
+
     if (swipeId === swipesLen - 1) {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        
+
         toastr.info('Polyceph generation running...', 'Polyceph');
         const batchId = chatMsg.extra.polyceph_batch;
         const userInput = chatMsg.extra.polyceph_input || '';
-        
+
         startPipeline(userInput, batchId);
     }
 }
@@ -105,11 +106,15 @@ async function init() {
 
     addSettingsUI();
     setupIntercepts();
+    injectChatPipelineSelector();
 
     const context = SillyTavern.getContext();
     if (context.eventSource && context.eventTypes) {
         context.eventSource.on(context.eventTypes.CHAT_CHANGED, renderPolycephThoughts);
         context.eventSource.on(context.eventTypes.MESSAGE_RECEIVED, renderPolycephThoughts);
+        
+        // Update chat dropdown when settings are saved/changed
+        context.eventSource.on(context.eventTypes.SETTINGS_UPDATED, () => updateChatSelectorOptions());
     }
 
     console.log(`[${MODULE_NAME}] Polyceph loaded.`);

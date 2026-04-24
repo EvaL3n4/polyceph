@@ -190,7 +190,8 @@
 }
 
 /* Metadata Labels */
-.polyceph-header-metadata, .polyceph-item-metadata {
+.polyceph-header-metadata,
+.polyceph-item-metadata {
     float: right;
     font-size: 0.75em;
     font-weight: normal;
@@ -214,4 +215,46 @@
     align-items: center;
     width: 100%;
     box-sizing: border-box;
+}
+
+/* Chat UI Pipeline Selector */
+#rightSendForm .polyceph-chat-pipeline-container {
+    display: inline-flex !important;
+    align-items: center !important;
+    width: auto !important;
+    height: 100% !important;
+    margin-right: 0.3rem !important;
+    gap: 0.2rem !important;
+    opacity: 0.8;
+    flex-shrink: 0 !important;
+}
+
+.polyceph-chat-pipeline-icon {
+    font-size: 1.5rem;
+    color: var(--SmartThemeKeyColor);
+    cursor: default;
+    user-select: none;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+}
+
+.polyceph-chat-pipeline-selector {
+    width: auto !important;
+    max-width: 7.5rem !important;
+    height: inherit;
+    padding: 0 0.2rem !important;
+    font-size: 0.75rem !important;
+    cursor: pointer;
+    border-radius: 0.3rem;
+    border: none;
+    background-color: var(--SmartThemeChatTintColor, rgba(0, 0, 0, 0.2));
+    color: var(--SmartThemeBodyColor);
+    line-height: 1.4rem !important;
+    vertical-align: middle;
+}
+
+.polyceph-chat-pipeline-selector:hover {
+    background-color: var(--SmartThemeBotMesBlurTintColor, rgba(0, 0, 0, 0.4));
+    opacity: 1;
 }

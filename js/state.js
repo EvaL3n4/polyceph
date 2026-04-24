@@ -133,10 +133,16 @@ export function loadSettings() {
             delete saved.steps;
         }
 
+        // Migration: enabled -> activePipelineId = 'none'
+        if (saved.enabled === false) {
+            saved.activePipelineId = 'none';
+        }
+        delete saved.enabled;
+
         settings = { ...defaultSettings, ...saved };
         
         // Ensure activePipelineId is valid
-        if (!settings.pipelines.find(p => p.id === settings.activePipelineId)) {
+        if (settings.activePipelineId !== 'none' && !settings.pipelines.find(p => p.id === settings.activePipelineId)) {
             settings.activePipelineId = settings.pipelines[0]?.id || 'default';
         }
 
