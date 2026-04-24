@@ -1,29 +1,31 @@
 import { getActivePipeline } from './state.js';
 
+export function generateSingleThoughtHTML(t) {
+    let contentHtml = t.content;
+    const stContext = SillyTavern.getContext();
+    if (typeof stContext.messageFormatting === 'function') {
+        contentHtml = stContext.messageFormatting(contentHtml, 'Polyceph', false, false);
+    } else {
+        contentHtml = contentHtml.replace(/\n/g, '<br>');
+    }
+
+    const openClass = t.isSilent ? '' : 'polyceph-item-open';
+    const silentClass = t.isSilent ? 'polyceph-silent-thought' : '';
+
+    return `<div class="polyceph-generated-thought ${openClass} ${silentClass}">
+        <div class="polyceph-generated-thought-name" style="cursor:pointer;" onclick="this.parentElement.classList.toggle('polyceph-item-open');">
+            <span class="polyceph-item-toggle-icon">▶</span> ${t.title}
+        </div>
+        <div class="polyceph-generated-thought-content mes_text">${contentHtml}</div>
+    </div>`;
+}
+
 export function generateThoughtsHTML(thoughtsArray) {
     if (!thoughtsArray || thoughtsArray.length === 0) return '';
-    
+
     const thoughtsId = `polyceph_thoughts_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    const htmlBlocks = thoughtsArray.map(t => {
-        let contentHtml = t.content;
-        const stContext = SillyTavern.getContext();
-        if (typeof stContext.messageFormatting === 'function') {
-            contentHtml = stContext.messageFormatting(contentHtml, 'Polyceph', false, false);
-        } else {
-            contentHtml = contentHtml.replace(/\n/g, '<br>');
-        }
-        
-        const openClass = t.isSilent ? '' : 'polyceph-item-open';
-        const silentClass = t.isSilent ? 'polyceph-silent-thought' : '';
-        
-        return `<div class="polyceph-generated-thought ${openClass} ${silentClass}">
-            <div class="polyceph-generated-thought-name" style="cursor:pointer;" onclick="this.parentElement.classList.toggle('polyceph-item-open');">
-                <span class="polyceph-item-toggle-icon">▶</span> ${t.title}
-            </div>
-            <div class="polyceph-generated-thought-content mes_text">${contentHtml}</div>
-        </div>`;
-    }).join('\n<div class="polyceph-thought-separator"></div>\n');
+
+    const htmlBlocks = thoughtsArray.map(t => generateSingleThoughtHTML(t)).join('\n<div class="polyceph-thought-separator"></div>\n');
 
     return `<div id="${thoughtsId}" class="polyceph-thoughts">
         <div class="polyceph-thoughts-details">
@@ -44,33 +46,10 @@ export function renderPolycephThoughts() {
     if (!context || !context.chat) return;
 
     $('#chat .mes').each((_, messageElement) => {
-        if (messageElement.getAttribute('polyceph_thoughts_rendered') === 'true') {
-            const thoughtsId = messageElement.getAttribute('polyceph_thoughts_id');
-            if (thoughtsId) {
-                const container = document.getElementById(thoughtsId);
-                if (container) {
-                    try {
-                        // If it's already inside this message, we don't need to do anything
-                        if (messageElement.contains(container)) return;
-
-                        // Otherwise, reattach if it was moved/detached by an ST re-render
-                        const $mesText = $(messageElement).find('.mes_text').first();
-                        if ($mesText.length > 0) {
-                            $mesText.before(container);
-                        } else {
-                            $(messageElement).append(container);
-                        }
-                    } catch (e) {
-                        console.warn('[polyceph] Failed to reattach thoughts container:', e);
-                    }
-                }
-            }
-            return;
-        }
+        if (messageElement.getAttribute('polyceph_thoughts_rendered') === 'true') return;
 
         const mesId = messageElement.getAttribute('mesid');
         const chatMsg = context.chat[mesId];
-        
         if (!chatMsg) return;
 
         let thoughts = null;

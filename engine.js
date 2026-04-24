@@ -174,6 +174,8 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                 // Process tasks in parallel (staggered by delayMs)
                 await Promise.all(groupNodes.map(async (item, k) => {
                     const { node, nodeIndex } = item;
+                    const sIdIndx = i + 1;
+                    const taskIdIndx = nodeIndex + 1;
 
                     // Stagger start to respect rate limits while allowing parallel execution
                     if (k > 0 && settings.delayMs > 0) {
@@ -199,41 +201,50 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                     });
 
                     let res = null;
+                    let displayRes = null;
                     const maxAttempts = (settings.maxRetries !== undefined) ? settings.maxRetries : 0;
 
                     for (let attempt = 0; attempt <= maxAttempts; attempt++) {
                         let rawRes = await generateQuietly(node.profile, prompt, !!node.useSystem);
                         res = rawRes;
+                        displayRes = rawRes;
 
                         // Silent Thought logic
                         if (node.stripThink && rawRes) {
-                            if (node.persist) {
-                                const thinkMatches = [...rawRes.matchAll(/<think>([\s\S]*?)<\/think>/gi)].map(m => m[1].trim()).filter(Boolean);
-                                thinkMatches.forEach((thinkText) => {
-                                    accumulatedThoughts.push({
-                                        title: node.label ? `${node.label} (Silent)` : `Task ${nodeIndex + 1} (Silent)`,
-                                        content: thinkText,
-                                        isSilent: true
-                                    });
-                                });
-
-                                let unclosedThought = '';
-                                const lastOpen = rawRes.lastIndexOf('<think>');
-                                const lastClose = rawRes.lastIndexOf('</think>');
-                                if (lastOpen !== -1 && lastOpen > lastClose) {
-                                    unclosedThought = rawRes.substring(lastOpen + 7).trim();
-                                    if (unclosedThought) {
+                            const segments = rawRes.split(/(<think>[\s\S]*?<\/think>|<think>[\s\S]*$)/gi);
+                            let cleanParts = [];
+                            
+                            segments.forEach(segment => {
+                                if (segment.toLowerCase().startsWith('<think>')) {
+                                    const content = segment.replace(/<\/?think>/gi, '').trim();
+                                    if (content) {
                                         accumulatedThoughts.push({
-                                            title: node.label ? `${node.label} (Silent)` : `Task ${nodeIndex + 1} (Silent)`,
-                                            content: unclosedThought,
+                                            title: node.label ? `${node.label} (Silent)` : `Task ${taskIdIndx} (Silent)`,
+                                            content: content,
                                             isSilent: true
                                         });
                                     }
+                                } else {
+                                    const content = segment.trim();
+                                    if (content) {
+                                        cleanParts.push(segment);
+                                        // If this is a persist-to-thoughts task, push segment in order
+                                        if (node.persist && !node.isCharacter) {
+                                            accumulatedThoughts.push({
+                                                title: node.label || `Task ${taskIdIndx}`,
+                                                content: content
+                                            });
+                                        }
+                                    }
                                 }
-                            }
-
-                            // Strip for the actual result
-                            res = rawRes.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<think>[\s\S]*$/gi, '').trim();
+                            });
+                            res = cleanParts.join('').trim();
+                        } else if (node.persist && !node.isCharacter && res) {
+                            // Non-stripped regular persistence
+                            accumulatedThoughts.push({
+                                title: node.label || `Task ${taskIdIndx}`,
+                                content: res
+                            });
                         }
 
                         const isEmpty = !res || res.trim() === "" || res === "(Generation returned empty)" || res === "(Error during generation)";
@@ -248,9 +259,6 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                             await new Promise(r => setTimeout(r, delayWait));
                         }
                     }
-
-                    const sIdIndx = i + 1;
-                    const taskIdIndx = nodeIndex + 1;
 
                     // Assign to vault variants
                     contextVault[`${step.id}_task_${taskIdIndx}`] = res;
@@ -332,7 +340,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                                             swipeCounter.innerText = `${targetMessage.swipe_id + 1}/${targetMessage.swipes.length}`;
                                         }
                                     }
-                                    
+
                                     if (stContext.eventSource && stContext.eventTypes) {
                                         stContext.eventSource.emit(stContext.eventTypes.MESSAGE_RECEIVED, actualMesId);
                                     }
@@ -356,7 +364,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                             postedAsCharacter = true;
                         }
 
-                        if (node.persist && !postedAsCharacter) {
+                        if (node.persist && !postedAsCharacter && !node.stripThink) {
                             accumulatedThoughts.push({
                                 title: node.label || `Task ${taskIdIndx}`,
                                 content: res
