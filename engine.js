@@ -96,9 +96,19 @@ async function removeTypingIndicator() {
 
 export async function runPipeline(userInput, generateSwipesForBatchId) {
     //toastr.info('Starting Polyceph Pipeline...', 'Polyceph');
-    const contextVault = { 'user_input': userInput };
+    const contextVault = { 
+        'user_input': userInput,
+        'input': userInput 
+    };
     const batchId = generateSwipesForBatchId || 'batch_' + generateId();
     const stContext = SillyTavern.getContext();
+    
+    // Fetch World Info prompt (Lorebook)
+    // Filter out typing indicator from chat for macro resolution to avoid '...' in history
+    const cleanChat = stContext.chat.filter(m => !m.extra?.polyceph_typing);
+    const wiPrompt = await stContext.getWorldInfoPrompt(cleanChat, stContext.maxContext, false);
+    contextVault['wi'] = wiPrompt;
+    contextVault['world_info'] = wiPrompt;
     
     let cleanMessagesArr = [];
     if (generateSwipesForBatchId) {
@@ -138,11 +148,9 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                     const { node, nodeIndex } = item;
                     let prompt = node.template || '';
 
-                    // Natively process {{chat_history}} and {{chat_history:X}}
+                    // Polyceph-specific: {{chat_history}} and {{chat_history:X}}
                     prompt = prompt.replace(/\{\{chat_history(?::(\d+))?\}\}/g, (match, count) => {
-                        const context = SillyTavern.getContext();
-                        if (!context.chat || !Array.isArray(context.chat)) return '';
-                        let history = context.chat.map(m => `${m.name}: ${m.mes}`);
+                        let history = cleanChat.map(m => `${m.name}: ${m.mes}`);
                         if (count) {
                             const cap = parseInt(count);
                             history = history.slice(-cap);
@@ -150,11 +158,11 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                         return history.join('\n\n');
                     });
 
-                    // Variables from contextVault
-                    for (const [key, val] of Object.entries(contextVault)) {
-                        const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
-                        prompt = prompt.replace(regex, val);
-                    }
+                    // SillyTavern Standard Macros & Step Variables
+                    // This handles {{char}}, {{user}}, {{personality}}, {{wi}}, etc.
+                    prompt = stContext.substituteParams(prompt, {
+                        dynamicMacros: contextVault
+                    });
 
                     let res = null;
                     const maxAttempts = (settings.maxRetries !== undefined) ? settings.maxRetries : 0;

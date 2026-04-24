@@ -22,7 +22,9 @@ Use these dynamic tags inside your node templates to route data:
 - `{{chat_history:N}}`: The last **N** messages of the current chat (formatted as `Name: Message`).
 - `{{s1}}`, `{{s2}}`: The combined output of a specific previous Step.
 - `{{s1t1}}`, `{{s2t3}}`: The output of a specific individual Target Node (Step 1, Target 1).
-- `{{CustomLabel}}`: If you give a Step or Target a custom label, you can use that name as a macro!
+- `{{CustomLabel}}`: Use any custom node or step label as a macro!
+- `{{char}}`, `{{user}}`, `{{personality}}`, `{{description}}`, `{{scenario}}`, `{{persona}}`: Standard SillyTavern character card placeholders.
+- `{{wi}}` or `{{world_info}}`: Automatically scans the chat and injects relevant Lorebook (World Info) entries.
 
 ### 2. Output Formatting
 - **Persist Output**: When checked, the results of that step are written to the chat.

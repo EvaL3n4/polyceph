@@ -218,10 +218,12 @@ export function createSettingsHTML() {
                         <div class="polyceph-placeholders-content" id="polyceph_placeholders_content">
                             <ul style="margin: 0; padding-left: 20px;">
                                 <li><code>{{user_input}}</code> - The original user text.</li>
-                                <li><code>{{chat_history:N}}</code> - Retrieves the last N messages from chat natively.</li>
+                                <li><code>{{chat_history:N}}</code> - Retrieves the last N messages from chat.</li>
                                 <li><code>{{s1}}</code>, <code>{{s2}}</code> - Combined output of a step. (Alias: <code>{{step_1}}</code>)</li>
-                                <li><code>{{s1t2}}</code>, <code>{{s2t1}}</code> - Output of an individual target node. (Alias: <code>{{step_1_target_2}}</code>)</li>
-                                <li><code>{{YourCustomLabel}}</code> - Binds to the custom label name of any node or step.</li>
+                                <li><code>{{s1t2}}</code>, <code>{{s2t1}}</code> - Output of an individual target node.</li>
+                                <li><code>{{YourCustomLabel}}</code> - Binds to any custom node/step label.</li>
+                                <li><code>{{char}}</code>, <code>{{user}}</code>, <code>{{personality}}</code>, <code>{{description}}</code> - Standard character card macros.</li>
+                                <li><code>{{wi}}</code> or <code>{{world_info}}</code> - Relevant Lorebook entries based on chat context.</li>
                             </ul>
                         </div>
                     </div>
