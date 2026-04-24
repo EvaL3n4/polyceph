@@ -80,6 +80,3 @@ Route data between tasks using these dynamic tags:
 - **Request Delay**: Pause between API calls to avoid rate limits.
 - **Max Retries**: Automatically retry failed or empty model responses.
 - **Timeout**: Prevents the pipeline from hanging on slow or stuck connections.
-
----
-*Polyceph: Because one head isn't always enough.*
