@@ -16,6 +16,7 @@ export function generateThoughtsHTML(thoughtsArray) {
         }
         
         const openClass = t.isSilent ? '' : 'polyceph-item-open';
+        const silentClass = t.isSilent ? 'polyceph-silent-thought' : '';
         
         return `<div class="polyceph-generated-thought ${openClass} ${silentClass}">
             <div class="polyceph-generated-thought-name" style="cursor:pointer;" onclick="this.parentElement.classList.toggle('polyceph-item-open');">
