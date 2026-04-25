@@ -69,7 +69,10 @@ Route data between tasks using these handlebars placeholders/macros:
 - `{{system_prompt}}`: The **Main Prompt** text from SillyTavern's Advanced Formatting settings.
 - `{{char}}`, `{{user}}`, `{{persona}}`, `{{personality}}`, etc.: All standard SillyTavern macros.
 - `{{wi}}` or `{{world_info}}`: Automatically scans chat context and injects relevant Lorebook entries.
-- `{{polyceph_prompt}}`: The global Polyceph Prompt defined in the extension settings.
+- `{{polyceph_prompt}}`: The global Polyceph Prompt defined in extension settings. Evaluated **recursively** (can contain other placeholders).
+- `{{cc_main_prompt}}`, `{{cc_aux_prompt}}`: Standard Chat Completion prompts.
+- `{{cc_post_history_instructions}}`: The "Post-History Instructions" from ST settings.
+- `{{cc_enhance_definitions}}`: The "Enhance Definitions" prompt.
 
 ## Postprocessing Tags
 

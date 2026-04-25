@@ -282,13 +282,16 @@ export function createSettingsHTML() {
                                 <li><code>{{polyceph_prompt}}</code> - The global Polyceph Prompt defined above.</li>
                                 <li><code>{{char}}</code>, <code>{{user}}</code>, <code>{{persona}}</code>, <code>{{personality}}</code> - Standard character macros.</li>
                                 <li><code>{{wi}}</code> or <code>{{world_info}}</code> - Relevant Lorebook entries based on chat context.</li>
+                                <li><code>{{cc_main_prompt}}</code>, <code>{{cc_aux_prompt}}</code> - CC Prompts.</li>
+                                <li><code>{{cc_post_history_instructions}}</code> - CC Post-History instructions.</li>
+                                <li><code>{{cc_enhance_definitions}}</code> - CC Enhance Definitions prompt.</li>
                             </ul>
                             <div style="margin-top: 10px; border-top: 1px solid var(--white10a); padding-top: 10px;">
                                 <b style="font-size: 1em; opacity: 0.8;">Post-Processing Tags (in Model Output)</b>
                                 <ul style="margin: 5px 0 0 0; padding-left: 20px; font-size: 0.9em; opacity: 0.9;">
                                     <li><code>&lt;think&gt;...&lt;/think&gt;</code> - Stripped if "Strip Thinking" is enabled on the task.</li>
-                                    <li><code>&lt;polyceph_thoughts&gt;...&lt;/polyceph_thoughts&gt;</code> - Renders as a reasoning card.</li>
-                                    <li><code>&lt;polyceph_hidden&gt;...&lt;/polyceph_hidden&gt;</code> - Renders as a hidden background message.</li>
+                                    <li><code>&lt;ramble&gt;...&lt;/ramble&gt;</code> - Renders as a reasoning card.</li>
+                                    <li><code>&lt;background&gt;...&lt;/background&gt;</code> - Renders as a hidden background message.</li>
                                 </ul>
                             </div>
                         </div>

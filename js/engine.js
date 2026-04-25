@@ -1,6 +1,7 @@
 import { MODULE_NAME } from './constants.js';
 import { settings, switchProfile, getActivePipeline, availableProfiles, saveSettings } from './state.js';
 import { generateId } from './utils.js';
+import { expandPrompt } from './macros.js';
 
 let currentPipelineAbortController = null;
 
@@ -191,6 +192,17 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
     contextVault['system_prompt'] = stContext.extension_settings?.formatting?.main_prompt || '';
     contextVault['polyceph_prompt'] = settings.polycephPrompt || '';
 
+    // Chat Completion API Prompts Mapping
+    if (stContext.chatCompletionSettings?.prompts) {
+        const prompts = stContext.chatCompletionSettings.prompts;
+        const findContent = (id) => prompts.find(p => p.identifier === id)?.content || '';
+        
+        contextVault['cc_main_prompt'] = findContent('main');
+        contextVault['cc_aux_prompt'] = findContent('nsfw');
+        contextVault['cc_post_history_instructions'] = findContent('jailbreak');
+        contextVault['cc_enhance_definitions'] = findContent('enhanceDefinitions');
+    }
+
     let cleanMessagesArr = [];
     if (generateSwipesForBatchId) {
         cleanMessagesArr = stContext.chat.filter(m => m.extra && m.extra.polyceph_batch === generateSwipesForBatchId);
@@ -269,31 +281,8 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                     }
 
                     try {
-                        let prompt = node.template || '';
-
-                        // Polyceph-specific: {{chat_history}}, {{chat_history:X}}, {{chat_history:live}}
-                        prompt = prompt.replace(/\{\{chat_history(?::(\w+))?\}\}/g, (match, param) => {
-                            let source = cleanChat; // Snapshot from start of pipeline
-                            let count = null;
-                            
-                            if (param === 'live') {
-                                source = stContext.chat.filter(m => m && !m.extra?.polyceph_typing);
-                            } else if (param && !isNaN(param)) {
-                                count = parseInt(param);
-                            }
-                            
-                            let history = source.map(m => `${m.name}: ${m.mes}`);
-                            if (count) {
-                                history = history.slice(-count);
-                            }
-                            return history.join('\n\n');
-                        });
-
-                        // SillyTavern Standard Macros & Step Variables
-                        // This handles {{char}}, {{user}}, {{personality}}, {{wi}}, etc.
-                        prompt = stContext.substituteParams(prompt, {
-                            dynamicMacros: contextVault
-                        });
+                        // Fully expand the prompt using the new recursive macro system
+                        const prompt = expandPrompt(node.template || '', settings, contextVault, cleanChat, stContext);
 
                         if (signal.aborted) return;
 
