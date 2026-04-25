@@ -71,6 +71,45 @@ export function parseOutputTags(rawOutput, taskId, profileDisplayName, isThinkin
     };
 }
 
+/**
+ * Parses a prompt string with [[ROLE:name]] tags into a SillyTavern message array.
+ */
+function parsePromptToMessages(text) {
+    const messages = [];
+    const roleRegex = /\[\[ROLE:(system|user|assistant)\]\]([\s\S]*?)\[\[\/ROLE\]\]/gi;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = roleRegex.exec(text)) !== null) {
+        const precedingText = text.substring(lastIndex, match.index).trim();
+        if (precedingText) {
+            messages.push({ role: 'system', content: precedingText });
+        }
+        messages.push({ role: match[1].toLowerCase(), content: match[2].trim() });
+        lastIndex = roleRegex.lastIndex;
+    }
+
+    const remainingText = text.substring(lastIndex).trim();
+    if (remainingText) {
+        messages.push({ role: 'system', content: remainingText });
+    }
+
+    if (messages.length === 0) {
+        return [{ role: 'system', content: text.trim() }];
+    }
+
+    const mergedMessages = [];
+    for (const msg of messages) {
+        const lastMsg = mergedMessages[mergedMessages.length - 1];
+        if (lastMsg && lastMsg.role === msg.role) {
+            lastMsg.content += '\n\n' + msg.content;
+        } else {
+            mergedMessages.push(msg);
+        }
+    }
+    return mergedMessages;
+}
+
 export async function generateQuietly(profileName, prompt) {
     if (!profileName || profileName === 'none') return prompt;
 
@@ -84,15 +123,22 @@ export async function generateQuietly(profileName, prompt) {
 
         let apiPromise;
 
+        const messages = parsePromptToMessages(prompt);
+
         if (typeof context.generateRaw === 'function') {
-            apiPromise = context.generateRaw({ prompt: prompt, systemPrompt: '' });
+            apiPromise = context.generateRaw({ prompt: messages, systemPrompt: '' });
         } else if (typeof context.generateQuietPrompt === 'function') {
             console.warn(`[${MODULE_NAME}] generateRaw not found, falling back to generateQuietPrompt.`);
-            apiPromise = context.generateQuietPrompt({ quietPrompt: prompt });
+            // generateQuietPrompt doesn't support arrays natively in all versions, 
+            // but the resolved string already has markers which ST might not like.
+            // So we'll pass the flattened string but ST will likely wrap it in 'user' role.
+            const flattened = messages.map(m => m.content).join('\n\n');
+            apiPromise = context.generateQuietPrompt({ quietPrompt: flattened });
         } else {
             console.warn(`[${MODULE_NAME}] generateQuietPrompt not found, falling back to basic command execution.`);
             // Fallback for older ST versions
-            const escaped = prompt.replace(/"/g, '\\"').replace(/\n/g, '\\n');
+            const flattened = messages.map(m => m.content).join('\n\n');
+            const escaped = flattened.replace(/"/g, '\\"').replace(/\n/g, '\\n');
             apiPromise = context.executeSlashCommandsWithOptions(`/gen ${escaped}`, {
                 handleExecutionErrors: false, handleParserErrors: false
             });
@@ -264,7 +310,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                     if (currentTypingIdx !== -1) {
                         const typingMsg = stContext.chat[currentTypingIdx];
                         if (!typingMsg.extra.polyceph_active_tasks) typingMsg.extra.polyceph_active_tasks = [];
-                        
+
                         const taskMetadata = {
                             id: node.id,
                             label: node.label || `Task ${taskIdIndx}`,
@@ -305,7 +351,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                                     const msg = {
                                         name: 'Background',
                                         is_user: false,
-                                        is_system: true,
+                                        is_system: false,
                                         send_date: typeof stContext.humanizedDateTime === 'function' ? stContext.humanizedDateTime() : new Date().toLocaleString(),
                                         mes: bg,
                                         extra: { model: 'polyceph', polyceph_hidden: true, polyceph_batch: batchId }
@@ -465,7 +511,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
             const msg = {
                 name: 'Polyceph Reasoning',
                 is_user: false,
-                is_system: true,
+                is_system: false,
                 send_date: typeof stContext.humanizedDateTime === 'function' ? stContext.humanizedDateTime() : new Date().toLocaleString(),
                 mes: '', // Empty message, thoughts rendered in DOM
                 extra: extraData

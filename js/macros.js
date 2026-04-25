@@ -46,7 +46,17 @@ export function resolveChatHistory(text, cleanChat, stContext) {
         }
 
         // 3. Map to Strings
-        let history = filteredMessages.map(m => `${m.name}: ${m.mes}`);
+        const isCC = stContext.mainApi === 'openai';
+        let history = filteredMessages.map(m => {
+            if (isCC) {
+                let mRole = 'assistant';
+                if (m.extra?.polyceph_hidden) mRole = 'assistant';
+                else if (m.is_user) mRole = 'user';
+                else if (m.is_system) mRole = 'system';
+                return `[[ROLE:${mRole}]]\n${m.mes}\n[[/ROLE]]`;
+            }
+            return `${m.name}: ${m.mes}`;
+        });
 
         // 4. Apply Final Limit
         if (options.last !== undefined) {
@@ -87,21 +97,32 @@ export function resolveCCMacros(text, cleanChat, stContext, wiPrompt) {
         const prompt = ccSettings.prompts.find(p => p.identifier === id);
         if (!prompt) return '';
         
+        const role = prompt.role || 'system';
+        const wrap = (content) => content.trim() ? `[[ROLE:${role}]]\n${content.trim()}\n[[/ROLE]]` : '';
+
         if (prompt.marker) {
             const char = stContext.characters[charId];
             switch (id) {
-                case 'charDescription': return char?.description || '';
-                case 'charPersonality': return char?.personality || '';
-                case 'scenario': return char?.scenario || '';
-                case 'personaDescription': return stContext.persona_description || '';
-                case 'worldInfoBefore': return wiPrompt || '';
+                case 'charDescription': return wrap(char?.description || '');
+                case 'charPersonality': return wrap(char?.personality || '');
+                case 'scenario': return wrap(char?.scenario || '');
+                case 'personaDescription': return wrap(stContext.persona_description || '');
+                case 'worldInfoBefore': return wrap(wiPrompt || '');
                 case 'worldInfoAfter': return ''; // World info usually comes as one block
-                case 'dialogueExamples': return char?.mes_example || '';
-                case 'chatHistory': return cleanChat.map(m => `${m.name}: ${m.mes}`).join('\n\n');
+                case 'dialogueExamples': return wrap(char?.mes_example || '');
+                case 'chatHistory': {
+                    return cleanChat.map(m => {
+                        let mRole = 'assistant';
+                        if (m.extra?.polyceph_hidden) mRole = 'assistant';
+                        else if (m.is_user) mRole = 'user';
+                        else if (m.is_system) mRole = 'system';
+                        return `[[ROLE:${mRole}]]\n${m.mes}\n[[/ROLE]]`;
+                    }).join('\n\n');
+                }
                 default: return '';
             }
         }
-        return prompt.content || '';
+        return wrap(prompt.content || '');
     };
 
     let result = text;
