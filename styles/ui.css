@@ -273,6 +273,15 @@ body.polyceph-show-hidden .mes[polyceph_hidden="true"] {
     min-height: auto !important;
 }
 
+/* Reasoning Blocks Visibility */
+.polyceph-thoughts {
+    display: none !important;
+}
+
+body.polyceph-show-reasoning .polyceph-thoughts {
+    display: block !important;
+}
+
 body.polyceph-show-hidden .mes[polyceph_hidden="true"] .mes_block {
     display: flex;
     flex-direction: column;

@@ -1,6 +1,7 @@
 import { availableProfiles, settings, saveSettings, getAvailableProfiles, getActivePipeline, createPipeline, deletePipeline } from './state.js';
 import { autoResizeTextarea, generateId } from './utils.js';
 import { MODULE_NAME } from './constants.js';
+import { syncHiddenMessageVisibility } from './ui.js';
 
 export function renderTask(stepId, task) {
     const profileOptions = `<option value="none">(Template Only - No LLM)</option>` +
@@ -235,9 +236,15 @@ export function createSettingsHTML() {
                         Reasoning pipeline options:
                     </div>
                     
-                    <div style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
-                        <input type="checkbox" id="polyceph_show_hidden_checkbox" ${settings.showHiddenMessages ? 'checked' : ''}>
-                        <label for="polyceph_show_hidden_checkbox" style="cursor: pointer;">Show Hidden Background Messages</label>
+                    <div style="margin-bottom: 15px; display: flex; flex-direction: column; gap: 8px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <input type="checkbox" id="polyceph_show_hidden_checkbox" ${settings.showHiddenMessages ? 'checked' : ''}>
+                            <label for="polyceph_show_hidden_checkbox" style="cursor: pointer;">Show Hidden Background Messages</label>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <input type="checkbox" id="polyceph_show_reasoning_checkbox" ${settings.showReasoning !== false ? 'checked' : ''}>
+                            <label for="polyceph_show_reasoning_checkbox" style="cursor: pointer;">Show Polyceph Reasoning Blocks</label>
+                        </div>
                     </div>
 
                     <div style="margin-bottom: 20px;">
@@ -350,11 +357,13 @@ export function addSettingsUI() {
     // Global settings
     document.getElementById('polyceph_show_hidden_checkbox')?.addEventListener('change', (e) => {
         settings.showHiddenMessages = e.target.checked;
-        if (settings.showHiddenMessages) {
-            document.body.classList.add('polyceph-show-hidden');
-        } else {
-            document.body.classList.remove('polyceph-show-hidden');
-        }
+        syncHiddenMessageVisibility();
+        saveSettings();
+    });
+
+    document.getElementById('polyceph_show_reasoning_checkbox')?.addEventListener('change', (e) => {
+        settings.showReasoning = e.target.checked;
+        syncHiddenMessageVisibility();
         saveSettings();
     });
 

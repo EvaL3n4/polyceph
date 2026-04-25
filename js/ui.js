@@ -6,6 +6,12 @@ export function syncHiddenMessageVisibility() {
     } else {
         document.body.classList.remove('polyceph-show-hidden');
     }
+
+    if (settings && settings.showReasoning !== false) {
+        document.body.classList.add('polyceph-show-reasoning');
+    } else {
+        document.body.classList.remove('polyceph-show-reasoning');
+    }
 }
 
 export function generateSingleThoughtHTML(t) {
@@ -58,7 +64,7 @@ export function renderPolycephThoughts() {
     if (!context || !context.chat) return;
 
     $('#chat .mes').each((_, messageElement) => {
-        if (messageElement.getAttribute('polyceph_thoughts_rendered') === 'true') return;
+
 
         const mesId = messageElement.getAttribute('mesid');
         const chatMsg = context.chat[mesId];
@@ -124,18 +130,18 @@ export function renderPolycephThoughts() {
 // Watch for chat changes and initial load
 $(document).ready(() => {
     syncHiddenMessageVisibility();
-    if (settings && settings.showHiddenMessages) {
-        document.body.classList.add('polyceph-show-hidden');
-    }
 
     // Proactive rendering using MutationObserver
     const observer = new MutationObserver((mutations) => {
         let shouldRender = false;
         for (const mutation of mutations) {
-            if (mutation.addedNodes.length > 0) {
-                shouldRender = true;
-                break;
+            for (const node of mutation.addedNodes) {
+                if (node.nodeType === 1 && (node.classList.contains('mes') || node.querySelector('.mes'))) {
+                    shouldRender = true;
+                    break;
+                }
             }
+            if (shouldRender) break;
         }
         if (shouldRender) {
             renderPolycephThoughts();
