@@ -274,8 +274,8 @@ export function createSettingsHTML() {
                         <div class="polyceph-placeholders-content" id="polyceph_placeholders_content">
                             <ul style="margin: 0; padding-left: 20px;">
                                 <li><code>{{user_input}}</code> - The original user text from the send box.</li>
-                                <li><code>{{chat_history:N}}</code> - The last N messages of chat (snapshot from start).</li>
-                                <li><code>{{chat_history:live:N}}</code> - Retrieves N messages from the CURRENT chat state (includes results from earlier steps).</li>
+                                <li><code>{{chat_history:N}}</code> - Last N messages (snapshot from start).</li>
+                                <li><code>{{chat_history:live:N}}</code> - Last N messages (retrieved at task start).</li>
                                 <li><code>{{s1}}</code>, <code>{{s2}}</code> - Combined output of all tasks in a previous Step.</li>
                                 <li><code>{{TaskLabel}}</code> - Output of a specific task (using its custom label).</li>
                                 <li><code>{{system_prompt}}</code> - The Main Prompt from SillyTavern Advanced Formatting.</li>
@@ -283,6 +283,14 @@ export function createSettingsHTML() {
                                 <li><code>{{char}}</code>, <code>{{user}}</code>, <code>{{persona}}</code>, <code>{{personality}}</code> - Standard character macros.</li>
                                 <li><code>{{wi}}</code> or <code>{{world_info}}</code> - Relevant Lorebook entries based on chat context.</li>
                             </ul>
+                            <div style="margin-top: 10px; border-top: 1px solid var(--white10a); padding-top: 10px;">
+                                <b style="font-size: 1em; opacity: 0.8;">Post-Processing Tags (in Model Output)</b>
+                                <ul style="margin: 5px 0 0 0; padding-left: 20px; font-size: 0.9em; opacity: 0.9;">
+                                    <li><code>&lt;think&gt;...&lt;/think&gt;</code> - Stripped if "Strip Thinking" is enabled on the task.</li>
+                                    <li><code>&lt;polyceph_thoughts&gt;...&lt;/polyceph_thoughts&gt;</code> - Renders as a reasoning card.</li>
+                                    <li><code>&lt;polyceph_hidden&gt;...&lt;/polyceph_hidden&gt;</code> - Renders as a hidden background message.</li>
+                                </ul>
+                            </div>
                         </div>
                     </div>
 
