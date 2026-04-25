@@ -349,13 +349,13 @@ body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open
 
 /* Custom Typing Indicator */
 .polyceph-typing-indicator {
-    background: var(--black70a);
+    background: var(--black50a);
     backdrop-filter: blur(5px);
-    border: 1px solid var(--white10a);
+    border: 1px solid var(--SmartThemeBodyColor);
     border-radius: 8px;
     padding: 12px;
     margin: 10px 0;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
     font-family: var(--mainFontFamily);
     color: var(--white);
     max-width: 400px;
@@ -366,7 +366,7 @@ body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open
     justify-content: space-between;
     align-items: center;
     margin-bottom: 10px;
-    border-bottom: 1px solid var(--white10a);
+    border-bottom: 1px solid var(--SmartThemeBodyColor);
     padding-bottom: 8px;
 }
 
@@ -375,7 +375,7 @@ body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open
     align-items: center;
     gap: 8px;
     font-weight: bold;
-    color: var(--SmartThemeKeyColor);
+    color: var(--SmartThemeQuoteColor);
     font-size: 0.9em;
 }
 
@@ -386,7 +386,7 @@ body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--black30a);
+    background: var(--SmartThemeShadowColor);
     border-radius: 4px;
     color: var(--white);
     transition: all 0.2s ease;
@@ -405,8 +405,8 @@ body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open
 }
 
 .polyceph-active-task {
-    background: var(--black30a);
-    border-left: 3px solid var(--SmartThemeKeyColor);
+    background: var(--SmartThemeShadowColor);
+    border-left: 3px solid var(--SmartThemeQuoteColor);
     padding: 6px 10px;
     border-radius: 4px;
     animation: polyceph-pulse 2s infinite ease-in-out;
@@ -423,12 +423,16 @@ body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open
 }
 
 @keyframes polyceph-pulse {
-    0% { opacity: 0.7; }
-    50% { opacity: 1; border-left-color: var(--SmartThemeQuoteColor); }
-    100% { opacity: 0.7; }
-}
+    0% {
+        opacity: 0.7;
+    }
 
-/* Hide the default "..." text when custom UI is shown */
-.mes[polyceph_typing="true"] .mes_text {
-    display: none !important;
+    50% {
+        opacity: 1;
+        border-left-color: var(--SmartThemeQuoteColor);
+    }
+
+    100% {
+        opacity: 0.7;
+    }
 }

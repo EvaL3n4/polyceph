@@ -147,6 +147,7 @@ async function removeTypingIndicator() {
     if (typeof context.updateMessageBlock === 'function') {
         context.updateMessageBlock(idx, msg);
     }
+    if (typeof context.saveChat === 'function') context.saveChat();
 }
 
 export async function startPipeline(text) {
@@ -441,6 +442,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                                     if (stContext.eventSource && stContext.eventTypes) {
                                         stContext.eventSource.emit(stContext.eventTypes.MESSAGE_RECEIVED, stContext.chat.length - 1);
                                     }
+                                    if (typeof stContext.saveChat === 'function') stContext.saveChat();
                                 }
                             }
                         }

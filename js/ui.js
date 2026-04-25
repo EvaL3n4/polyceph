@@ -96,7 +96,7 @@ export function renderPolycephTyping(messageElement, chatMsg) {
             e.stopPropagation();
             stopPipeline();
         });
-        $mesBlock.prepend($indicator);
+        $mesBlock.append($indicator);
     } else {
         $indicator.find('.polyceph-typing-step-label').text(`Polyceph ${stepInfo}`);
     }
@@ -125,9 +125,11 @@ export function renderPolycephThoughts() {
         // Handle Typing Indicator
         const isTyping = (chatMsg.extra && chatMsg.extra.polyceph_typing) || (chatMsg.mes === '...' && !chatMsg.is_user && !chatMsg.is_system);
         if (isTyping) {
-            console.log(`[${MODULE_NAME}] Typing indicator detected at mesid ${mesId}`);
             renderPolycephTyping(messageElement, chatMsg);
             return;
+        } else {
+            $(messageElement).find('.polyceph-typing-indicator').remove();
+            messageElement.removeAttribute('polyceph_typing');
         }
 
         // Handle Hidden Background Messages
