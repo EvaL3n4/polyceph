@@ -332,8 +332,42 @@ export async function generateViaApi(messages) {
  * @param {boolean} [options.save=true] - Whether to call saveChat after posting.
  * @returns {number} The index of the posted message in the chat array.
  */
+/**
+ * Normalizes API names for SillyTavern icons.
+ * e.g., 'openrouter-text' -> 'openrouter'
+ */
+function normalizeApiForIcon(api) {
+    if (!api) return '';
+    const normalized = api.toLowerCase();
+    
+    // Standard mappings for multi-mode APIs and aliases
+    if (normalized.startsWith('openrouter')) return 'openrouter';
+    if (normalized.startsWith('openai')) return 'openai';
+    if (normalized.startsWith('kobold')) return 'kobold';
+    if (normalized === 'google') return 'makersuite';
+    if (normalized === 'makersuite') return 'makersuite';
+    if (normalized === 'horde') return 'koboldhorde';
+    
+    return normalized;
+}
+
+/**
+ * Posts a message to SillyTavern's chat, handling addOneMessage, saveChat, and event emission.
+ *
+ * @param {object} options
+ * @param {string} options.content - The message text.
+ * @param {string} [options.name='Assistant'] - Display name for the message.
+ * @param {boolean} [options.isUser=false] - Whether this is a user message.
+ * @param {string} [options.forceAvatar=''] - Avatar URL override.
+ * @param {object} [options.extra={}] - Extra metadata to attach.
+ * @param {boolean} [options.save=true] - Whether to call saveChat after posting.
+ * @param {string} [options.api=''] - The API provider ID (for icons).
+ * @param {string} [options.model=''] - The LLM model name (for tooltips).
+ * @returns {number} The index of the posted message in the chat array.
+ */
 export function postMessageToChat({ content, name = 'Assistant', isUser = false, forceAvatar = '', extra = {}, save = true, api = '', model = '' }) {
     const ctx = SillyTavern.getContext();
+    const iconApi = normalizeApiForIcon(api || extra.api);
 
     const msg = {
         name: name,
@@ -343,8 +377,8 @@ export function postMessageToChat({ content, name = 'Assistant', isUser = false,
         mes: content,
         extra: {
             ...extra,
-            api: extra.api || api,
-            model: extra.model || model
+            api: iconApi,
+            model: model || extra.model
         },
     };
 

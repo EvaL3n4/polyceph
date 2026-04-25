@@ -503,7 +503,8 @@ export function addSettingsUI() {
     document.getElementById('polyceph_refresh_profiles')?.addEventListener('click', async () => {
         await getAvailableProfiles();
         refreshPresets();
-        toastr.success(`Found ${availableProfiles.length} profiles, ${availablePresets.length} presets.`, 'Polyceph');
+        const totalPresets = Object.values(availablePresetsByApi).flat().length;
+        toastr.success(`Found ${availableProfiles.length} profiles, ${totalPresets} presets.`, 'Polyceph');
         updateUI();
     });
 }

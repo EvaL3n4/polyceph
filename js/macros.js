@@ -204,7 +204,11 @@ export function expandPrompt(template, settings, contextVault, cleanChat, stCont
     // 3. Resolve Chat Completion Prompts
     result = resolveCCMacros(result, cleanChat, stContext, wiPrompt);
 
-    // 4. Resolve SillyTavern standard macros and remaining contextVault items
+    // 4. Resolve {{user_input}} with explicit user role
+    const resolvedInput = contextVault?.['user_input'] || settings.userInput || '';
+    result = result.replace(/\{\{user_input\}\}/g, `[[ROLE:user]]\n${resolvedInput}\n[[/ROLE]]`);
+
+    // 5. Resolve SillyTavern standard macros and remaining contextVault items
     if (typeof stContext.substituteParams === 'function') {
         result = stContext.substituteParams(result, {
             dynamicMacros: contextVault

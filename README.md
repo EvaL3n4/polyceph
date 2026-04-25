@@ -60,8 +60,8 @@ Polyceph leverages SillyTavern's built-in **Connection Profiles**.
 ## Macro & Placeholder Reference
 
 Route data between tasks using these handlebars placeholders/macros:
-- `{{user_input}}`: The original text from the chat box.
-- `{{chat_history|last:10|bg_last:2|live:true}}`: Advanced history filtering.
+- `{{user_input}}`: The original text from the chat box, the last user message.
+- `{{chat_history|last:10|bg_last:2|live:true}}`: Advanced history filtering. Does not include the last user message.
     - `last:N`: Limit total messages to N.
     - `bg_last:N`: Keep only the last N background messages (interspersed).
     - `live:true`: Use real-time chat (includes earlier pipeline results).

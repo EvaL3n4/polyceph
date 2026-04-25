@@ -77,7 +77,7 @@ export function parseOutputTags(rawOutput, taskId, profileDisplayName, isThinkin
  * Parses a prompt string with [[ROLE:name]] tags into a SillyTavern message array.
  * Validates tag structure and warns about content outside role tags.
  */
-function parsePromptToMessages(text) {
+function parsePromptToMessages(text, api = '') {
     const messages = [];
     const roleRegex = /\[\[ROLE:(system|user|assistant)\]\]([\s\S]*?)\[\[\/ROLE\]\]/gi;
     let lastIndex = 0;
@@ -108,9 +108,9 @@ function parsePromptToMessages(text) {
         return [{ role: 'system', content: text.trim() }];
     }
 
-    // Validation: warn about content outside role tags
-    if (hasOrphanedContent) {
-        console.warn(`[${MODULE_NAME}] Prompt contains text outside [[ROLE:...]] tags. This content will be sent as an implicit 'system' message. Wrap all content in role tags for explicit control.`);
+    // Validation: check for content outside role tags (only for Chat Completion)
+    if (hasOrphanedContent && remainingText.trim().length > 0 && api === 'openai') {
+        console.debug(`[${MODULE_NAME}] Prompt contains implicit 'system' content outside [[ROLE:...]] tags.`);
     }
 
     // Validation: check for malformed tags that the regex didn't match
@@ -134,7 +134,7 @@ function parsePromptToMessages(text) {
     return mergedMessages;
 }
 
-export async function generateQuietly(profileName, prompt) {
+export async function generateQuietly(profileName, prompt, api = '') {
     if (!profileName || profileName === 'none') return prompt;
 
     // Ensure API is ready and settled before starting generation
@@ -152,7 +152,8 @@ export async function generateQuietly(profileName, prompt) {
 
         let responseData = "";
 
-        const messages = parsePromptToMessages(prompt);
+        // Parse prompt into role-based messages
+        const messages = parsePromptToMessages(prompt, api);
         const apiPromise = generateViaApi(messages);
 
         const timeoutMs = settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 60000;
@@ -303,8 +304,10 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                 if (profileId !== 'none' && profileId !== 'Task') {
                     console.log(`[${MODULE_NAME}] Switching to profile group: ${profileId}`);
                     await switchProfile(profileId);
+                    if (signal.aborted) return;
                     // Allow ST UI state to settle profile load
                     await new Promise(r => setTimeout(r, 1000));
+                    if (signal.aborted) return;
                 }
 
                 // Process tasks in parallel (staggered by delayMs)
@@ -318,6 +321,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                     if (k > 0 && settings.delayMs > 0) {
                         await new Promise(r => setTimeout(r, k * settings.delayMs));
                     }
+                    if (signal.aborted) return;
 
                     // Per-task preset override
                     const taskPreset = node.preset || 'Current';
@@ -372,7 +376,9 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                         }
                     } else {
                         taskApi = stContext.mainApi;
-                        taskModel = stContext.model;
+                        taskModel = (typeof stContext.getGeneratingModel === 'function')
+                            ? stContext.getGeneratingModel()
+                            : (stContext.chatCompletionSettings?.openai_model || '');
                     }
 
                     try {
@@ -387,7 +393,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
 
                         for (let attempt = 0; attempt <= maxAttempts; attempt++) {
                             if (signal.aborted) return;
-                            let rawRes = await generateQuietly(node.profile, prompt);
+                            let rawRes = await generateQuietly(node.profile, prompt, taskApi);
                             if (signal.aborted) return;
 
                             if (!rawRes) {
@@ -400,10 +406,11 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
 
                                 // Handle hidden backgrounds
                                 for (const bg of hiddenBackgrounds) {
+                                    if (signal.aborted) return;
                                     postMessageToChat({
                                         content: bg,
                                         name: 'Background',
-                                        extra: { model: 'polyceph', polyceph_hidden: true, polyceph_batch: batchId },
+                                        extra: { polyceph_source: 'polyceph', polyceph_hidden: true, polyceph_batch: batchId },
                                         save: false,
                                         api: taskApi,
                                         model: taskModel,
@@ -460,7 +467,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                                 const { name: charName, avatarUrl: avatarStr } = getActiveCharacterInfo();
 
                                 const extraData = {
-                                    model: 'polyceph',
+                                    polyceph_source: 'polyceph',
                                     polyceph_batch: batchId,
                                     polyceph_input: userInput,
                                     polyceph_task_id: node.id,
@@ -484,9 +491,14 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                                         targetMessage.swipe_info = [{}];
                                         targetMessage.swipe_id = 0;
                                     }
-
                                     targetMessage.swipes.push(combinedRes);
                                     targetMessage.swipe_id = targetMessage.swipes.length - 1;
+
+                                    // Update metadata to reflect the generator of this specific swipe
+                                    if (!targetMessage.extra) targetMessage.extra = {};
+                                    targetMessage.extra.api = taskApi;
+                                    targetMessage.extra.model = taskModel;
+
                                     targetMessage.swipe_info.push({ extra: extraData });
                                     targetMessage.mes = combinedRes;
 
@@ -507,6 +519,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                                         }
                                     }
                                 } else {
+                                    if (signal.aborted) return;
                                     postMessageToChat({
                                         content: combinedRes,
                                         name: charName,
@@ -546,11 +559,11 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
         }
 
         // Handle any leftover thoughts that weren't printed because there was no final character message
-        if (accumulatedThoughts.length > 0) {
+        if (accumulatedThoughts.length > 0 && !signal.aborted) {
             postMessageToChat({
                 content: '', // Empty message, thoughts rendered in DOM
                 name: 'Polyceph Reasoning',
-                extra: { model: 'polyceph', polyceph_batch: batchId, polyceph_input: userInput, polyceph_thoughts: accumulatedThoughts },
+                extra: { polyceph_source: 'polyceph', polyceph_batch: batchId, polyceph_input: userInput, polyceph_thoughts: accumulatedThoughts },
                 api: stContext.mainApi,
                 model: stContext.model,
             });
