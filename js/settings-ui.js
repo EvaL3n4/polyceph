@@ -13,15 +13,15 @@ export function renderTask(stepId, task) {
     return `
         <div class="polyceph-node-card" data-node-id="${task.id}">
             <div class="polyceph-node-header" style="display: flex; flex-direction: column; gap: 8px;">
-                <div style="display: flex; gap: 5px; align-items: center;">
+                <div class="polyceph-node-header-label-row">
                     <input type="text" class="polyceph-node-label-input text_pole" data-node-id="${task.id}" placeholder="Task Label..." value="${task.label || ''}" style="flex: 1; min-width: 100px; padding: 2px 5px;" />
-                    <select class="polyceph-profile-select text_pole" data-node-id="${task.id}" style="flex: 2; max-width: 250px;">
-                        ${profileOptions}
-                    </select>
                     <i class="fa-solid fa-times polyceph-del-node" data-node-id="${task.id}" data-step-id="${stepId}"></i>
                 </div>
-                <div style="display: flex; gap: 5px; align-items: center;">
-                    <select class="polyceph-preset-select text_pole" data-node-id="${task.id}" style="flex: 2; max-width: 250px;" title="Override the API preset for this task">
+                <div class="polyceph-node-header-controls">
+                    <select class="polyceph-profile-select text_pole" data-node-id="${task.id}" style="flex: 1; min-width: 150px;">
+                        ${profileOptions}
+                    </select>
+                    <select class="polyceph-preset-select text_pole" data-node-id="${task.id}" style="flex: 1; min-width: 150px;" title="Override the API preset for this task">
                         ${presetOptions}
                     </select>
                 </div>

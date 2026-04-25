@@ -48,9 +48,27 @@
     font-size: 0.85em;
 }
 
+.polyceph-node-header-label-row {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    justify-content: space-between;
+    width: stretch;
+}
+
+.polyceph-node-header-controls {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+}
+
 .polyceph-node-header select {
     flex: 1;
     margin-right: 10px;
+}
+
+.polyceph-del-node {
+    margin: 0 0.5rem;
 }
 
 .polyceph-node-card textarea {
