@@ -67,6 +67,28 @@ export function renderPolycephThoughts() {
             pipelineName = chatMsg.extra.polyceph_pipeline;
         }
 
+        // Handle Hidden Background Messages
+        if (chatMsg.extra && chatMsg.extra.polyceph_hidden) {
+            messageElement.setAttribute('polyceph_hidden', 'true');
+            
+            // Inject separator if not already there
+            if (!messageElement.querySelector('.polyceph-background-separator')) {
+                const $separator = $(`
+                    <div class="polyceph-background-separator">
+                        <div class="polyceph-background-label">Background Message</div>
+                    </div>
+                `);
+                $separator.on('click', () => {
+                    messageElement.classList.toggle('polyceph-hidden-open');
+                });
+                $(messageElement).prepend($separator);
+            }
+        }
+
+        if (chatMsg.is_system && chatMsg.mes === '') {
+            messageElement.style.display = 'none';
+        }
+
         if (!thoughts || thoughts.length === 0) {
             messageElement.setAttribute('polyceph_thoughts_rendered', 'true');
             return;
@@ -85,28 +107,6 @@ export function renderPolycephThoughts() {
 
         messageElement.setAttribute('polyceph_thoughts_rendered', 'true');
         messageElement.setAttribute('polyceph_thoughts_id', thoughtsId);
-
-        // Handle Hidden Background Messages
-        if (chatMsg.extra && chatMsg.extra.polyceph_hidden) {
-            messageElement.setAttribute('polyceph_hidden', 'true');
-
-            // Inject separator if not already there
-            if (!messageElement.querySelector('.polyceph-background-separator')) {
-                const $separator = $(`
-                    <div class="polyceph-background-separator">
-                        <div class="polyceph-background-label">Background Message</div>
-                    </div>
-                `);
-                $separator.on('click', () => {
-                    messageElement.classList.toggle('polyceph-hidden-open');
-                });
-                $(messageElement).prepend($separator);
-            }
-        }
-
-        if (chatMsg.is_system && chatMsg.mes === '') {
-            messageElement.style.display = 'none';
-        }
     });
 }
 

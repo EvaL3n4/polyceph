@@ -5,7 +5,7 @@ import { generateId } from './utils.js';
 export function parseOutputTags(rawOutput, taskId, profileDisplayName, isThinkingTask) {
     const thoughts = [];
     const hiddenBackgrounds = [];
-    
+
     // Extract backgrounds first (always extracted)
     const backgroundRegex = /<background>([\s\S]*?)<\/background>/gi;
     let bgMatch;
@@ -17,7 +17,7 @@ export function parseOutputTags(rawOutput, taskId, profileDisplayName, isThinkin
     // Interleaved parsing for think/ramble and text
     const tokenRegex = /(<think>[\s\S]*?<\/think>|<ramble>[\s\S]*?<\/ramble>)/gi;
     const segments = rawOutput.split(tokenRegex);
-    
+
     let cleanParts = [];
     let persistentParts = [];
 
@@ -41,7 +41,7 @@ export function parseOutputTags(rawOutput, taskId, profileDisplayName, isThinkin
             if (content) {
                 cleanParts.push(content);
                 persistentParts.push(content);
-                
+
                 // If it's a "Thinking" task, everything goes into the thoughts list in order
                 if (isThinkingTask) {
                     thoughts.push({ title: `Task Output`, content, isSilent: false, profile: profileDisplayName });
@@ -290,7 +290,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                             // Handle hidden backgrounds
                             for (const bg of hiddenBackgrounds) {
                                 const msg = {
-                                    name: 'Polyceph',
+                                    name: 'Background',
                                     is_user: false,
                                     is_system: true,
                                     send_date: typeof stContext.humanizedDateTime === 'function' ? stContext.humanizedDateTime() : new Date().toLocaleString(),
@@ -440,7 +440,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
         if (accumulatedThoughts.length > 0) {
             const extraData = { model: 'polyceph', polyceph_batch: batchId, polyceph_input: userInput, polyceph_thoughts: accumulatedThoughts };
             const msg = {
-                name: 'Polyceph',
+                name: 'Polyceph Reasoning',
                 is_user: false,
                 is_system: true,
                 send_date: typeof stContext.humanizedDateTime === 'function' ? stContext.humanizedDateTime() : new Date().toLocaleString(),

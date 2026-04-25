@@ -112,10 +112,14 @@ async function init() {
     if (context.eventSource && context.eventTypes) {
         context.eventSource.on(context.eventTypes.CHAT_CHANGED, renderPolycephThoughts);
         context.eventSource.on(context.eventTypes.MESSAGE_RECEIVED, renderPolycephThoughts);
+        context.eventSource.on(context.eventTypes.CHAT_COMPLETED, renderPolycephThoughts);
         
         // Update chat dropdown when settings are saved/changed
         context.eventSource.on(context.eventTypes.SETTINGS_UPDATED, () => updateChatSelectorOptions());
     }
+
+    // Initial render for already existing messages
+    renderPolycephThoughts();
 
     console.log(`[${MODULE_NAME}] Polyceph loaded.`);
 }

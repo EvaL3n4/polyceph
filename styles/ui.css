@@ -266,19 +266,15 @@
 
 body.polyceph-show-hidden .mes[polyceph_hidden="true"] {
     display: flex !important;
-    flex-direction: column;
-    padding: 0 !important;
+    flex-wrap: wrap !important;
     margin: 5px 0 !important;
-    border: none !important;
-    background: transparent !important;
-    box-shadow: none !important;
     min-height: auto !important;
 }
 
 body.polyceph-show-hidden .mes[polyceph_hidden="true"] .mes_block {
     display: flex;
     flex-direction: column;
-    width: 100%;
+    flex: 1;
 }
 
 /* Background Separator Header */
@@ -286,15 +282,15 @@ body.polyceph-show-hidden .mes[polyceph_hidden="true"] .mes_block {
     display: flex;
     align-items: center;
     width: 100%;
-    margin: 10px 0;
+    margin: 0 0 10px 0;
     cursor: pointer;
     user-select: none;
-    opacity: 0.6;
+    opacity: 0.4;
     transition: opacity 0.2s;
 }
 
 .polyceph-background-separator:hover {
-    opacity: 1;
+    opacity: 0.8;
 }
 
 .polyceph-background-separator::before,
@@ -307,30 +303,35 @@ body.polyceph-show-hidden .mes[polyceph_hidden="true"] .mes_block {
 
 .polyceph-background-label {
     padding: 0 10px;
-    font-size: 0.8em;
+    font-size: 0.7em;
     font-weight: bold;
     color: var(--SmartThemeKeyColor);
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 2px;
 }
 
 /* Hidden Content State */
 .mes[polyceph_hidden="true"] .mes_text {
     display: none;
-    padding: 10px;
-    background: var(--SmartThemeBotMesBlurTintColor, rgba(0, 0, 0, 0.1));
-    border-radius: 5px;
+    padding: 15px;
+    background: var(--SmartThemeBotMesBlurTintColor, rgba(0, 0, 0, 0.2));
+    border-radius: 8px;
     margin-top: 5px;
-    font-style: italic;
-    font-size: 0.9em;
+    font-size: 0.95em;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.1));
 }
 
 .mes[polyceph_hidden="true"].polyceph-hidden-open .mes_text {
     display: block !important;
 }
 
-/* Hide metadata and avatars for hidden messages */
-body.polyceph-show-hidden .mes[polyceph_hidden="true"] .message_header,
-body.polyceph-show-hidden .mes[polyceph_hidden="true"] .avatar {
+/* Hide metadata and avatars for hidden messages when collapsed */
+body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open) .ch_name,
+body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open) .avatar,
+body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open) .mes_buttons,
+body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open) .swipe_left,
+body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open) .swipe_right,
+body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open) .swipes-counter,
+body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open) .mes_edit_buttons {
     display: none !important;
 }
