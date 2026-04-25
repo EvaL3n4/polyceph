@@ -18,39 +18,61 @@
 
 import { MODULE_NAME } from './constants.js';
 
-// ---------------------------------------------------------------------------
-// Preset Enumeration
-// ---------------------------------------------------------------------------
-
 /**
- * Gets the PresetManager for the currently active API.
- * Returns null if not available.
- *
- * @returns {object|null} The PresetManager instance, or null.
+ * Gets the SillyTavern PresetManager for a specific API.
+ * Handles aliases and mapping for derivative APIs (e.g., OpenRouter CC -> OpenAI, OpenRouter TC -> TextGenWebUI).
+ * Uses SillyTavern's CONNECT_API_MAP from the context to stay in sync with ST's internal mappings.
+ * @param {string} apiId The API ID (e.g., 'openai', 'kobold', 'openrouter')
+ * @returns {object|null} The PresetManager instance or null
  */
-function getPresetManagerSafe() {
+function getPresetManagerSafe(apiId = '') {
     const ctx = SillyTavern.getContext();
     if (typeof ctx.getPresetManager !== 'function') {
         console.warn(`[${MODULE_NAME}] getPresetManager not available on this ST version.`);
         return null;
     }
-    return ctx.getPresetManager();
+
+    // If no apiId provided, ST's getPresetManager will use the current main_api
+    if (!apiId) {
+        return ctx.getPresetManager('');
+    }
+
+    // Use CONNECT_API_MAP from SillyTavern context to find the canonical API
+    // This handles mappings like 'openrouter-text' -> 'textgenerationwebui', 'horde' -> 'koboldhorde', etc.
+    let canonicalApi = apiId;
+    if (ctx.CONNECT_API_MAP && ctx.CONNECT_API_MAP[apiId]) {
+        const config = ctx.CONNECT_API_MAP[apiId];
+        if (config.selected) {
+            canonicalApi = config.selected;
+            console.log(`[${MODULE_NAME}] Mapped API "${apiId}" to canonical "${canonicalApi}" using CONNECT_API_MAP.`);
+        }
+    }
+
+    // Return the manager for the resolved canonical API
+    const manager = ctx.getPresetManager(canonicalApi);
+    if (!manager && canonicalApi !== apiId) {
+        // Fallback to original ID if canonical failed for some reason
+        return ctx.getPresetManager(apiId);
+    }
+
+    return manager;
 }
 
 /**
- * Returns an array of all preset names available for the currently active API.
+ * Returns an array of all preset names available for the specified or active API.
  *
+ * @param {string} apiId - Optional API ID.
  * @returns {string[]} Array of preset names (display text).
  */
-export function getAvailablePresets() {
-    const pm = getPresetManagerSafe();
+export function getAvailablePresets(apiId = '') {
+    const pm = getPresetManagerSafe(apiId);
     if (!pm) return [];
 
     try {
         const presets = pm.getAllPresets();
         return Array.isArray(presets) ? presets : [];
     } catch (e) {
-        console.warn(`[${MODULE_NAME}] Error fetching presets:`, e);
+        console.warn(`[${MODULE_NAME}] Error fetching presets for API "${apiId}":`, e);
         return [];
     }
 }
@@ -132,12 +154,17 @@ let _capturedPresetName = null;
 /**
  * Captures the current preset name so it can be restored later.
  * Called at the start of a pipeline run or before a profile switch.
+ * If a preset is already captured, this call is ignored to preserve the original state.
  *
  * @returns {string} The captured preset name.
  */
 export function capturePresetState() {
-    _capturedPresetName = getCurrentPresetName();
-    console.log(`[${MODULE_NAME}] Preset state captured: "${_capturedPresetName}".`);
+    if (_capturedPresetName === null) {
+        _capturedPresetName = getCurrentPresetName();
+        console.log(`[${MODULE_NAME}] Preset state captured: "${_capturedPresetName}".`);
+    } else {
+        console.log(`[${MODULE_NAME}] Preset state already captured: "${_capturedPresetName}". Skipping.`);
+    }
     return _capturedPresetName;
 }
 

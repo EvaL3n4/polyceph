@@ -329,8 +329,13 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                             presetSwitched = applyPreset(taskPreset);
                             if (presetSwitched) {
                                 await new Promise(r => setTimeout(r, 300));
+                            } else {
+                                console.error(`[${MODULE_NAME}] Failed to apply preset "${taskPreset}". It may not exist for the active API.`);
                             }
                         }
+                    } else {
+                        // Ensure we are back to the original captured preset for "Current" tasks
+                        restorePresetState();
                     }
 
                     // Resolve profile name for metadata

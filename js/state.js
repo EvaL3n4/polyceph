@@ -1,10 +1,10 @@
 import { MODULE_NAME, defaultSettings } from './constants.js';
 import { waitForApiReady } from './utils.js';
-import { capturePresetState, restorePresetState, clearPresetState, getAvailablePresets as fetchPresets } from './compat-presets.js';
+import { capturePresetState, restorePresetState, clearPresetState, getAvailablePresets } from './compat-presets.js';
 
 export let settings = { ...defaultSettings };
-export let availableProfiles = []; // Array of {id, name}
-export let availablePresets = []; // Array of preset name strings
+export let availableProfiles = []; // Array of {id, name, api}
+export let availablePresetsByApi = {}; // Object of { apiId: string[] }
 
 /**
  * Switch ST to a specific profile by ID or Name
@@ -97,37 +97,38 @@ export function deletePipeline(id) {
  */
 export async function getAvailableProfiles() {
     try {
-        // Method 1: Check ST DOM directly
-        const profileSelect = document.querySelector('#api_profiles, #connection_profiles, select[name="api_profiles"]');
-        if (profileSelect) {
-            availableProfiles = Array.from(profileSelect.options)
-                .map(opt => ({ id: opt.value, name: opt.text }))
-                .filter(v => v.id && v.id !== 'default');
-            if (availableProfiles.length > 0) return availableProfiles;
+        const ctx = SillyTavern.getContext();
+        let profilesData = null;
+
+        // Try to get from SillyTavern context first (most reliable for extensions)
+        if (ctx.extensionSettings?.connectionManager?.profiles) {
+            profilesData = ctx.extensionSettings.connectionManager.profiles;
+        } else if (ctx.settings?.connection_profiles) {
+            profilesData = ctx.settings.connection_profiles;
         }
 
-        // Method 2: Try settings
+        if (profilesData) {
+            console.log(`[${MODULE_NAME}] Found profiles in SillyTavern context:`, profilesData);
+            return processProfiles(profilesData);
+        }
+
+        // Fallback: Fetch from API
+        console.log(`[${MODULE_NAME}] Profiles not in context, fetching from API...`);
         const response = await fetch('/api/settings/get', { method: 'POST' });
         const data = await response.json();
         const possibleLocs = [
-            data?.connectionManager?.profiles, data?.connection_profiles,
-            data?.profiles, data?.api?.profiles, data?.connectionProfiles
+            data?.extension_settings?.connectionManager?.profiles,
+            data?.connectionManager?.profiles, 
+            data?.connection_profiles,
+            data?.profiles, 
+            data?.api?.profiles, 
+            data?.connectionProfiles
         ];
 
         for (const loc of possibleLocs) {
             if (loc) {
-                if (Array.isArray(loc)) {
-                    availableProfiles = loc.map(p => {
-                        if (typeof p === 'string') return { id: p, name: p };
-                        return { id: p.id || p.name, name: p.name || p.id };
-                    });
-                } else if (typeof loc === 'object') {
-                    availableProfiles = Object.keys(loc).map(key => ({
-                        id: key,
-                        name: loc[key].name || key
-                    }));
-                }
-                if (availableProfiles.length > 0) return availableProfiles;
+                console.log(`[${MODULE_NAME}] Found profiles at location:`, loc);
+                return processProfiles(loc);
             }
         }
     } catch (e) {
@@ -137,13 +138,64 @@ export async function getAvailableProfiles() {
 }
 
 /**
- * Refresh the list of available presets for the active API.
- * @returns {string[]} Array of preset name strings.
+ * Helper to process profile data into standardized format
+ */
+function processProfiles(loc) {
+    if (Array.isArray(loc)) {
+        availableProfiles = loc.map(p => {
+            if (typeof p === 'string') return { id: p, name: p, api: '' };
+            const api = p.api || p.mode || p.main_api || ''; 
+            if (!api) console.warn(`[${MODULE_NAME}] Profile object missing API:`, p);
+            return { id: p.id || p.name, name: p.name || p.id, api: api };
+        });
+    } else if (typeof loc === 'object') {
+        availableProfiles = Object.keys(loc).map(key => {
+            const p = loc[key];
+            const api = p.api || p.mode || p.main_api || '';
+            if (!api) console.warn(`[${MODULE_NAME}] Profile object missing API:`, p);
+            return {
+                id: key,
+                name: p.name || key,
+                api: api
+            };
+        });
+    }
+    console.log(`[${MODULE_NAME}] Extracted profiles:`, availableProfiles);
+    return availableProfiles;
+}
+
+/**
+ * Refresh the list of available presets for all APIs used by the profiles.
+ * @returns {object} Object of { apiId: string[] }
  */
 export function refreshPresets() {
-    availablePresets = fetchPresets();
-    console.log(`[${MODULE_NAME}] Refreshed presets (${availablePresets.length}):`, availablePresets);
-    return availablePresets;
+    const ctx = SillyTavern.getContext();
+    const mainApi = ctx.mainApi;
+    const apis = new Set();
+    
+    // Always include main API
+    if (mainApi) {
+        console.log(`[${MODULE_NAME}] Adding main API to refresh: ${mainApi}`);
+        apis.add(mainApi);
+    }
+    
+    // Add APIs from profiles
+    for (const profile of availableProfiles) {
+        if (profile.api && !apis.has(profile.api)) {
+            console.log(`[${MODULE_NAME}] Adding profile API to refresh: ${profile.api} (from profile: ${profile.name})`);
+            apis.add(profile.api);
+        }
+    }
+
+    const newPresets = {};
+    for (const apiId of apis) {
+        const presets = getAvailablePresets(apiId);
+        newPresets[apiId] = presets;
+    }
+
+    availablePresetsByApi = newPresets;
+    console.log(`[${MODULE_NAME}] Refreshed presets for APIs:`, Object.keys(availablePresetsByApi));
+    return availablePresetsByApi;
 }
 
 export function saveSettings() {

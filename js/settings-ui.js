@@ -1,14 +1,33 @@
-import { availableProfiles, availablePresets, settings, saveSettings, getAvailableProfiles, getActivePipeline, createPipeline, deletePipeline, refreshPresets } from './state.js';
+import { availableProfiles, availablePresetsByApi, settings, saveSettings, getAvailableProfiles, getActivePipeline, createPipeline, deletePipeline, refreshPresets } from './state.js';
 import { autoResizeTextarea, generateId } from './utils.js';
 import { MODULE_NAME } from './constants.js';
 import { syncHiddenMessageVisibility } from './ui.js';
+
+function getPresetOptionsHTML(profileId, currentPreset) {
+    const profile = availableProfiles.find(p => p.id === profileId);
+    let apiId = profile?.api;
+    let fallbackReason = '';
+
+    if (!apiId) {
+        apiId = SillyTavern.getContext().mainApi || '';
+        fallbackReason = profile ? `Profile "${profile.name}" has no API defined.` : `Profile ID "${profileId}" not found.`;
+        console.warn(`[${MODULE_NAME}] Using fallback API "${apiId}" for preset dropdown. Reason: ${fallbackReason}`);
+    }
+
+    const presets = availablePresetsByApi[apiId] || [];
+    if (presets.length === 0 && apiId) {
+        console.warn(`[${MODULE_NAME}] No presets found for API "${apiId}" in cache.`);
+    }
+
+    return `<option value="Current" ${(!currentPreset || currentPreset === 'Current') ? 'selected' : ''}>Current Preset</option>` +
+        presets.map(p => `<option value="${p}" ${p === currentPreset ? 'selected' : ''}>${p}</option>`).join('');
+}
 
 export function renderTask(stepId, task) {
     const profileOptions = `<option value="none">(Template Only - No LLM)</option>` +
         availableProfiles.map(p => `<option value="${p.id}" ${p.id === task.profile ? 'selected' : ''}>${p.name}</option>`).join('');
 
-    const presetOptions = `<option value="Current" ${(!task.preset || task.preset === 'Current') ? 'selected' : ''}>Current Preset</option>` +
-        availablePresets.map(p => `<option value="${p}" ${p === task.preset ? 'selected' : ''}>${p}</option>`).join('');
+    const presetOptions = getPresetOptionsHTML(task.profile, task.preset);
 
     return `
         <div class="polyceph-node-card" data-node-id="${task.id}">
@@ -107,11 +126,25 @@ export function bindStepEvents() {
     container.querySelectorAll('.polyceph-profile-select').forEach(select => {
         select.addEventListener('change', (e) => {
             const nodeId = e.target.getAttribute('data-node-id');
+            let updatedTask = null;
             for (const step of activePipeline.steps) {
                 const task = step.tasks.find(n => n.id === nodeId);
-                if (task) { task.profile = e.target.value; break; }
+                if (task) {
+                    task.profile = e.target.value;
+                    updatedTask = task;
+                    break;
+                }
             }
             saveSettings();
+
+            // Dynamic preset list update
+            if (updatedTask) {
+                const card = e.target.closest('.polyceph-node-card');
+                const presetSelect = card?.querySelector('.polyceph-preset-select');
+                if (presetSelect) {
+                    presetSelect.innerHTML = getPresetOptionsHTML(updatedTask.profile, updatedTask.preset);
+                }
+            }
         });
     });
 
