@@ -192,16 +192,9 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
     contextVault['system_prompt'] = stContext.extension_settings?.formatting?.main_prompt || '';
     contextVault['polyceph_prompt'] = settings.polycephPrompt || '';
 
-    // Chat Completion API Prompts Mapping
-    if (stContext.chatCompletionSettings?.prompts) {
-        const prompts = stContext.chatCompletionSettings.prompts;
-        const findContent = (id) => prompts.find(p => p.identifier === id)?.content || '';
-        
-        contextVault['cc_main_prompt'] = findContent('main');
-        contextVault['cc_aux_prompt'] = findContent('nsfw');
-        contextVault['cc_post_history_instructions'] = findContent('jailbreak');
-        contextVault['cc_enhance_definitions'] = findContent('enhanceDefinitions');
-    }
+    // Chat Completion API Prompts are now resolved dynamically in macros.js via resolveCCMacros
+    // during the expandPrompt call. We keep contextVault for other dynamic variables.
+
 
     let cleanMessagesArr = [];
     if (generateSwipesForBatchId) {
@@ -282,7 +275,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
 
                     try {
                         // Fully expand the prompt using the new recursive macro system
-                        const prompt = expandPrompt(node.template || '', settings, contextVault, cleanChat, stContext);
+                        const prompt = expandPrompt(node.template || '', settings, contextVault, cleanChat, stContext, wiPrompt);
 
                         if (signal.aborted) return;
 

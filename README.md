@@ -71,9 +71,10 @@ Route data between tasks using these handlebars placeholders/macros:
 - `{{char}}`, `{{user}}`, `{{persona}}`, `{{personality}}`, etc.: All standard SillyTavern macros.
 - `{{wi}}` or `{{world_info}}`: Automatically scans chat context and injects relevant Lorebook entries.
 - `{{polyceph_prompt}}`: The global Polyceph Prompt defined in extension settings. Evaluated **recursively** (can contain other placeholders).
-- `{{cc_main_prompt}}`, `{{cc_aux_prompt}}`: Standard Chat Completion prompts.
-- `{{cc_post_history_instructions}}`: The "Post-History Instructions" from ST settings.
-- `{{cc_enhance_definitions}}`: The "Enhance Definitions" prompt.
+- `{{cc_main_prompt}}`, `{{cc_aux_prompt}}`: Specific Chat Completion prompts.
+- `{{cc_post_history_instructions}}`, `{{cc_enhance_definitions}}`: Other individual CC prompts.
+- `{{cc_all_prompts}}`: **Comprehensive Context**. Rebuilds the *entire* SillyTavern prompt list exactly as configured in your settings. Resolves all enabled markers (Description, Personality, World Info, History, Examples) in their correct order.
+
 
 ## Postprocessing Tags
 

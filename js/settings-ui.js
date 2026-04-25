@@ -281,7 +281,8 @@ export function createSettingsHTML() {
                                 <li><code>{{polyceph_prompt}}</code> - The global Polyceph Prompt defined above.</li>
                                 <li><code>{{char}}</code>, <code>{{user}}</code>, <code>{{persona}}</code>, <code>{{personality}}</code> - Standard character macros.</li>
                                 <li><code>{{wi}}</code> or <code>{{world_info}}</code> - Relevant Lorebook entries based on chat context.</li>
-                                <li><code>{{cc_main_prompt}}</code>, <code>{{cc_aux_prompt}}</code> - CC Prompts.</li>
+                                <li><code>{{cc_all_prompts}}</code> - Comprehensive ST prompt list (includes all enabled markers, history, examples).</li>
+                                <li><code>{{cc_main_prompt}}</code>, <code>{{cc_aux_prompt}}</code> - Specific CC Prompts.</li>
                                 <li><code>{{cc_post_history_instructions}}</code> - CC Post-History instructions.</li>
                                 <li><code>{{cc_enhance_definitions}}</code> - CC Enhance Definitions prompt.</li>
                             </ul>

@@ -61,6 +61,74 @@ export function resolveChatHistory(text, cleanChat, stContext) {
 }
 
 /**
+ * Resolves all active SillyTavern Chat Completion prompts into a single string.
+ */
+export function resolveCCMacros(text, cleanChat, stContext, wiPrompt) {
+    if (!text) return text;
+
+    const ccSettings = stContext.chatCompletionSettings;
+    if (!ccSettings || !ccSettings.prompts) return text;
+
+    // Use current character ID
+    const charId = stContext.characterId || 0;
+    
+    // Get prompt order for enabled state
+    const promptOrder = ccSettings.prompt_order?.find(po => po.characterId === charId) || 
+                       ccSettings.prompt_order?.find(po => po.characterId === 100001) || 
+                       ccSettings.prompt_order?.[0];
+    
+    const isEnabled = (id) => {
+        if (id === 'main') return true;
+        const entry = promptOrder?.prompts?.[id];
+        return entry ? entry.enabled : true;
+    };
+
+    const resolveIdentifier = (id) => {
+        const prompt = ccSettings.prompts.find(p => p.identifier === id);
+        if (!prompt) return '';
+        
+        if (prompt.marker) {
+            const char = stContext.characters[charId];
+            switch (id) {
+                case 'charDescription': return char?.description || '';
+                case 'charPersonality': return char?.personality || '';
+                case 'scenario': return char?.scenario || '';
+                case 'personaDescription': return stContext.persona_description || '';
+                case 'worldInfoBefore': return wiPrompt || '';
+                case 'worldInfoAfter': return ''; // World info usually comes as one block
+                case 'dialogueExamples': return char?.mes_example || '';
+                case 'chatHistory': return cleanChat.map(m => `${m.name}: ${m.mes}`).join('\n\n');
+                default: return '';
+            }
+        }
+        return prompt.content || '';
+    };
+
+    let result = text;
+
+    // 1. Resolve {{cc_all_prompts}}
+    result = result.replace(/\{\{cc_all_prompts\}\}/g, () => {
+        const parts = [];
+        ccSettings.prompts.forEach(p => {
+            if (!isEnabled(p.identifier)) return;
+            const content = resolveIdentifier(p.identifier);
+            if (content.trim()) parts.push(content.trim());
+        });
+        return parts.join('\n\n');
+    });
+
+    // 2. Resolve individual macros
+    result = result.replace(/\{\{cc_main_prompt\}\}/g, () => resolveIdentifier('main'));
+    result = result.replace(/\{\{cc_aux_prompt\}\}/g, () => resolveIdentifier('nsfw'));
+    result = result.replace(/\{\{cc_nsfw_prompt\}\}/g, () => resolveIdentifier('nsfw'));
+    result = result.replace(/\{\{cc_post_history_instructions\}\}/g, () => resolveIdentifier('jailbreak'));
+    result = result.replace(/\{\{cc_jailbreak_prompt\}\}/g, () => resolveIdentifier('jailbreak'));
+    result = result.replace(/\{\{cc_enhance_definitions\}\}/g, () => resolveIdentifier('enhanceDefinitions'));
+
+    return result;
+}
+
+/**
  * Fully expands a prompt by resolving Polyceph-specific recursion and custom macros.
  * 
  * @param {string} template - The starting template
@@ -68,20 +136,23 @@ export function resolveChatHistory(text, cleanChat, stContext) {
  * @param {object} contextVault - The current macro values
  * @param {Array} cleanChat - Chat snapshot
  * @param {object} stContext - SillyTavern context
+ * @param {string} wiPrompt - Pre-calculated World Info string
  * @returns {string} - Fully expanded prompt string
  */
-export function expandPrompt(template, settings, contextVault, cleanChat, stContext) {
+export function expandPrompt(template, settings, contextVault, cleanChat, stContext, wiPrompt) {
     let result = template || '';
 
     // 1. Resolve recursive {{polyceph_prompt}}
-    // We do this first so that any macros inside the global prompt can be resolved in the next steps
     const globalPrompt = settings.polycephPrompt || '';
     result = result.replace(/\{\{polyceph_prompt\}\}/g, globalPrompt);
 
-    // 2. Resolve Custom Polyceph Macros (Chat History)
+    // 2. Resolve Chat History (with params)
     result = resolveChatHistory(result, cleanChat, stContext);
 
-    // 3. Resolve SillyTavern standard macros and remaining contextVault items
+    // 3. Resolve Chat Completion Prompts
+    result = resolveCCMacros(result, cleanChat, stContext, wiPrompt);
+
+    // 4. Resolve SillyTavern standard macros and remaining contextVault items
     if (typeof stContext.substituteParams === 'function') {
         result = stContext.substituteParams(result, {
             dynamicMacros: contextVault
