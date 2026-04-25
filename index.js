@@ -42,17 +42,30 @@ function interceptSend(e) {
         send_date: typeof context.humanizedDateTime === 'function' ? context.humanizedDateTime() : new Date().toLocaleString(),
         mes: text,
         force_avatar: avatarStr,
-        extra: {}
+        extra: { polyceph_typing: true, polyceph_active_tasks: [] },
+        swipes: [text],
+        swipe_id: 0,
+        swipe_info: [{}]
     };
 
-    context.chat.push(message);
-    if (context.eventSource && context.eventTypes) {
-        context.eventSource.emit(context.eventTypes.MESSAGE_RECEIVED, context.chat.length - 1);
-    }
-    if (typeof context.addOneMessage === 'function') context.addOneMessage(message);
-    if (typeof context.saveChat === 'function') context.saveChat();
+    setTimeout(async () => {
+        console.log(`[${MODULE_NAME}] Adding user message. Chat length before:`, context.chat.length);
+        context.chat.push(message);
+        if (typeof context.addOneMessage === 'function') {
+            await context.addOneMessage(message);
+        } else {
+            if (context.eventSource && context.eventTypes) {
+                context.eventSource.emit(context.eventTypes.MESSAGE_RECEIVED, context.chat.length - 1);
+            }
+        }
+        console.log(`[${MODULE_NAME}] User message added. Chat length after:`, context.chat.length);
+        if (typeof context.saveChat === 'function') context.saveChat();
 
-    startPipeline(text);
+        // Stagger the pipeline start slightly
+        setTimeout(() => {
+            startPipeline(text);
+        }, 50);
+    }, 0);
 }
 
 function interceptSwipe(e) {

@@ -346,3 +346,89 @@ body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open
 body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open) .mes_edit_buttons {
     display: none !important;
 }
+
+/* Custom Typing Indicator */
+.polyceph-typing-indicator {
+    background: var(--black70a);
+    backdrop-filter: blur(5px);
+    border: 1px solid var(--white10a);
+    border-radius: 8px;
+    padding: 12px;
+    margin: 10px 0;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    font-family: var(--mainFontFamily);
+    color: var(--white);
+    max-width: 400px;
+}
+
+.polyceph-typing-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--white10a);
+    padding-bottom: 8px;
+}
+
+.polyceph-typing-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: bold;
+    color: var(--SmartThemeKeyColor);
+    font-size: 0.9em;
+}
+
+.polyceph-stop-button {
+    cursor: pointer;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--black30a);
+    border-radius: 4px;
+    color: var(--white);
+    transition: all 0.2s ease;
+}
+
+.polyceph-stop-button:hover {
+    background: #ff4444;
+    color: white;
+    transform: scale(1.1);
+}
+
+.polyceph-active-tasks-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.polyceph-active-task {
+    background: var(--black30a);
+    border-left: 3px solid var(--SmartThemeKeyColor);
+    padding: 6px 10px;
+    border-radius: 4px;
+    animation: polyceph-pulse 2s infinite ease-in-out;
+}
+
+.polyceph-active-task-label {
+    font-size: 0.85em;
+    font-weight: bold;
+}
+
+.polyceph-active-task-profile {
+    font-size: 0.75em;
+    opacity: 0.7;
+}
+
+@keyframes polyceph-pulse {
+    0% { opacity: 0.7; }
+    50% { opacity: 1; border-left-color: var(--SmartThemeQuoteColor); }
+    100% { opacity: 0.7; }
+}
+
+/* Hide the default "..." text when custom UI is shown */
+.mes[polyceph_typing="true"] .mes_text {
+    display: none !important;
+}

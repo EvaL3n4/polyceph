@@ -1,4 +1,6 @@
+import { MODULE_NAME } from './constants.js';
 import { getActivePipeline, settings } from './state.js';
+import { stopPipeline } from './engine.js';
 
 export function syncHiddenMessageVisibility() {
     if (settings && settings.showHiddenMessages) {
@@ -59,6 +61,56 @@ export function generateThoughtsHTML(thoughtsArray, pipelineName) {
     </div>`;
 }
 
+export function renderPolycephTyping(messageElement, chatMsg) {
+    const activeTasks = chatMsg.extra?.polyceph_active_tasks || [];
+    let stepInfo = 'Processing';
+    if (activeTasks.length > 0) {
+        stepInfo = `Step ${activeTasks[0].step}/${activeTasks[0].totalSteps}`;
+    } else if (chatMsg.mes && chatMsg.mes.includes('Step')) {
+        // Fallback to text if metadata missing but text has step info
+        const match = chatMsg.mes.match(/Step (\d+\/\d+)/);
+        if (match) stepInfo = `Step ${match[1]}`;
+    }
+    
+    const $mesBlock = $(messageElement).find('.mes_block');
+    messageElement.setAttribute('polyceph_typing', 'true');
+    
+    // Check if we already have an indicator to avoid flicker, just update tasks
+    let $indicator = $mesBlock.find('.polyceph-typing-indicator');
+    if ($indicator.length === 0) {
+        $indicator = $(`
+            <div class="polyceph-typing-indicator">
+                <div class="polyceph-typing-header">
+                    <div class="polyceph-typing-title">
+                        <span class="fa-solid fa-spinner fa-spin"></span>
+                        <span class="polyceph-typing-step-label">Polyceph ${stepInfo}</span>
+                    </div>
+                    <div class="polyceph-stop-button" title="Stop Pipeline">
+                        <span class="fa-solid fa-square"></span>
+                    </div>
+                </div>
+                <div class="polyceph-active-tasks-list"></div>
+            </div>
+        `);
+        $indicator.find('.polyceph-stop-button').on('click', (e) => {
+            e.stopPropagation();
+            stopPipeline();
+        });
+        $mesBlock.prepend($indicator);
+    } else {
+        $indicator.find('.polyceph-typing-step-label').text(`Polyceph ${stepInfo}`);
+    }
+
+    const tasksHtml = activeTasks.map(task => `
+        <div class="polyceph-active-task">
+            <div class="polyceph-active-task-label">${task.label}</div>
+            <div class="polyceph-active-task-profile">${task.profile}</div>
+        </div>
+    `).join('');
+
+    $indicator.find('.polyceph-active-tasks-list').html(tasksHtml || '<div class="polyceph-active-task-label">Initializing...</div>');
+}
+
 export function renderPolycephThoughts() {
     const context = SillyTavern.getContext();
     if (!context || !context.chat) return;
@@ -69,6 +121,14 @@ export function renderPolycephThoughts() {
         const mesId = messageElement.getAttribute('mesid');
         const chatMsg = context.chat[mesId];
         if (!chatMsg) return;
+
+        // Handle Typing Indicator
+        const isTyping = (chatMsg.extra && chatMsg.extra.polyceph_typing) || (chatMsg.mes === '...' && !chatMsg.is_user && !chatMsg.is_system);
+        if (isTyping) {
+            console.log(`[${MODULE_NAME}] Typing indicator detected at mesid ${mesId}`);
+            renderPolycephTyping(messageElement, chatMsg);
+            return;
+        }
 
         // Handle Hidden Background Messages
         if ((chatMsg.extra && chatMsg.extra.polyceph_hidden) || chatMsg.name === 'Background') {
@@ -135,6 +195,19 @@ $(document).ready(() => {
     const observer = new MutationObserver((mutations) => {
         let shouldRender = false;
         for (const mutation of mutations) {
+            const target = mutation.target;
+            
+            // Ignore mutations within Polyceph's own UI elements to prevent infinite loops
+            if (target.closest && target.closest('.polyceph-typing-indicator, .polyceph-thoughts, .polyceph-background-separator')) {
+                continue;
+            }
+
+            // If the mutation target is a message or inside a message
+            if (target.nodeType === 1 && (target.classList.contains('mes') || target.closest('.mes'))) {
+                shouldRender = true;
+                break;
+            }
+            // If nodes were added, check if they are messages
             for (const node of mutation.addedNodes) {
                 if (node.nodeType === 1 && (node.classList.contains('mes') || node.querySelector('.mes'))) {
                     shouldRender = true;
