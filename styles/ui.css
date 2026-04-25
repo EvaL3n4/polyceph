@@ -273,6 +273,34 @@ body.polyceph-show-hidden .mes[polyceph_hidden="true"] {
     min-height: auto !important;
 }
 
+/* Force show background messages (collapsed) in delete mode even if hidden in settings */
+body.polyceph-delete-mode .mes[polyceph_hidden="true"] {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    min-height: auto !important;
+    margin: 5px 0 !important;
+}
+
+body.polyceph-delete-mode .mes[polyceph_hidden="true"] .polyceph-background-separator {
+    flex: 1 1 auto !important;
+    margin-bottom: 0 !important;
+}
+
+/* Align delete checkbox with separator line for background messages */
+.mes[polyceph_hidden="true"] .del_checkbox,
+.mes[polyceph_hidden="true"] .for_checkbox {
+    order: -1 !important;
+    /* Force to the left of the separator */
+    margin-top: 0 !important;
+    margin-right: 15px !important;
+    align-self: center !important;
+    position: relative;
+    z-index: 10;
+    flex-shrink: 0 !important;
+}
+
 /* Reasoning Blocks Visibility */
 .polyceph-thoughts {
     display: none !important;
@@ -298,6 +326,8 @@ body.polyceph-show-hidden .mes[polyceph_hidden="true"] .mes_block {
     user-select: none;
     opacity: 0.4;
     transition: opacity 0.2s;
+    position: relative;
+    /* Anchor for absolute delete icon */
 }
 
 .polyceph-background-separator:hover {
@@ -319,6 +349,40 @@ body.polyceph-show-hidden .mes[polyceph_hidden="true"] .mes_block {
     color: var(--SmartThemeKeyColor);
     text-transform: uppercase;
     letter-spacing: 2px;
+}
+
+.polyceph-background-delete {
+    position: absolute;
+    right: 15px;
+    opacity: 0;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 1.1em;
+    color: var(--SmartThemeBodyColor);
+
+    /* Square background like ST menu buttons */
+    background-color: var(--SmartThemeChatTintColor, rgba(0, 0, 0, 0.4));
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.1));
+    border-radius: 4px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    z-index: 5;
+}
+
+.polyceph-background-separator:hover .polyceph-background-delete {
+    opacity: 0.6;
+}
+
+.polyceph-background-delete:hover {
+    opacity: 1 !important;
+    color: var(--SmartThemeQuoteColor, #ff4444) !important;
+    background-color: var(--SmartThemeBotMesBlurTintColor, rgba(0, 0, 0, 0.6));
+    border-color: var(--SmartThemeQuoteColor);
+    transform: scale(1.05);
 }
 
 /* Hidden Content State */

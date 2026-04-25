@@ -16,6 +16,29 @@ export function syncHiddenMessageVisibility() {
     }
 }
 
+/**
+ * Monitors SillyTavern's deletion mode dialog to toggle a helper class on the body.
+ */
+export function monitorDeletionMode() {
+    const dialog = document.getElementById('dialogue_del_mes');
+    if (!dialog) return;
+
+    const observer = new MutationObserver(() => {
+        if (dialog.style.display === 'block') {
+            document.body.classList.add('polyceph-delete-mode');
+        } else {
+            document.body.classList.remove('polyceph-delete-mode');
+        }
+    });
+
+    observer.observe(dialog, { attributes: true, attributeFilter: ['style'] });
+    
+    // Initial check
+    if (dialog.style.display === 'block') {
+        document.body.classList.add('polyceph-delete-mode');
+    }
+}
+
 export function generateSingleThoughtHTML(t) {
     let contentHtml = t.content;
     const stContext = SillyTavern.getContext();
@@ -141,9 +164,25 @@ export function renderPolycephThoughts() {
                 const $separator = $(`
                     <div class="polyceph-background-separator">
                         <div class="polyceph-background-label">Background Message</div>
+                        <div class="polyceph-background-delete fa-solid fa-trash-can" title="Delete message"></div>
                     </div>
                 `);
-                $separator.on('click', () => {
+                $separator.on('click', (e) => {
+                    const isDelete = e.target.classList.contains('polyceph-background-delete');
+                    if (isDelete) {
+                        e.stopPropagation();
+                        const mesId = messageElement.getAttribute('mesid');
+                        const context = SillyTavern.getContext();
+                        
+                        // Close any open editors or menus to prevent ST from crashing on stale message indices
+                        if (typeof context.closeMessageEditor === 'function') context.closeMessageEditor();
+                        if (typeof context.hideMenu === 'function') context.hideMenu();
+                        
+                        if (typeof context.deleteMessage === 'function') {
+                            context.deleteMessage(mesId, undefined, true);
+                        }
+                        return;
+                    }
                     messageElement.classList.toggle('polyceph-hidden-open');
                 });
                 $(messageElement).prepend($separator);
@@ -192,6 +231,7 @@ export function renderPolycephThoughts() {
 // Watch for chat changes and initial load
 $(document).ready(() => {
     syncHiddenMessageVisibility();
+    monitorDeletionMode();
 
     // Proactive rendering using MutationObserver
     const observer = new MutationObserver((mutations) => {
