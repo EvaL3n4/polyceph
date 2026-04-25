@@ -79,37 +79,88 @@ export function resolveCCMacros(text, cleanChat, stContext, wiPrompt) {
     const ccSettings = stContext.chatCompletionSettings;
     if (!ccSettings || !ccSettings.prompts) return text;
 
-    // Use current character ID
-    const charId = stContext.characterId || 0;
+    // Use current character's unique ID
+    const charData = stContext.characters[stContext.characterId] || {};
+    const charId = charData.id || 0;
     
-    // Get prompt order for enabled state
-    const promptOrder = ccSettings.prompt_order?.find(po => po.characterId === charId) || 
-                       ccSettings.prompt_order?.find(po => po.characterId === 100001) || 
-                       ccSettings.prompt_order?.[0];
+    console.log(`[Polyceph] resolveCCMacros for character: ${stContext.characters[stContext.characterId]?.name} (${charId})`);
+    const allOrders = ccSettings.prompt_order || [];
+    console.log(`[Polyceph] Available prompt_order IDs:`, allOrders.map(e => e.character_id).join(', '));
+
+    const promptOrderEntry = allOrders.find(e => String(e.character_id) === String(charId)) || 
+                             allOrders.find(e => String(e.character_id) === '100001') || 
+                             allOrders.find(e => String(e.character_id) === '100000') || 
+                             allOrders.find(e => e.character_id === '') ||
+                             allOrders[0];
+
+    console.log(`[Polyceph] Selected promptOrderEntry:`, { 
+        character_id: promptOrderEntry?.character_id, 
+        orderLength: promptOrderEntry?.order?.length 
+    });
     
+    const rawPromptOrder = promptOrderEntry?.order || [];
+    
+    // Ensure all prompts from ccSettings are represented in the order
+    // (ST sometimes has markers missing from the character's prompt_order list)
+    const promptOrder = [...rawPromptOrder];
+    console.log(`[Polyceph] ccSettings.prompts identifiers:`, ccSettings.prompts.map(p => p.identifier).join(', '));
+    
+    ccSettings.prompts.forEach(p => {
+        if (!promptOrder.some(e => e.identifier === p.identifier)) {
+            console.log(`[Polyceph] Identifier ${p.identifier} missing from promptOrder, injecting...`);
+            if (p.identifier === 'personaDescription') {
+                // Inject persona after worldInfoBefore or main
+                let idx = promptOrder.findIndex(e => e.identifier === 'worldInfoBefore');
+                if (idx === -1) idx = promptOrder.findIndex(e => e.identifier === 'main');
+                promptOrder.splice(idx + 1, 0, { identifier: 'personaDescription', enabled: true });
+            } else {
+                promptOrder.push({ identifier: p.identifier, enabled: true });
+            }
+        }
+    });
+
     const isEnabled = (id) => {
         if (id === 'main') return true;
-        const entry = promptOrder?.prompts?.[id];
+        const entry = promptOrder.find(e => e.identifier === id);
         return entry ? entry.enabled : true;
     };
 
     const resolveIdentifier = (id) => {
+        console.log(`[Polyceph] resolveIdentifier called for: ${id}`);
         const prompt = ccSettings.prompts.find(p => p.identifier === id);
-        if (!prompt) return '';
+        if (!prompt) {
+            console.warn(`[Polyceph] resolveIdentifier: identifier not found in ccSettings.prompts: ${id}`);
+            return '';
+        }
         
         const role = prompt.role || 'system';
-        const wrap = (content) => content.trim() ? `[[ROLE:${role}]]\n${content.trim()}\n[[/ROLE]]` : '';
+        const wrap = (content) => content && String(content).trim() ? `[[ROLE:${role}]]\n${String(content).trim()}\n[[/ROLE]]` : '';
 
-        if (prompt.marker) {
-            const char = stContext.characters[charId];
+        if (prompt.marker || [
+            'charDescription', 'charPersonality', 'scenario', 
+            'personaDescription', 'worldInfoBefore', 'worldInfoAfter', 
+            'dialogueExamples', 'chatHistory'
+        ].includes(id)) {
+            const char = stContext.characters[stContext.characterId];
+            const charFields = typeof stContext.getCharacterCardFields === 'function' ? stContext.getCharacterCardFields() : {};
+            
+            console.log(`[Polyceph] Resolving marker: ${id}`, { 
+                hasChar: !!char, 
+                hasFields: !!stContext.getCharacterCardFields 
+            });
+
             switch (id) {
-                case 'charDescription': return wrap(char?.description || '');
-                case 'charPersonality': return wrap(char?.personality || '');
-                case 'scenario': return wrap(char?.scenario || '');
-                case 'personaDescription': return wrap(stContext.persona_description || '');
+                case 'charDescription': return wrap(charFields.description || char?.description || '');
+                case 'charPersonality': return wrap(charFields.personality || char?.personality || '');
+                case 'scenario': return wrap(charFields.scenario || char?.scenario || '');
+                case 'personaDescription': {
+                    const desc = charFields.persona || stContext.powerUserSettings?.persona_description || '';
+                    console.log(`[Polyceph] Persona marker content:`, { length: desc.length, preview: desc.substring(0, 50) });
+                    return wrap(desc);
+                }
                 case 'worldInfoBefore': return wrap(wiPrompt || '');
                 case 'worldInfoAfter': return ''; // World info usually comes as one block
-                case 'dialogueExamples': return wrap(char?.mes_example || '');
+                case 'dialogueExamples': return wrap(charFields.mesExamples || char?.mes_example || '');
                 case 'chatHistory': {
                     return cleanChat.map(m => {
                         let mRole = 'assistant';
@@ -129,10 +180,12 @@ export function resolveCCMacros(text, cleanChat, stContext, wiPrompt) {
 
     // 1. Resolve {{cc_all_prompts}}
     result = result.replace(/\{\{cc_all_prompts\}\}/g, () => {
+        console.log(`[Polyceph] Resolving cc_all_prompts. Order:`, promptOrder.map(e => `${e.identifier}(${e.enabled})`).join(', '));
         const parts = [];
-        ccSettings.prompts.forEach(p => {
-            if (!isEnabled(p.identifier)) return;
-            const content = resolveIdentifier(p.identifier);
+        // Use promptOrder to maintain the correct sequence
+        promptOrder.forEach(entry => {
+            if (!entry.enabled) return;
+            const content = resolveIdentifier(entry.identifier);
             if (content.trim()) parts.push(content.trim());
         });
         return parts.join('\n\n');
