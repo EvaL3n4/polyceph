@@ -1,4 +1,12 @@
-import { getActivePipeline } from './state.js';
+import { getActivePipeline, settings } from './state.js';
+
+export function syncHiddenMessageVisibility() {
+    if (settings && settings.showHiddenMessages) {
+        document.body.classList.add('polyceph-show-hidden');
+    } else {
+        document.body.classList.remove('polyceph-show-hidden');
+    }
+}
 
 export function generateSingleThoughtHTML(t) {
     let contentHtml = t.content;
@@ -56,23 +64,12 @@ export function renderPolycephThoughts() {
         const chatMsg = context.chat[mesId];
         if (!chatMsg) return;
 
-        let thoughts = null;
-        let pipelineName = null;
-        if (chatMsg.swipe_info && chatMsg.swipe_id !== undefined && chatMsg.swipe_info[chatMsg.swipe_id]) {
-            thoughts = chatMsg.swipe_info[chatMsg.swipe_id]?.extra?.polyceph_thoughts;
-            pipelineName = chatMsg.swipe_info[chatMsg.swipe_id]?.extra?.polyceph_pipeline;
-        }
-        if (!thoughts && chatMsg.extra) {
-            thoughts = chatMsg.extra.polyceph_thoughts;
-            pipelineName = chatMsg.extra.polyceph_pipeline;
-        }
-
         // Handle Hidden Background Messages
-        if (chatMsg.extra && chatMsg.extra.polyceph_hidden) {
+        if ((chatMsg.extra && chatMsg.extra.polyceph_hidden) || chatMsg.name === 'Background') {
             messageElement.setAttribute('polyceph_hidden', 'true');
             
             // Inject separator if not already there
-            if (!messageElement.querySelector('.polyceph-background-separator')) {
+            if (messageElement.getAttribute('polyceph_separator_rendered') !== 'true' && !messageElement.querySelector('.polyceph-background-separator')) {
                 const $separator = $(`
                     <div class="polyceph-background-separator">
                         <div class="polyceph-background-label">Background Message</div>
@@ -82,11 +79,25 @@ export function renderPolycephThoughts() {
                     messageElement.classList.toggle('polyceph-hidden-open');
                 });
                 $(messageElement).prepend($separator);
+                messageElement.setAttribute('polyceph_separator_rendered', 'true');
             }
         }
 
         if (chatMsg.is_system && chatMsg.mes === '') {
             messageElement.style.display = 'none';
+        }
+
+        if (messageElement.getAttribute('polyceph_thoughts_rendered') === 'true') return;
+
+        let thoughts = null;
+        let pipelineName = null;
+        if (chatMsg.swipe_info && chatMsg.swipe_id !== undefined && chatMsg.swipe_info[chatMsg.swipe_id]) {
+            thoughts = chatMsg.swipe_info[chatMsg.swipe_id]?.extra?.polyceph_thoughts;
+            pipelineName = chatMsg.swipe_info[chatMsg.swipe_id]?.extra?.polyceph_pipeline;
+        }
+        if (!thoughts && chatMsg.extra) {
+            thoughts = chatMsg.extra.polyceph_thoughts;
+            pipelineName = chatMsg.extra.polyceph_pipeline;
         }
 
         if (!thoughts || thoughts.length === 0) {
@@ -110,10 +121,29 @@ export function renderPolycephThoughts() {
     });
 }
 
-// Initial state for hidden messages
+// Watch for chat changes and initial load
 $(document).ready(() => {
-    const { settings } = SillyTavern.getContext();
+    syncHiddenMessageVisibility();
     if (settings && settings.showHiddenMessages) {
         document.body.classList.add('polyceph-show-hidden');
+    }
+
+    // Proactive rendering using MutationObserver
+    const observer = new MutationObserver((mutations) => {
+        let shouldRender = false;
+        for (const mutation of mutations) {
+            if (mutation.addedNodes.length > 0) {
+                shouldRender = true;
+                break;
+            }
+        }
+        if (shouldRender) {
+            renderPolycephThoughts();
+        }
+    });
+
+    const chat = document.getElementById('chat');
+    if (chat) {
+        observer.observe(chat, { childList: true, subtree: true });
     }
 });

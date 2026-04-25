@@ -239,6 +239,11 @@ export function createSettingsHTML() {
                         <input type="checkbox" id="polyceph_show_hidden_checkbox" ${settings.showHiddenMessages ? 'checked' : ''}>
                         <label for="polyceph_show_hidden_checkbox" style="cursor: pointer;">Show Hidden Background Messages</label>
                     </div>
+
+                    <div style="margin-bottom: 20px;">
+                        <label for="polyceph_prompt_input" style="font-weight: bold; display: block; margin-bottom: 5px;">Polyceph Prompt</label>
+                        <textarea id="polyceph_prompt_input" class="text_pole" style="width: 100%; min-height: 80px; font-family: monospace;" placeholder="Global context or instructions...">${settings.polycephPrompt || ''}</textarea>
+                    </div>
                     
                     <div style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 15px;">
                         ${renderNeoSlider('Request Delay (ms)', 'polyceph_delay', settings.delayMs || 0, 0, 5000, 50)}
@@ -262,10 +267,12 @@ export function createSettingsHTML() {
                         <div class="polyceph-placeholders-content" id="polyceph_placeholders_content">
                             <ul style="margin: 0; padding-left: 20px;">
                                 <li><code>{{user_input}}</code> - The original user text from the send box.</li>
-                                <li><code>{{chat_history:N}}</code> - Retrieves the last N messages from chat (Name: Message).</li>
+                                <li><code>{{chat_history:N}}</code> - The last N messages of chat (snapshot from start).</li>
+                                <li><code>{{chat_history:live:N}}</code> - Retrieves N messages from the CURRENT chat state (includes results from earlier steps).</li>
                                 <li><code>{{s1}}</code>, <code>{{s2}}</code> - Combined output of all tasks in a previous Step.</li>
                                 <li><code>{{TaskLabel}}</code> - Output of a specific task (using its custom label).</li>
                                 <li><code>{{system_prompt}}</code> - The Main Prompt from SillyTavern Advanced Formatting.</li>
+                                <li><code>{{polyceph_prompt}}</code> - The global Polyceph Prompt defined above.</li>
                                 <li><code>{{char}}</code>, <code>{{user}}</code>, <code>{{persona}}</code>, <code>{{personality}}</code> - Standard character macros.</li>
                                 <li><code>{{wi}}</code> or <code>{{world_info}}</code> - Relevant Lorebook entries based on chat context.</li>
                             </ul>
@@ -348,6 +355,11 @@ export function addSettingsUI() {
         } else {
             document.body.classList.remove('polyceph-show-hidden');
         }
+        saveSettings();
+    });
+
+    document.getElementById('polyceph_prompt_input')?.addEventListener('input', (e) => {
+        settings.polycephPrompt = e.target.value;
         saveSettings();
     });
 

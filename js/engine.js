@@ -44,7 +44,7 @@ export function parseOutputTags(rawOutput, taskId, profileDisplayName, isThinkin
 
                 // If it's a "Thinking" task, everything goes into the thoughts list in order
                 if (isThinkingTask) {
-                    thoughts.push({ title: `Task Output`, content, isSilent: false, profile: profileDisplayName });
+                    thoughts.push({ title: taskId || `Task Output`, content, isSilent: false, profile: profileDisplayName });
                 }
             }
         }
@@ -186,6 +186,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
     contextVault['wi'] = wiPrompt;
     contextVault['world_info'] = wiPrompt;
     contextVault['system_prompt'] = stContext.extension_settings?.formatting?.main_prompt || '';
+    contextVault['polyceph_prompt'] = settings.polycephPrompt || '';
 
     let cleanMessagesArr = [];
     if (generateSwipesForBatchId) {
@@ -257,12 +258,20 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
 
                     let prompt = node.template || '';
 
-                    // Polyceph-specific: {{chat_history}} and {{chat_history:X}}
-                    prompt = prompt.replace(/\{\{chat_history(?::(\d+))?\}\}/g, (match, count) => {
-                        let history = cleanChat.map(m => `${m.name}: ${m.mes}`);
+                    // Polyceph-specific: {{chat_history}}, {{chat_history:X}}, {{chat_history:live}}
+                    prompt = prompt.replace(/\{\{chat_history(?::(\w+))?\}\}/g, (match, param) => {
+                        let source = cleanChat; // Snapshot from start of pipeline
+                        let count = null;
+                        
+                        if (param === 'live') {
+                            source = stContext.chat.filter(m => m && !m.extra?.polyceph_typing);
+                        } else if (param && !isNaN(param)) {
+                            count = parseInt(param);
+                        }
+                        
+                        let history = source.map(m => `${m.name}: ${m.mes}`);
                         if (count) {
-                            const cap = parseInt(count);
-                            history = history.slice(-cap);
+                            history = history.slice(-count);
                         }
                         return history.join('\n\n');
                     });
@@ -282,7 +291,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                         if (!rawRes) {
                             res = rawRes;
                         } else {
-                            const { cleanOutput, persistentOutput, thoughts, hiddenBackgrounds } = parseOutputTags(rawRes, taskIdIndx, profileDisplayName, node.persist && !node.isCharacter);
+                            const { cleanOutput, persistentOutput, thoughts, hiddenBackgrounds } = parseOutputTags(rawRes, node.label || `Task ${taskIdIndx}`, profileDisplayName, node.persist && !node.isCharacter);
                             res = cleanOutput;
                             displayRes = persistentOutput;
                             accumulatedThoughts.push(...thoughts);

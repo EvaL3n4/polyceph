@@ -61,12 +61,15 @@ Polyceph leverages SillyTavern's built-in **Connection Profiles**.
 
 Route data between tasks using these handlebars placeholders/macros:
 - `{{user_input}}`: The original text from the chat box.
-- `{{chat_history:N}}`: The last **N** messages of the chat (Name: Message).
+- `{{chat_history}}`: All chat messages. (snapshot at start of pipeline).
+- `{{chat_history:N}}`: The last **N** messages of the chat (snapshot at start of pipeline).
+- `{{chat_history:live:N}}`: Retrieves messages from the **current** chat state (includes background messages or character responses from earlier steps in the same pipeline).
 - `{{s1}}`, `{{s2}}`: The combined output of all tasks in a previous Step.
 - `{{TaskLabel}}`: The output of a specific task (uses the custom label you assigned to the task).
 - `{{system_prompt}}`: The **Main Prompt** text from SillyTavern's Advanced Formatting settings.
 - `{{char}}`, `{{user}}`, `{{persona}}`, `{{personality}}`, etc.: All standard SillyTavern macros.
 - `{{wi}}` or `{{world_info}}`: Automatically scans chat context and injects relevant Lorebook entries.
+- `{{polyceph_prompt}}`: The global Polyceph Prompt defined in the extension settings.
 
 ## Postprocessing Tags
 

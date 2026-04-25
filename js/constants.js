@@ -8,6 +8,7 @@ export const defaultSettings = {
     retryDelayMs: 2000,
     activePipelineId: 'default',
     showHiddenMessages: false,
+    polycephPrompt: '',
     pipelines: [
         {
             id: 'default',

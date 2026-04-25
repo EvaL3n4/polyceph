@@ -259,11 +259,13 @@
     opacity: 1;
 }
 
-/* Hidden Background Messages */
+/* Robust hiding for background messages */
+.mes[ch_name="Background"],
 .mes[polyceph_hidden="true"] {
     display: none !important;
 }
 
+body.polyceph-show-hidden .mes[ch_name="Background"],
 body.polyceph-show-hidden .mes[polyceph_hidden="true"] {
     display: flex !important;
     flex-wrap: wrap !important;

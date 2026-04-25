@@ -1,6 +1,6 @@
 import { MODULE_NAME, VERSION } from './js/constants.js';
 import { loadSettings, getAvailableProfiles, settings } from './js/state.js';
-import { renderPolycephThoughts } from './js/ui.js';
+import { renderPolycephThoughts, syncHiddenMessageVisibility } from './js/ui.js';
 import { addSettingsUI } from './js/settings-ui.js';
 import { startPipeline } from './js/engine.js';
 import { injectChatPipelineSelector, updateChatSelectorOptions } from './js/chat-ui.js';
@@ -102,6 +102,7 @@ async function init() {
     console.log(`[${MODULE_NAME}] Initializing Polyceph v${VERSION}...`);
 
     loadSettings();
+    syncHiddenMessageVisibility();
     await getAvailableProfiles();
 
     addSettingsUI();
