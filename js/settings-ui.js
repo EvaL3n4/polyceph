@@ -273,9 +273,8 @@ export function createSettingsHTML() {
                         </div>
                         <div class="polyceph-placeholders-content" id="polyceph_placeholders_content">
                             <ul style="margin: 0; padding-left: 20px;">
-                                <li><code>{{user_input}}</code> - The original user text from the send box.</li>
-                                <li><code>{{chat_history:N}}</code> - Last N messages (snapshot from start).</li>
-                                <li><code>{{chat_history:live:N}}</code> - Last N messages (retrieved at task start).</li>
+                                <li><code>{{user_input}}</code> - Original text from the send box.</li>
+                                <li><code>{{chat_history}}</code> - All chat messages - see below for advanced use.</li>
                                 <li><code>{{s1}}</code>, <code>{{s2}}</code> - Combined output of all tasks in a previous Step.</li>
                                 <li><code>{{TaskLabel}}</code> - Output of a specific task (using its custom label).</li>
                                 <li><code>{{system_prompt}}</code> - The Main Prompt from SillyTavern Advanced Formatting.</li>
@@ -286,6 +285,17 @@ export function createSettingsHTML() {
                                 <li><code>{{cc_post_history_instructions}}</code> - CC Post-History instructions.</li>
                                 <li><code>{{cc_enhance_definitions}}</code> - CC Enhance Definitions prompt.</li>
                             </ul>
+                            <div style="margin-top: 10px; border-top: 1px solid var(--white10a); padding-top: 10px;">
+                                <b style="font-size: 0.9em; opacity: 0.8;">Advanced: Chat History</b>
+                                <div style="font-size: 0.85em; opacity: 0.9; margin-top: 5px;">
+                                    Format: <code>{{chat_history|last:10|bg_last:2|live:true}}</code>
+                                    <ul style="margin: 5px 0 0 0; padding-left: 15px;">
+                                        <li><code>last:N</code> - Limit total messages to N.</li>
+                                        <li><code>bg_last:N</code> - Keep only the last N background messages (interspersed).</li>
+                                        <li><code>live:true</code> - Use chat *during* pipeline runs, not a snapshot of prior to the run. (includes pipeline results).</li>
+                                    </ul>
+                                </div>
+                            </div>
                             <div style="margin-top: 10px; border-top: 1px solid var(--white10a); padding-top: 10px;">
                                 <b style="font-size: 1em; opacity: 0.8;">Post-Processing Tags (in Model Output)</b>
                                 <ul style="margin: 5px 0 0 0; padding-left: 20px; font-size: 0.9em; opacity: 0.9;">

@@ -14,28 +14,48 @@
 export function resolveChatHistory(text, cleanChat, stContext) {
     if (!text) return text;
 
-    return text.replace(/\{\{chat_history(?::(\w+))?(?::(\d+))?\}\}/g, (match, param1, param2) => {
-        let source = cleanChat;
-        let count = null;
-        
-        // Handle variants: 
-        // {{chat_history:10}} -> param1 is "10"
-        // {{chat_history:live}} -> param1 is "live"
-        // {{chat_history:live:10}} -> param1 is "live", param2 is "10"
+    // Regex for: {{chat_history|last:10|live:true|bg_last:2}}
+    return text.replace(/\{\{chat_history(?:\|([^}]+))?\}\}/g, (match, params) => {
+        const options = {};
+        if (params) {
+            params.split('|').forEach(p => {
+                const [key, val] = p.split(':').map(s => s.trim().toLowerCase());
+                if (key) options[key] = val;
+            });
+        }
 
-        if (param1 === 'live') {
-            source = stContext.chat.filter(m => m && !m.extra?.polyceph_typing);
-            if (param2 && !isNaN(param2)) {
-                count = parseInt(param2);
+        // 1. Select Source
+        let source = (options.live === 'true') ? 
+            stContext.chat.filter(m => m && !m.extra?.polyceph_typing) : 
+            cleanChat;
+
+        // 2. Filter Background Messages (preserve order)
+        let filteredMessages = source;
+        if (options.bg_last !== undefined) {
+            const bgLimit = parseInt(options.bg_last);
+            const backgroundMsgs = source.filter(m => m && m.extra?.polyceph_hidden);
+            
+            if (backgroundMsgs.length > bgLimit) {
+                const keepBgs = backgroundMsgs.slice(-bgLimit);
+                filteredMessages = source.filter(m => {
+                    // Keep if not hidden OR if it's one of the last N hidden ones
+                    if (!m.extra?.polyceph_hidden) return true;
+                    return keepBgs.includes(m);
+                });
             }
-        } else if (param1 && !isNaN(param1)) {
-            count = parseInt(param1);
         }
 
-        let history = source.map(m => `${m.name}: ${m.mes}`);
-        if (count) {
-            history = history.slice(-count);
+        // 3. Map to Strings
+        let history = filteredMessages.map(m => `${m.name}: ${m.mes}`);
+
+        // 4. Apply Final Limit
+        if (options.last !== undefined) {
+            const lastN = parseInt(options.last);
+            if (!isNaN(lastN)) {
+                history = history.slice(-lastN);
+            }
         }
+
         return history.join('\n\n');
     });
 }
