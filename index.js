@@ -23,14 +23,38 @@ function interceptSend(e) {
         return;
     }
 
-    const text = textarea.value.trim();
-    if (!text) return;
+    let text = textarea.value.trim();
+    const context = SillyTavern.getContext();
+
+    if (!text) {
+        // If text is empty, check if last message is from user to re-trigger
+        const lastMsg = context.chat[context.chat.length - 1];
+        if (lastMsg && lastMsg.is_user && !lastMsg.extra?.polyceph_typing) {
+            console.log(`[${MODULE_NAME}] Empty input detected. Re-triggering pipeline on last user message.`);
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            
+            text = lastMsg.mes;
+            if (!lastMsg.extra) lastMsg.extra = {};
+            lastMsg.extra.polyceph_typing = true;
+            lastMsg.extra.polyceph_active_tasks = [];
+            
+            if (typeof context.updateMessageBlock === 'function') {
+                context.updateMessageBlock(context.chat.length - 1, lastMsg);
+            }
+            
+            startPipeline(text);
+            return;
+        }
+        return;
+    }
 
     e.preventDefault();
+    e.stopPropagation();
     e.stopImmediatePropagation();
     textarea.value = '';
 
-    const context = SillyTavern.getContext();
     const userName = context.name1 || 'User';
     const avatarStr = typeof context.getThumbnailUrl === 'function' && context.userAvatar ?
         context.getThumbnailUrl('avatar', context.userAvatar) : '';
@@ -99,10 +123,31 @@ function interceptSwipe(e) {
 }
 
 function setupIntercepts() {
-    const sendBtn = document.getElementById('send_but');
+    const rightForm = document.getElementById('rightSendForm');
     const textArea = document.getElementById('send_textarea');
 
-    if (sendBtn) sendBtn.addEventListener('click', interceptSend, true);
+    if (rightForm) {
+        const handleSendEvent = (e) => {
+            const sendBtn = e.target.closest('#send_but');
+            if (sendBtn) {
+                interceptSend(e);
+            }
+        };
+
+        // Use capture phase to intercept before ST's own listeners
+        rightForm.addEventListener('click', handleSendEvent, true);
+        rightForm.addEventListener('mousedown', handleSendEvent, true);
+
+        // Monitor for DOM changes (like enabling impersonate button) to re-inject selector
+        const observer = new MutationObserver(() => {
+            if (!document.getElementById('polyceph-chat-pipeline-container')) {
+                console.log(`[${MODULE_NAME}] Chat form changed, re-injecting selector.`);
+                injectChatPipelineSelector();
+            }
+        });
+        observer.observe(rightForm, { childList: true, subtree: true });
+    }
+    
     if (textArea) textArea.addEventListener('keydown', interceptSend, true);
     document.body.addEventListener('click', interceptSwipe, true);
 }
