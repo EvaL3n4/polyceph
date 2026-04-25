@@ -2,6 +2,7 @@ import { MODULE_NAME } from './constants.js';
 import { settings, switchProfile, getActivePipeline, availableProfiles, saveSettings } from './state.js';
 import { generateId, waitForApiReady } from './utils.js';
 import { expandPrompt } from './macros.js';
+import { getMaxContextTokens, getMaxResponseTokens, countTokens, generateViaApi, postMessageToChat, getWorldInfoForChat, getActiveCharacterInfo, getMainSystemPrompt } from './compat-shared.js';
 
 let currentPipelineAbortController = null;
 
@@ -73,16 +74,21 @@ export function parseOutputTags(rawOutput, taskId, profileDisplayName, isThinkin
 
 /**
  * Parses a prompt string with [[ROLE:name]] tags into a SillyTavern message array.
+ * Validates tag structure and warns about content outside role tags.
  */
 function parsePromptToMessages(text) {
     const messages = [];
     const roleRegex = /\[\[ROLE:(system|user|assistant)\]\]([\s\S]*?)\[\[\/ROLE\]\]/gi;
     let lastIndex = 0;
     let match;
+    let hasRoleTags = false;
+    let hasOrphanedContent = false;
 
     while ((match = roleRegex.exec(text)) !== null) {
+        hasRoleTags = true;
         const precedingText = text.substring(lastIndex, match.index).trim();
         if (precedingText) {
+            hasOrphanedContent = true;
             messages.push({ role: 'system', content: precedingText });
         }
         messages.push({ role: match[1].toLowerCase(), content: match[2].trim() });
@@ -90,12 +96,29 @@ function parsePromptToMessages(text) {
     }
 
     const remainingText = text.substring(lastIndex).trim();
-    if (remainingText) {
+    if (remainingText && hasRoleTags) {
+        hasOrphanedContent = true;
+        messages.push({ role: 'system', content: remainingText });
+    } else if (remainingText) {
         messages.push({ role: 'system', content: remainingText });
     }
 
     if (messages.length === 0) {
         return [{ role: 'system', content: text.trim() }];
+    }
+
+    // Validation: warn about content outside role tags
+    if (hasOrphanedContent) {
+        console.warn(`[${MODULE_NAME}] Prompt contains text outside [[ROLE:...]] tags. This content will be sent as an implicit 'system' message. Wrap all content in role tags for explicit control.`);
+    }
+
+    // Validation: check for malformed tags that the regex didn't match
+    if (hasRoleTags) {
+        const openCount = (text.match(/\[\[ROLE:/gi) || []).length;
+        const closeCount = (text.match(/\[\[\/ROLE\]\]/gi) || []).length;
+        if (openCount !== closeCount) {
+            console.warn(`[${MODULE_NAME}] Mismatched role tags: ${openCount} opening vs ${closeCount} closing. Some content may be incorrectly assigned.`);
+        }
     }
 
     const mergedMessages = [];
@@ -119,30 +142,17 @@ export async function generateQuietly(profileName, prompt) {
     try {
         const context = SillyTavern.getContext();
 
+        // --- Compatibility: Token limit check ---
+        const maxPromptTokens = getMaxContextTokens() - getMaxResponseTokens();
+        const promptTokens = await countTokens(prompt);
+        if (promptTokens > maxPromptTokens) {
+            console.warn(`[${MODULE_NAME}] Prompt (${promptTokens} tokens) exceeds max prompt budget (${maxPromptTokens} tokens). Generation may be truncated by the API.`);
+        }
+
         let responseData = "";
 
-        let apiPromise;
-
         const messages = parsePromptToMessages(prompt);
-
-        if (typeof context.generateRaw === 'function') {
-            apiPromise = context.generateRaw({ prompt: messages, systemPrompt: '' });
-        } else if (typeof context.generateQuietPrompt === 'function') {
-            console.warn(`[${MODULE_NAME}] generateRaw not found, falling back to generateQuietPrompt.`);
-            // generateQuietPrompt doesn't support arrays natively in all versions, 
-            // but the resolved string already has markers which ST might not like.
-            // So we'll pass the flattened string but ST will likely wrap it in 'user' role.
-            const flattened = messages.map(m => m.content).join('\n\n');
-            apiPromise = context.generateQuietPrompt({ quietPrompt: flattened });
-        } else {
-            console.warn(`[${MODULE_NAME}] generateQuietPrompt not found, falling back to basic command execution.`);
-            // Fallback for older ST versions
-            const flattened = messages.map(m => m.content).join('\n\n');
-            const escaped = flattened.replace(/"/g, '\\"').replace(/\n/g, '\\n');
-            apiPromise = context.executeSlashCommandsWithOptions(`/gen ${escaped}`, {
-                handleExecutionErrors: false, handleParserErrors: false
-            });
-        }
+        const apiPromise = generateViaApi(messages);
 
         const timeoutMs = settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 60000;
 
@@ -154,6 +164,13 @@ export async function generateQuietly(profileName, prompt) {
         } else {
             responseData = await apiPromise;
         }
+
+        // NOTE: Stop string handling is delegated to SillyTavern's native pipeline.
+        // generateRaw() internally passes stop sequences to the API via:
+        //   - Chat: createGenerationParameters() → stop: getCustomStoppingStrings()
+        //   - Text: createTextGenGenerationData() → stopping_strings + stop
+        // Post-processing is intentionally not performed here to avoid
+        // truncating valid content that contains stop-string-like text.
 
         if (responseData) return responseData;
         return "(Generation returned empty)";
@@ -227,18 +244,15 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
     const stContext = SillyTavern.getContext();
     let accumulatedThoughts = [];
 
-    // Fetch World Info prompt (Lorebook)
     // Filter out typing indicator from chat for macro resolution to avoid '...' in history
     const cleanChat = stContext.chat.filter(m => m && !m.extra?.polyceph_typing);
 
-    // World Info expects a reversed array of strings (name: message)
-    const chatForWI = cleanChat.map(m => `${m.name}: ${m.mes}`).reverse();
-    const wiResult = await stContext.getWorldInfoPrompt(chatForWI, stContext.maxContext, false);
-    const wiPrompt = wiResult?.worldInfoString || '';
+    // Fetch World Info prompt (Lorebook)
+    const wiPrompt = await getWorldInfoForChat(cleanChat);
 
     contextVault['wi'] = wiPrompt;
     contextVault['world_info'] = wiPrompt;
-    contextVault['system_prompt'] = stContext.extension_settings?.formatting?.main_prompt || '';
+    contextVault['system_prompt'] = getMainSystemPrompt();
     contextVault['polyceph_prompt'] = settings.polycephPrompt || '';
 
     // Chat Completion API Prompts are now resolved dynamically in macros.js via resolveCCMacros
@@ -348,16 +362,12 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
 
                                 // Handle hidden backgrounds
                                 for (const bg of hiddenBackgrounds) {
-                                    const msg = {
+                                    postMessageToChat({
+                                        content: bg,
                                         name: 'Background',
-                                        is_user: false,
-                                        is_system: false,
-                                        send_date: typeof stContext.humanizedDateTime === 'function' ? stContext.humanizedDateTime() : new Date().toLocaleString(),
-                                        mes: bg,
-                                        extra: { model: 'polyceph', polyceph_hidden: true, polyceph_batch: batchId }
-                                    };
-                                    stContext.chat.push(msg);
-                                    if (typeof stContext.addOneMessage === 'function') stContext.addOneMessage(msg);
+                                        extra: { model: 'polyceph', polyceph_hidden: true, polyceph_batch: batchId },
+                                        save: false,
+                                    });
                                 }
                             }
 
@@ -407,9 +417,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                                     accumulatedThoughts = [];
                                 }
 
-                                const charName = stContext.characters?.[stContext.characterId]?.name || stContext.name2 || 'Assistant';
-                                const avatarStr = typeof stContext.getThumbnailUrl === 'function' && stContext.characters?.[stContext.characterId] ?
-                                    stContext.getThumbnailUrl('avatar', stContext.characters[stContext.characterId].avatar) : '';
+                                const { name: charName, avatarUrl: avatarStr } = getActiveCharacterInfo();
 
                                 const extraData = {
                                     model: 'polyceph',
@@ -459,22 +467,12 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                                         }
                                     }
                                 } else {
-                                    const msg = {
+                                    postMessageToChat({
+                                        content: combinedRes,
                                         name: charName,
-                                        is_user: false,
-                                        is_system: false,
-                                        send_date: typeof stContext.humanizedDateTime === 'function' ? stContext.humanizedDateTime() : new Date().toLocaleString(),
-                                        mes: combinedRes,
-                                        force_avatar: avatarStr,
-                                        extra: extraData
-                                    };
-
-                                    stContext.chat.push(msg);
-                                    if (typeof stContext.addOneMessage === 'function') stContext.addOneMessage(msg);
-                                    if (stContext.eventSource && stContext.eventTypes) {
-                                        stContext.eventSource.emit(stContext.eventTypes.MESSAGE_RECEIVED, stContext.chat.length - 1);
-                                    }
-                                    if (typeof stContext.saveChat === 'function') stContext.saveChat();
+                                        forceAvatar: avatarStr,
+                                        extra: extraData,
+                                    });
                                 }
                             }
                         }
@@ -507,21 +505,11 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
 
         // Handle any leftover thoughts that weren't printed because there was no final character message
         if (accumulatedThoughts.length > 0) {
-            const extraData = { model: 'polyceph', polyceph_batch: batchId, polyceph_input: userInput, polyceph_thoughts: accumulatedThoughts };
-            const msg = {
+            postMessageToChat({
+                content: '', // Empty message, thoughts rendered in DOM
                 name: 'Polyceph Reasoning',
-                is_user: false,
-                is_system: false,
-                send_date: typeof stContext.humanizedDateTime === 'function' ? stContext.humanizedDateTime() : new Date().toLocaleString(),
-                mes: '', // Empty message, thoughts rendered in DOM
-                extra: extraData
-            };
-            stContext.chat.push(msg);
-            if (typeof stContext.addOneMessage === 'function') stContext.addOneMessage(msg);
-            if (stContext.eventSource && stContext.eventTypes) {
-                stContext.eventSource.emit(stContext.eventTypes.MESSAGE_RECEIVED, stContext.chat.length - 1);
-            }
-            if (typeof stContext.saveChat === 'function') stContext.saveChat();
+                extra: { model: 'polyceph', polyceph_batch: batchId, polyceph_input: userInput, polyceph_thoughts: accumulatedThoughts },
+            });
         }
         //toastr.success('Pipeline finished.', 'Polyceph');
     } catch (e) {

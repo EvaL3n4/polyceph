@@ -97,6 +97,36 @@ Polyceph automatically parses and processes specific tags in LLM outputs to mana
 | **Reasoning** | Posts the task result to chat as a reasoning block immediately upon completion. |
 | **Character Message** | Posts the result using the character's name and avatar (ideal for final responses). |
 
+## API Compatibility
+
+Polyceph is designed to be a transparent layer on top of SillyTavern's existing generation infrastructure. It does **not** maintain its own sampler settings, API keys, or model configurations. Instead, it delegates all generation to SillyTavern's native `generateRaw()` function, which guarantees that every Polyceph task respects your currently active preset exactly as if you had typed the message yourself.
+
+### How Prompt Building Works
+
+When a pipeline task is executed, Polyceph performs the following steps:
+
+1.  **Macro Expansion** (`js/macros.js`): The task's prompt template is resolved. All `{{handlebars}}` placeholders — including `{{chat_history}}`, `{{cc_all_prompts}}`, `{{wi}}`, and standard SillyTavern macros like `{{char}}` — are expanded into their final text. For Chat Completion macros like `{{cc_all_prompts}}`, Polyceph reads the active **Prompt Manager** order and resolves each enabled prompt (Main, Persona Description, Character Description, etc.) in the exact sequence configured in your Chat Completion settings.
+
+2.  **Role Tagging** (`js/engine.js`): The expanded prompt is parsed for `[[ROLE:system]]`, `[[ROLE:user]]`, and `[[ROLE:assistant]]` tags. These are converted into a structured message array (`[{role, content}, ...]`) that Chat Completion APIs expect. If no role tags are present, the entire prompt is sent as a single `system` message. The parser validates tag structure and warns in the console if:
+    -   Content exists outside role tags (will be sent as an implicit `system` message).
+    -   Opening and closing tag counts don't match (possible malformed template).
+
+3.  **Token Budget Check** (`js/compat-shared.js`): Before sending, Polyceph checks the prompt's token count against the active context window. It reads the live context limit from `oai_settings.openai_max_context` (for Chat Completion) or the global `max_context` (for Text Completion) and warns in the console if the prompt exceeds the available budget after reserving space for the response.
+
+4.  **Native Generation** via `generateRaw()`: The structured message array is passed to SillyTavern's `generateRaw()`. This is the same function that powers SillyTavern's own `/gen` slash command. Internally, it dispatches to the active backend:
+    -   **Chat Completion** → `sendOpenAIRequest()` → `createGenerationParameters()` — applies temperature, top_p, frequency/presence penalties, logit bias, stop strings, reasoning effort, and all other settings from the active Chat Completion preset.
+    -   **Text Completion** → `getTextGenGenerationData()` → `createTextGenGenerationData()` — applies temperature, top_k, rep_pen, mirostat, banned tokens, instruct mode formatting, and all other settings from the active Text Completion preset.
+    -   **Instruct Formatting** → `createRawPrompt()` — automatically wraps text prompts in the active Instruct Template (Alpaca, ChatML, etc.) when using Text Completion APIs with Instruct Mode enabled.
+    -   **Stopping Strings** — SillyTavern passes your custom and instruct-mode stopping strings directly to the API as part of the generation request. The API provider handles stopping natively, ensuring clean output without post-processing truncation.
+
+### What This Means
+
+-   **Switching your Chat Completion preset** (e.g. changing temperature from 1.0 to 0.7) immediately affects all subsequent Polyceph tasks — no restart or reconfiguration needed.
+-   **Logit bias**, **banned tokens**, **grammar constraints**, and **JSON schema** settings from your active preset are all honored automatically.
+-   **Instruct mode** templates are applied identically to how SillyTavern would format a normal chat message.
+-   Polyceph's compatibility layer (`js/compat-shared.js`, `js/compat-chat.js`, `js/compat-text.js`) only reads settings for its own decision-making (token budgeting, feature flag checks) — it never overrides or duplicates SillyTavern's generation logic.
+
+
 ## Engine Controls
 
 - **Request Delay**: Pause between API calls to avoid rate limits.

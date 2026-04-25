@@ -1,6 +1,6 @@
 {
     "display_name": "Polyceph",
-    "version": "0.3.8",
+    "version": "0.4.0",
     "author": "Nialyn Mid",
     "description": "An extension for SillyTavern which allows multi-step chain-of-thought/multi-agent response generation.",
     "js": "index.js",
