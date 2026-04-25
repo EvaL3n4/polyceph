@@ -361,6 +361,20 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                         updateTypingIndicator();
                     }
 
+                    // Resolve API/Model for this task to enable provider icons and tooltips
+                    let taskApi = '';
+                    let taskModel = '';
+                    if (node.profile && node.profile !== 'current') {
+                        const prof = availableProfiles.find(p => p.id === node.profile || p.name === node.profile);
+                        if (prof) {
+                            taskApi = prof.api;
+                            taskModel = prof.model;
+                        }
+                    } else {
+                        taskApi = stContext.mainApi;
+                        taskModel = stContext.model;
+                    }
+
                     try {
                         // Fully expand the prompt using the new recursive macro system
                         const prompt = expandPrompt(node.template || '', settings, contextVault, cleanChat, stContext, wiPrompt);
@@ -391,6 +405,8 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                                         name: 'Background',
                                         extra: { model: 'polyceph', polyceph_hidden: true, polyceph_batch: batchId },
                                         save: false,
+                                        api: taskApi,
+                                        model: taskModel,
                                     });
                                 }
                             }
@@ -496,6 +512,8 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                                         name: charName,
                                         forceAvatar: avatarStr,
                                         extra: extraData,
+                                        api: taskApi,
+                                        model: taskModel,
                                     });
                                 }
                             }
@@ -533,6 +551,8 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                 content: '', // Empty message, thoughts rendered in DOM
                 name: 'Polyceph Reasoning',
                 extra: { model: 'polyceph', polyceph_batch: batchId, polyceph_input: userInput, polyceph_thoughts: accumulatedThoughts },
+                api: stContext.mainApi,
+                model: stContext.model,
             });
         }
         //toastr.success('Pipeline finished.', 'Polyceph');

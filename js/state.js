@@ -143,20 +143,23 @@ export async function getAvailableProfiles() {
 function processProfiles(loc) {
     if (Array.isArray(loc)) {
         availableProfiles = loc.map(p => {
-            if (typeof p === 'string') return { id: p, name: p, api: '' };
-            const api = p.api || p.mode || p.main_api || ''; 
+            if (typeof p === 'string') return { id: p, name: p, api: '', model: '' };
+            const api = p.api || p.mode || p.main_api || '';
+            const model = p.model || p.openai_model || '';
             if (!api) console.warn(`[${MODULE_NAME}] Profile object missing API:`, p);
-            return { id: p.id || p.name, name: p.name || p.id, api: api };
+            return { id: p.id || p.name, name: p.name || p.id, api: api, model: model };
         });
     } else if (typeof loc === 'object') {
         availableProfiles = Object.keys(loc).map(key => {
             const p = loc[key];
             const api = p.api || p.mode || p.main_api || '';
+            const model = p.model || p.openai_model || '';
             if (!api) console.warn(`[${MODULE_NAME}] Profile object missing API:`, p);
             return {
                 id: key,
                 name: p.name || key,
-                api: api
+                api: api,
+                model: model
             };
         });
     }

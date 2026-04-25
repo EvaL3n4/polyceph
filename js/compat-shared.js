@@ -332,7 +332,7 @@ export async function generateViaApi(messages) {
  * @param {boolean} [options.save=true] - Whether to call saveChat after posting.
  * @returns {number} The index of the posted message in the chat array.
  */
-export function postMessageToChat({ content, name = 'Assistant', isUser = false, forceAvatar = '', extra = {}, save = true }) {
+export function postMessageToChat({ content, name = 'Assistant', isUser = false, forceAvatar = '', extra = {}, save = true, api = '', model = '' }) {
     const ctx = SillyTavern.getContext();
 
     const msg = {
@@ -341,7 +341,11 @@ export function postMessageToChat({ content, name = 'Assistant', isUser = false,
         is_system: false,
         send_date: typeof ctx.humanizedDateTime === 'function' ? ctx.humanizedDateTime() : new Date().toLocaleString(),
         mes: content,
-        extra: extra,
+        extra: {
+            ...extra,
+            api: extra.api || api,
+            model: extra.model || model
+        },
     };
 
     if (forceAvatar) {
