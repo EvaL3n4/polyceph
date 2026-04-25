@@ -1,6 +1,6 @@
 import { MODULE_NAME } from './constants.js';
 import { settings, switchProfile, getActivePipeline, availableProfiles, saveSettings } from './state.js';
-import { generateId } from './utils.js';
+import { generateId, waitForApiReady } from './utils.js';
 import { expandPrompt } from './macros.js';
 
 let currentPipelineAbortController = null;
@@ -74,6 +74,9 @@ export function parseOutputTags(rawOutput, taskId, profileDisplayName, isThinkin
 export async function generateQuietly(profileName, prompt) {
     if (!profileName || profileName === 'none') return prompt;
 
+    // Ensure API is ready and settled before starting generation
+    await waitForApiReady(3000);
+
     try {
         const context = SillyTavern.getContext();
 
@@ -144,7 +147,7 @@ async function removeTypingIndicator() {
         delete msg.extra.polyceph_typing;
         delete msg.extra.polyceph_active_tasks;
     }
-    
+
     if (typeof context.updateMessageBlock === 'function') {
         context.updateMessageBlock(idx, msg);
     }
@@ -239,6 +242,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                     await new Promise(r => setTimeout(r, 1000));
                 }
 
+                // Process tasks in parallel (staggered by delayMs)
                 // Process tasks in parallel (staggered by delayMs)
                 await Promise.all(groupNodes.map(async (item, k) => {
                     const { node, nodeIndex } = item;
@@ -428,6 +432,9 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                                 }
                             }
                         }
+                    } catch (e) {
+                        console.error(`[${MODULE_NAME}] Task failed: Step ${sIdIndx}, Task ${taskIdIndx}`, e);
+                        resultsByIndex[nodeIndex] = `Error: ${e.message}`;
                     } finally {
                         // Task completion cleanup
                         const endTypingIdx = stContext.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
@@ -439,7 +446,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                             }
                         }
                     }
-                })) // End Promise.all map
+                })); // End Promise.all map
             } // End profileGroups loop
 
             const combinedResult = resultsByIndex.join('\n\n---\n\n');

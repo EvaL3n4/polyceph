@@ -1,4 +1,5 @@
 import { MODULE_NAME, defaultSettings } from './constants.js';
+import { waitForApiReady } from './utils.js';
 
 export let settings = { ...defaultSettings };
 export let availableProfiles = []; // Array of {id, name}
@@ -9,6 +10,15 @@ export let availableProfiles = []; // Array of {id, name}
 export async function switchProfile(profileId) {
     if (!profileId) return false;
     const context = SillyTavern.getContext();
+    const cmSettings = context.extensionSettings?.['connectionManager'];
+    const currentProfileId = cmSettings?.selectedProfile;
+
+    console.log(`[${MODULE_NAME}] switchProfile debug: target=${profileId}, current=${currentProfileId}`);
+
+    if (currentProfileId && currentProfileId === profileId) {
+        console.log(`[${MODULE_NAME}] switchProfile: profile ${profileId} already active. Skipping switch.`);
+        return true;
+    }
 
     const prof = availableProfiles.find(p => p.id === profileId);
     const profileName = prof ? prof.name : profileId;
@@ -18,20 +28,60 @@ export async function switchProfile(profileId) {
         return true;
     }
 
+    // Capture current state to preserve preset if it's accidentally reset
+    const oldApi = context.mainApi;
+    const oldPresetName = context.chatCompletionSettings?.preset_settings_openai;
+
     console.log(`[${MODULE_NAME}] switchProfile: switching to "${profileName}" (id: ${profileId})`);
     const quotedName = profileName.includes(' ') ? `"${profileName}"` : profileName;
     try {
         await context.executeSlashCommandsWithOptions(`/profile ${quotedName}`, {
             handleExecutionErrors: false, handleParserErrors: false,
         });
-        // Wait a bit for ST events to fire and settings to propagate
-        await new Promise(r => setTimeout(r, 500));
+        
+        // Wait for API to be ready after profile switch
+        await waitForApiReady(2000);
+
+        // Re-fetch context to get updated state (mainApi, chatCompletionSettings, etc.)
+        const newContext = SillyTavern.getContext();
+        const newApi = newContext.mainApi;
+        const ccSettings = newContext.chatCompletionSettings;
+
+        // Restoration logic for preserved presets
+        if (ccSettings && oldPresetName && oldPresetName !== 'Default') {
+            const newPresetName = ccSettings.preset_settings_openai;
+            console.log(`[${MODULE_NAME}] switchProfile debug: oldApi=${oldApi}, newApi=${newApi}, oldCCPreset=${oldPresetName}, newCCPreset=${newPresetName}`);
+            
+            // If the preset was reset to Default, try to restore it
+            if (newApi === 'openai' && newPresetName === 'Default') {
+                const freshPm = newContext.getPresetManager ? newContext.getPresetManager() : null;
+                if (freshPm) {
+                    const presetList = freshPm.getPresetList();
+                    const names = Array.isArray(presetList.preset_names) ? presetList.preset_names : Object.keys(presetList.preset_names);
+                    
+                    if (names.includes(oldPresetName)) {
+                        console.log(`[${MODULE_NAME}] Detected preset reset to Default. Restoring original: ${oldPresetName}`);
+                        const quotedPreset = oldPresetName.includes(' ') ? `"${oldPresetName}"` : oldPresetName;
+                        await newContext.executeSlashCommandsWithOptions(`/preset ${quotedPreset}`, {
+                            handleExecutionErrors: false, handleParserErrors: false,
+                        });
+                        // Wait for preset restoration to settle
+                        await new Promise(r => setTimeout(r, 500));
+                    } else {
+                        console.log(`[${MODULE_NAME}] Original preset "${oldPresetName}" not found in Chat Completion preset list.`);
+                    }
+                }
+            }
+        }
+
         return true;
     } catch (e) {
         console.error(`[${MODULE_NAME}] Error switching profile to ${profileName}:`, e);
         return false;
     }
 }
+
+
 
 /**
  * Pipeline Management

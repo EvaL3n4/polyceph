@@ -9,7 +9,7 @@ import { injectChatPipelineSelector, updateChatSelectorOptions } from './js/chat
 // Interception Hook
 // -------------------------------------------------------------------------
 
-function interceptSend(e) {
+async function interceptSend(e) {
     console.log(`[${MODULE_NAME}] interceptSend triggered`, e.type);
     if (settings.activePipelineId === 'none') {
         console.log(`[${MODULE_NAME}] Polyceph set to 'None', skipping intercept.`);
@@ -44,7 +44,12 @@ function interceptSend(e) {
                 context.updateMessageBlock(context.chat.length - 1, lastMsg);
             }
             
-            startPipeline(text);
+            try {
+                await startPipeline(text);
+            } catch (err) {
+                console.error(`[${MODULE_NAME}] Pipeline execution failed:`, err);
+                toastr.error('Pipeline execution failed. Check console for details.', 'Polyceph');
+            }
             return;
         }
         return;
@@ -86,8 +91,13 @@ function interceptSend(e) {
         if (typeof context.saveChat === 'function') context.saveChat();
 
         // Stagger the pipeline start slightly
-        setTimeout(() => {
-            startPipeline(text);
+        setTimeout(async () => {
+            try {
+                await startPipeline(text);
+            } catch (err) {
+                console.error(`[${MODULE_NAME}] Pipeline execution failed:`, err);
+                toastr.error('Pipeline execution failed. Check console for details.', 'Polyceph');
+            }
         }, 50);
     }, 0);
 }
