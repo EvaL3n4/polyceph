@@ -94,7 +94,7 @@ Polyceph automatically parses and processes specific tags in LLM outputs to mana
 
 | Option | Description |
 |--------|-------------|
-| **Reasoning** | Posts the task result to chat as a reasoning block immediately upon completion. |
+| **Reasoning** | Posts the task result to chat as a reasoning block. |
 | **Character Message** | Posts the result using the character's name and avatar (ideal for final responses). |
 
 ## API Compatibility

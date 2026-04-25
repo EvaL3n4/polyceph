@@ -1,8 +1,10 @@
 import { MODULE_NAME, defaultSettings } from './constants.js';
 import { waitForApiReady } from './utils.js';
+import { capturePresetState, restorePresetState, clearPresetState, getAvailablePresets as fetchPresets } from './compat-presets.js';
 
 export let settings = { ...defaultSettings };
 export let availableProfiles = []; // Array of {id, name}
+export let availablePresets = []; // Array of preset name strings
 
 /**
  * Switch ST to a specific profile by ID or Name
@@ -28,9 +30,8 @@ export async function switchProfile(profileId) {
         return true;
     }
 
-    // Capture current state to preserve preset if it's accidentally reset
-    const oldApi = context.mainApi;
-    const oldPresetName = context.chatCompletionSettings?.preset_settings_openai;
+    // Capture preset state before the connection switch resets it
+    capturePresetState();
 
     console.log(`[${MODULE_NAME}] switchProfile: switching to "${profileName}" (id: ${profileId})`);
     const quotedName = profileName.includes(' ') ? `"${profileName}"` : profileName;
@@ -38,41 +39,15 @@ export async function switchProfile(profileId) {
         await context.executeSlashCommandsWithOptions(`/profile ${quotedName}`, {
             handleExecutionErrors: false, handleParserErrors: false,
         });
-        
+
         // Wait for API to be ready after profile switch
         await waitForApiReady(2000);
 
-        // Re-fetch context to get updated state (mainApi, chatCompletionSettings, etc.)
-        const newContext = SillyTavern.getContext();
-        const newApi = newContext.mainApi;
-        const ccSettings = newContext.chatCompletionSettings;
+        // Restore preset if the connection switch reset it
+        restorePresetState();
 
-        // Restoration logic for preserved presets
-        if (ccSettings && oldPresetName && oldPresetName !== 'Default') {
-            const newPresetName = ccSettings.preset_settings_openai;
-            console.log(`[${MODULE_NAME}] switchProfile debug: oldApi=${oldApi}, newApi=${newApi}, oldCCPreset=${oldPresetName}, newCCPreset=${newPresetName}`);
-            
-            // If the preset was reset to Default, try to restore it
-            if (newApi === 'openai' && newPresetName === 'Default') {
-                const freshPm = newContext.getPresetManager ? newContext.getPresetManager() : null;
-                if (freshPm) {
-                    const presetList = freshPm.getPresetList();
-                    const names = Array.isArray(presetList.preset_names) ? presetList.preset_names : Object.keys(presetList.preset_names);
-                    
-                    if (names.includes(oldPresetName)) {
-                        console.log(`[${MODULE_NAME}] Detected preset reset to Default. Restoring original: ${oldPresetName}`);
-                        const quotedPreset = oldPresetName.includes(' ') ? `"${oldPresetName}"` : oldPresetName;
-                        await newContext.executeSlashCommandsWithOptions(`/preset ${quotedPreset}`, {
-                            handleExecutionErrors: false, handleParserErrors: false,
-                        });
-                        // Wait for preset restoration to settle
-                        await new Promise(r => setTimeout(r, 500));
-                    } else {
-                        console.log(`[${MODULE_NAME}] Original preset "${oldPresetName}" not found in Chat Completion preset list.`);
-                    }
-                }
-            }
-        }
+        // Wait for preset restoration to settle
+        await new Promise(r => setTimeout(r, 500));
 
         return true;
     } catch (e) {
@@ -161,6 +136,16 @@ export async function getAvailableProfiles() {
     return [];
 }
 
+/**
+ * Refresh the list of available presets for the active API.
+ * @returns {string[]} Array of preset name strings.
+ */
+export function refreshPresets() {
+    availablePresets = fetchPresets();
+    console.log(`[${MODULE_NAME}] Refreshed presets (${availablePresets.length}):`, availablePresets);
+    return availablePresets;
+}
+
 export function saveSettings() {
     const context = SillyTavern.getContext();
     if (!context.extensionSettings) context.extensionSettings = {};
@@ -229,6 +214,7 @@ export function loadSettings() {
                     if (n.persist === undefined) n.persist = false;
                     if (n.isCharacter === undefined) n.isCharacter = false;
                     if (n.stripThink === undefined) n.stripThink = false;
+                    if (n.preset === undefined) n.preset = 'Current';
                 });
             });
         });

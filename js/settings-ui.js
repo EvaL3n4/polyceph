@@ -1,4 +1,4 @@
-import { availableProfiles, settings, saveSettings, getAvailableProfiles, getActivePipeline, createPipeline, deletePipeline } from './state.js';
+import { availableProfiles, availablePresets, settings, saveSettings, getAvailableProfiles, getActivePipeline, createPipeline, deletePipeline, refreshPresets } from './state.js';
 import { autoResizeTextarea, generateId } from './utils.js';
 import { MODULE_NAME } from './constants.js';
 import { syncHiddenMessageVisibility } from './ui.js';
@@ -6,6 +6,9 @@ import { syncHiddenMessageVisibility } from './ui.js';
 export function renderTask(stepId, task) {
     const profileOptions = `<option value="none">(Template Only - No LLM)</option>` +
         availableProfiles.map(p => `<option value="${p.id}" ${p.id === task.profile ? 'selected' : ''}>${p.name}</option>`).join('');
+
+    const presetOptions = `<option value="Current" ${(!task.preset || task.preset === 'Current') ? 'selected' : ''}>Current Preset</option>` +
+        availablePresets.map(p => `<option value="${p}" ${p === task.preset ? 'selected' : ''}>${p}</option>`).join('');
 
     return `
         <div class="polyceph-node-card" data-node-id="${task.id}">
@@ -16,6 +19,11 @@ export function renderTask(stepId, task) {
                         ${profileOptions}
                     </select>
                     <i class="fa-solid fa-times polyceph-del-node" data-node-id="${task.id}" data-step-id="${stepId}"></i>
+                </div>
+                <div style="display: flex; gap: 5px; align-items: center;">
+                    <select class="polyceph-preset-select text_pole" data-node-id="${task.id}" style="flex: 2; max-width: 250px;" title="Override the API preset for this task">
+                        ${presetOptions}
+                    </select>
                 </div>
                 <div style="display: flex; align-items: center; gap: 15px; padding-left: 2px; flex-wrap: wrap;">
 
@@ -107,6 +115,18 @@ export function bindStepEvents() {
         });
     });
 
+    // Node preset select
+    container.querySelectorAll('.polyceph-preset-select').forEach(select => {
+        select.addEventListener('change', (e) => {
+            const nodeId = e.target.getAttribute('data-node-id');
+            for (const step of activePipeline.steps) {
+                const task = step.tasks.find(n => n.id === nodeId);
+                if (task) { task.preset = e.target.value; break; }
+            }
+            saveSettings();
+        });
+    });
+
     // Node template textarea
     container.querySelectorAll('.polyceph-node-template').forEach(textarea => {
         textarea.addEventListener('input', (e) => {
@@ -142,7 +162,7 @@ export function bindStepEvents() {
             const stepId = e.currentTarget.getAttribute('data-step');
             const step = activePipeline.steps.find(s => s.id === stepId);
             if (step) {
-                step.tasks.push({ id: 'task_' + generateId(), profile: '', template: '{{user_input}}' });
+                step.tasks.push({ id: 'task_' + generateId(), profile: '', preset: 'Current', template: '{{user_input}}' });
                 saveSettings();
                 updateUI();
             }
@@ -441,7 +461,7 @@ export function addSettingsUI() {
         const pipeline = getActivePipeline();
         pipeline.steps.push({
             id: 'step_' + generateId(),
-            tasks: [{ id: 'task_' + generateId(), profile: '', template: '{{user_input}}' }]
+            tasks: [{ id: 'task_' + generateId(), profile: '', preset: 'Current', template: '{{user_input}}' }]
         });
         saveSettings();
         updateUI();
@@ -449,7 +469,8 @@ export function addSettingsUI() {
 
     document.getElementById('polyceph_refresh_profiles')?.addEventListener('click', async () => {
         await getAvailableProfiles();
+        refreshPresets();
+        toastr.success(`Found ${availableProfiles.length} profiles, ${availablePresets.length} presets.`, 'Polyceph');
         updateUI();
-        toastr.success(`Profiles refreshed.`, 'Polyceph');
     });
 }

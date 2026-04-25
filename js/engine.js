@@ -3,6 +3,7 @@ import { settings, switchProfile, getActivePipeline, availableProfiles, saveSett
 import { generateId, waitForApiReady } from './utils.js';
 import { expandPrompt } from './macros.js';
 import { getMaxContextTokens, getMaxResponseTokens, countTokens, generateViaApi, postMessageToChat, getWorldInfoForChat, getActiveCharacterInfo, getMainSystemPrompt } from './compat-shared.js';
+import { capturePresetState, restorePresetState, clearPresetState, applyPreset, getCurrentPresetName } from './compat-presets.js';
 
 let currentPipelineAbortController = null;
 
@@ -233,6 +234,10 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
 
     console.log(`[${MODULE_NAME}] runPipeline started`, { userInput: userInput?.substring(0, 50), batchId: generateSwipesForBatchId });
     //toastr.info('Starting Polyceph Pipeline...', 'Polyceph');
+
+    // Capture the user's original preset before the pipeline modifies anything
+    capturePresetState();
+
     const activePipeline = getActivePipeline();
     const pipelineName = activePipeline?.name || 'Default';
 
@@ -312,6 +317,20 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                     // Stagger start to respect rate limits while allowing parallel execution
                     if (k > 0 && settings.delayMs > 0) {
                         await new Promise(r => setTimeout(r, k * settings.delayMs));
+                    }
+
+                    // Per-task preset override
+                    const taskPreset = node.preset || 'Current';
+                    let presetSwitched = false;
+                    if (taskPreset !== 'Current') {
+                        const currentPreset = getCurrentPresetName();
+                        if (currentPreset !== taskPreset) {
+                            console.log(`[${MODULE_NAME}] Applying task preset: "${taskPreset}" (was: "${currentPreset}")`);
+                            presetSwitched = applyPreset(taskPreset);
+                            if (presetSwitched) {
+                                await new Promise(r => setTimeout(r, 300));
+                            }
+                        }
                     }
 
                     // Resolve profile name for metadata
@@ -516,6 +535,9 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
         toastr.error('Pipeline execution encountered an error.', 'Polyceph');
         console.error(`[${MODULE_NAME}] Pipeline Error`, e);
     } finally {
+        // Restore the user's original preset and clean up
+        restorePresetState();
+        clearPresetState();
         await removeTypingIndicator();
     }
 }

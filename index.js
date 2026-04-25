@@ -1,5 +1,5 @@
 import { MODULE_NAME, VERSION } from './js/constants.js';
-import { loadSettings, getAvailableProfiles, settings } from './js/state.js';
+import { loadSettings, getAvailableProfiles, refreshPresets, settings } from './js/state.js';
 import { renderPolycephThoughts, syncHiddenMessageVisibility } from './js/ui.js';
 import { addSettingsUI } from './js/settings-ui.js';
 import { startPipeline } from './js/engine.js';
@@ -176,6 +176,7 @@ async function init() {
     loadSettings();
     syncHiddenMessageVisibility();
     await getAvailableProfiles();
+    refreshPresets();
 
     addSettingsUI();
     setupIntercepts();

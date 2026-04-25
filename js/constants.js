@@ -1,5 +1,5 @@
 export const MODULE_NAME = 'polyceph';
-export const VERSION = '0.4.0';
+export const VERSION = '0.4.1';
 
 export const defaultSettings = {
     delayMs: 250,
@@ -23,6 +23,7 @@ export const defaultSettings = {
                             id: 'task_1',
                             label: '',
                             profile: 'none',
+                            preset: 'Current',
                             useSystem: false,
                             template: '{{user_input}}',
                             persist: false,
