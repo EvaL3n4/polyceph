@@ -1,5 +1,5 @@
 export const MODULE_NAME = 'polyceph';
-export const VERSION = '0.3.5';
+export const VERSION = '0.3.6';
 
 export const defaultSettings = {
     delayMs: 250,

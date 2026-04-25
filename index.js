@@ -29,26 +29,30 @@ async function interceptSend(e) {
     if (!text) {
         // If text is empty, check if last message is from user to re-trigger
         const lastMsg = context.chat[context.chat.length - 1];
-        if (lastMsg && lastMsg.is_user && !lastMsg.extra?.polyceph_typing) {
-            console.log(`[${MODULE_NAME}] Empty input detected. Re-triggering pipeline on last user message.`);
+        if (lastMsg) {
+            // ALWAYS prevent default if Polyceph is active on an empty send
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
-            
-            text = lastMsg.mes;
-            if (!lastMsg.extra) lastMsg.extra = {};
-            lastMsg.extra.polyceph_typing = true;
-            lastMsg.extra.polyceph_active_tasks = [];
-            
-            if (typeof context.updateMessageBlock === 'function') {
-                context.updateMessageBlock(context.chat.length - 1, lastMsg);
-            }
-            
-            try {
-                await startPipeline(text);
-            } catch (err) {
-                console.error(`[${MODULE_NAME}] Pipeline execution failed:`, err);
-                toastr.error('Pipeline execution failed. Check console for details.', 'Polyceph');
+
+            if (lastMsg.is_user && !lastMsg.extra?.polyceph_typing) {
+                console.log(`[${MODULE_NAME}] Empty input detected. Re-triggering pipeline on last user message.`);
+                
+                text = lastMsg.mes;
+                if (!lastMsg.extra) lastMsg.extra = {};
+                lastMsg.extra.polyceph_typing = true;
+                lastMsg.extra.polyceph_active_tasks = [];
+                
+                if (typeof context.updateMessageBlock === 'function') {
+                    context.updateMessageBlock(context.chat.length - 1, lastMsg);
+                }
+                
+                try {
+                    await startPipeline(text);
+                } catch (err) {
+                    console.error(`[${MODULE_NAME}] Pipeline execution failed:`, err);
+                    toastr.error('Pipeline execution failed. Check console for details.', 'Polyceph');
+                }
             }
             return;
         }
