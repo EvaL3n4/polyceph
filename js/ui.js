@@ -32,7 +32,7 @@ export function monitorDeletionMode() {
     });
 
     observer.observe(dialog, { attributes: true, attributeFilter: ['style'] });
-    
+
     // Initial check
     if (dialog.style.display === 'block') {
         document.body.classList.add('polyceph-delete-mode');
@@ -94,10 +94,10 @@ export function renderPolycephTyping(messageElement, chatMsg) {
         const match = chatMsg.mes.match(/Step (\d+\/\d+)/);
         if (match) stepInfo = `Step ${match[1]}`;
     }
-    
+
     const $mesBlock = $(messageElement).find('.mes_block');
     messageElement.setAttribute('polyceph_typing', 'true');
-    
+
     // Check if we already have an indicator to avoid flicker, just update tasks
     let $indicator = $mesBlock.find('.polyceph-typing-indicator');
     if ($indicator.length === 0) {
@@ -131,7 +131,7 @@ export function renderPolycephTyping(messageElement, chatMsg) {
         </div>
     `).join('');
 
-    $indicator.find('.polyceph-active-tasks-list').html(tasksHtml || '<div class="polyceph-active-task-label">Initializing...</div>');
+    $indicator.find('.polyceph-active-tasks-list').html(tasksHtml || '<div class="polyceph-active-task-label">Preparing...</div>');
 }
 
 export function renderPolycephThoughts() {
@@ -158,7 +158,7 @@ export function renderPolycephThoughts() {
         // Handle Hidden Background Messages
         if ((chatMsg.extra && chatMsg.extra.polyceph_hidden) || chatMsg.name === 'Background') {
             messageElement.setAttribute('polyceph_hidden', 'true');
-            
+
             // Inject separator if not already there
             if (messageElement.getAttribute('polyceph_separator_rendered') !== 'true' && !messageElement.querySelector('.polyceph-background-separator')) {
                 const $separator = $(`
@@ -173,11 +173,11 @@ export function renderPolycephThoughts() {
                         e.stopPropagation();
                         const mesId = messageElement.getAttribute('mesid');
                         const context = SillyTavern.getContext();
-                        
+
                         // Close any open editors or menus to prevent ST from crashing on stale message indices
                         if (typeof context.closeMessageEditor === 'function') context.closeMessageEditor();
                         if (typeof context.hideMenu === 'function') context.hideMenu();
-                        
+
                         if (typeof context.deleteMessage === 'function') {
                             context.deleteMessage(mesId, undefined, true);
                         }
@@ -238,7 +238,7 @@ $(document).ready(() => {
         let shouldRender = false;
         for (const mutation of mutations) {
             const target = mutation.target;
-            
+
             // Ignore mutations within Polyceph's own UI elements to prevent infinite loops
             if (target.closest && target.closest('.polyceph-typing-indicator, .polyceph-thoughts, .polyceph-background-separator')) {
                 continue;
