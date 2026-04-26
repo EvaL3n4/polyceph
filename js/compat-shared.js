@@ -369,17 +369,23 @@ export function postMessageToChat({ content, name = 'Assistant', isUser = false,
     const ctx = SillyTavern.getContext();
     const iconApi = normalizeApiForIcon(api || extra.api);
 
+    const msgExtra = {
+        ...extra,
+        api: iconApi,
+        model: model || extra.model
+    };
     const msg = {
         name: name,
         is_user: isUser,
         is_system: false,
         send_date: typeof ctx.humanizedDateTime === 'function' ? ctx.humanizedDateTime() : new Date().toLocaleString(),
         mes: content,
-        extra: {
-            ...extra,
-            api: iconApi,
-            model: model || extra.model
-        },
+        extra: msgExtra,
+        // Initialize swipes from creation so ST renders swipe UI (counter/arrows) immediately
+        // Use a clone for swipe_info to avoid reference sharing with the main extra object
+        swipes: [content],
+        swipe_info: [{ extra: { ...msgExtra } }],
+        swipe_id: 0,
     };
 
     if (forceAvatar) {

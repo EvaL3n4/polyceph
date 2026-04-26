@@ -194,21 +194,33 @@ export function renderPolycephThoughts() {
             messageElement.style.display = 'none';
         }
 
-        if (messageElement.getAttribute('polyceph_thoughts_rendered') === 'true') return;
+        // Track which swipe index was last rendered so we can re-render when swipe changes
+        const lastRenderedSwipe = messageElement.getAttribute('polyceph_thoughts_swipe');
+        const currentSwipeId = String(chatMsg.swipe_id ?? 0);
+        if (lastRenderedSwipe === currentSwipeId) return;
 
         let thoughts = null;
         let pipelineName = null;
-        if (chatMsg.swipe_info && chatMsg.swipe_id !== undefined && chatMsg.swipe_info[chatMsg.swipe_id]) {
-            thoughts = chatMsg.swipe_info[chatMsg.swipe_id]?.extra?.polyceph_thoughts;
-            pipelineName = chatMsg.swipe_info[chatMsg.swipe_id]?.extra?.polyceph_pipeline;
-        }
-        if (!thoughts && chatMsg.extra) {
-            thoughts = chatMsg.extra.polyceph_thoughts;
-            pipelineName = chatMsg.extra.polyceph_pipeline;
+        const swipeEntry = chatMsg.swipe_info?.[chatMsg.swipe_id];
+        if (swipeEntry) {
+            thoughts = swipeEntry.extra?.polyceph_thoughts || null;
+            pipelineName = swipeEntry.extra?.polyceph_pipeline || null;
+        } else if (chatMsg.extra) {
+            thoughts = chatMsg.extra.polyceph_thoughts || null;
+            pipelineName = chatMsg.extra.polyceph_pipeline || null;
         }
 
+        // Remove any existing thoughts block before re-rendering
+        const existingThoughtsId = messageElement.getAttribute('polyceph_thoughts_id');
+        if (existingThoughtsId) {
+            $(`#${existingThoughtsId}`).remove();
+            messageElement.removeAttribute('polyceph_thoughts_id');
+        }
+
+        // Record that we've rendered for this swipe (even if empty, to avoid loops)
+        messageElement.setAttribute('polyceph_thoughts_swipe', currentSwipeId);
+
         if (!thoughts || thoughts.length === 0) {
-            messageElement.setAttribute('polyceph_thoughts_rendered', 'true');
             return;
         }
 
@@ -223,7 +235,6 @@ export function renderPolycephThoughts() {
             $(messageElement).append($thoughtsContainer);
         }
 
-        messageElement.setAttribute('polyceph_thoughts_rendered', 'true');
         messageElement.setAttribute('polyceph_thoughts_id', thoughtsId);
     });
 }
@@ -259,7 +270,8 @@ $(document).ready(() => {
             if (shouldRender) break;
         }
         if (shouldRender) {
-            renderPolycephThoughts();
+            // Defer until after ST has completed all swipe-related updates (both DOM and data)
+            setTimeout(() => renderPolycephThoughts(), 0);
         }
     });
 

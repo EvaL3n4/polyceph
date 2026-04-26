@@ -228,7 +228,7 @@ export async function startPipeline(text) {
     }
 }
 
-export async function runPipeline(userInput, generateSwipesForBatchId) {
+export async function runPipeline(userInput, generateSwipesForBatchId, triggeringUserMesId = -1) {
     if (currentPipelineAbortController) currentPipelineAbortController.abort();
     currentPipelineAbortController = new AbortController();
     const signal = currentPipelineAbortController.signal;
@@ -265,14 +265,32 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
     // during the expandPrompt call. We keep contextVault for other dynamic variables.
 
 
-    let cleanMessagesArr = [];
+    let batchCharMessages = [];
+    let batchBgMessages = [];
+    let batchReasoningMsg = null;
     if (generateSwipesForBatchId) {
-        cleanMessagesArr = stContext.chat.filter(m => m.extra && m.extra.polyceph_batch === generateSwipesForBatchId);
+        const batchMsgs = stContext.chat.filter(m => m.extra?.polyceph_batch === generateSwipesForBatchId);
+        batchBgMessages   = batchMsgs.filter(m =>  m.extra?.polyceph_hidden);
+        batchCharMessages = batchMsgs.filter(m => !m.extra?.polyceph_hidden && m.name !== 'Polyceph Reasoning');
+        batchReasoningMsg = batchMsgs.find(m => m.name === 'Polyceph Reasoning') || null;
     }
 
     console.log(`[${MODULE_NAME}] Pipeline context initialized. Clean chat size:`, cleanChat.length);
 
-    await startTypingIndicator();
+    // In swipe mode, attach typing indicator to the triggering user message instead of creating a new one
+    if (generateSwipesForBatchId && triggeringUserMesId !== -1) {
+        const userMsg = stContext.chat[triggeringUserMesId];
+        if (userMsg) {
+            if (!userMsg.extra) userMsg.extra = {};
+            userMsg.extra.polyceph_typing = true;
+            userMsg.extra.polyceph_active_tasks = [];
+            if (typeof stContext.updateMessageBlock === 'function') {
+                stContext.updateMessageBlock(triggeringUserMesId, userMsg);
+            }
+        }
+    } else {
+        await startTypingIndicator();
+    }
     console.log(`[${MODULE_NAME}] Typing indicator started.`);
 
     try {
@@ -298,6 +316,10 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
             });
 
             const resultsByIndex = [];
+            // Counters shared across parallel tasks in this step
+            // (JS is single-threaded so atomic increments between awaits are safe)
+            let charMsgOutputCount = 0;
+            let bgMsgOutputCount = 0;
 
             // Process each profile group sequentially
             for (const [profileId, groupNodes] of Object.entries(profileGroups)) {
@@ -407,14 +429,55 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                                 // Handle hidden backgrounds
                                 for (const bg of hiddenBackgrounds) {
                                     if (signal.aborted) return;
-                                    postMessageToChat({
-                                        content: bg,
-                                        name: 'Background',
-                                        extra: { polyceph_source: 'polyceph', polyceph_hidden: true, polyceph_batch: batchId },
-                                        save: false,
-                                        api: taskApi,
-                                        model: taskModel,
-                                    });
+                                    if (generateSwipesForBatchId && bgMsgOutputCount < batchBgMessages.length) {
+                                        // Update existing background message as a swipe
+                                        const targetBg = batchBgMessages[bgMsgOutputCount];
+                                        let actualBgIdx = stContext.chat.indexOf(targetBg);
+                                        if (actualBgIdx === -1) {
+                                            actualBgIdx = stContext.chat.findIndex(m => m.extra?.polyceph_batch === batchId && m.extra?.polyceph_hidden && m.mes === targetBg.mes);
+                                        }
+
+                                        // Ensure swipes array exists (guard for legacy messages)
+                                        if (!Array.isArray(targetBg.swipes)) {
+                                            targetBg.swipes = [targetBg.mes];
+                                            targetBg.swipe_info = [{ extra: { ...(targetBg.extra || {}) } }];
+                                            targetBg.swipe_id = 0;
+                                        }
+                                        targetBg.swipes.push(bg);
+                                        targetBg.swipe_id = targetBg.swipes.length - 1;
+                                        targetBg.mes = bg;
+                                        // Metadata for this specific background swipe
+                                        const bgExtra = {
+                                            polyceph_source: 'polyceph',
+                                            polyceph_hidden: true,
+                                            polyceph_batch: batchId,
+                                            api: taskApi,
+                                            model: taskModel
+                                        };
+                                        targetBg.swipe_info.push({ extra: bgExtra });
+                                        targetBg.extra = { ...bgExtra };
+
+                                        if (actualBgIdx !== -1 && typeof stContext.updateMessageBlock === 'function') {
+                                            stContext.updateMessageBlock(actualBgIdx, targetBg);
+                                        }
+
+                                        if (typeof stContext.swipe?.refresh === 'function') {
+                                            stContext.swipe.refresh(true);
+                                        }
+
+                                        if (typeof stContext.saveChat === 'function') stContext.saveChat();
+                                    } else {
+                                        // New background (pipeline produced more than last run)
+                                        postMessageToChat({
+                                            content: bg,
+                                            name: 'Background',
+                                            extra: { polyceph_source: 'polyceph', polyceph_hidden: true, polyceph_batch: batchId },
+                                            save: true,
+                                            api: taskApi,
+                                            model: taskModel,
+                                        });
+                                    }
+                                    bgMsgOutputCount++;
                                 }
                             }
 
@@ -478,40 +541,43 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
                                 }
 
                                 let targetSwipeId = -1;
-                                if (generateSwipesForBatchId) {
-                                    targetSwipeId = cleanMessagesArr.findIndex(m => m.extra && m.extra.polyceph_task_id === node.id);
+                                if (generateSwipesForBatchId && charMsgOutputCount < batchCharMessages.length) {
+                                    targetSwipeId = charMsgOutputCount;
                                 }
+                                charMsgOutputCount++;
 
                                 if (targetSwipeId !== -1) {
-                                    const targetMessage = cleanMessagesArr[targetSwipeId];
-                                    const actualMesId = stContext.chat.indexOf(targetMessage);
+                                    const targetMessage = batchCharMessages[targetSwipeId];
+                                    let actualMesId = stContext.chat.indexOf(targetMessage);
+                                    if (actualMesId === -1) {
+                                        // Fallback if reference was lost (e.g. ST replaced object)
+                                        actualMesId = stContext.chat.findIndex(m => m.extra?.polyceph_task_id === node.id && m.extra?.polyceph_batch === batchId);
+                                    }
 
+                                    // Ensure swipes array exists (guard for legacy messages)
                                     if (!Array.isArray(targetMessage.swipes)) {
                                         targetMessage.swipes = [targetMessage.mes];
-                                        targetMessage.swipe_info = [{}];
+                                        targetMessage.swipe_info = [{ extra: { ...(targetMessage.extra || {}) } }];
                                         targetMessage.swipe_id = 0;
                                     }
                                     targetMessage.swipes.push(combinedRes);
                                     targetMessage.swipe_id = targetMessage.swipes.length - 1;
 
-                                    // Update metadata to reflect the generator of this specific swipe
-                                    if (!targetMessage.extra) targetMessage.extra = {};
+                                    // Update current metadata to reflect the generator of this specific swipe
+                                    targetMessage.extra = { ...extraData };
                                     targetMessage.extra.api = taskApi;
                                     targetMessage.extra.model = taskModel;
 
-                                    targetMessage.swipe_info.push({ extra: extraData });
+                                    targetMessage.swipe_info.push({ extra: { ...targetMessage.extra } });
                                     targetMessage.mes = combinedRes;
 
-                                    if (typeof stContext.updateMessageBlock === 'function') {
+                                    if (actualMesId !== -1 && typeof stContext.updateMessageBlock === 'function') {
                                         stContext.updateMessageBlock(actualMesId, targetMessage);
 
-                                        // Update Swipe UI
-                                        const mesBlock = document.querySelector(`.mes[mesid="${actualMesId}"]`);
-                                        if (mesBlock) {
-                                            const swipeCounter = mesBlock.querySelector('.swipe_counter');
-                                            if (swipeCounter) {
-                                                swipeCounter.innerText = `${targetMessage.swipe_id + 1}/${targetMessage.swipes.length}`;
-                                            }
+                                        if (typeof stContext.saveChat === 'function') stContext.saveChat();
+
+                                        if (typeof stContext.swipe?.refresh === 'function') {
+                                            stContext.swipe.refresh(true);
                                         }
 
                                         if (stContext.eventSource && stContext.eventTypes) {
@@ -560,13 +626,33 @@ export async function runPipeline(userInput, generateSwipesForBatchId) {
 
         // Handle any leftover thoughts that weren't printed because there was no final character message
         if (accumulatedThoughts.length > 0 && !signal.aborted) {
-            postMessageToChat({
-                content: '', // Empty message, thoughts rendered in DOM
-                name: 'Polyceph Reasoning',
-                extra: { polyceph_source: 'polyceph', polyceph_batch: batchId, polyceph_input: userInput, polyceph_thoughts: accumulatedThoughts },
-                api: stContext.mainApi,
-                model: stContext.model,
-            });
+            if (generateSwipesForBatchId && batchReasoningMsg) {
+                // Swipe the existing reasoning message
+                const rIdx = stContext.chat.indexOf(batchReasoningMsg);
+                if (!Array.isArray(batchReasoningMsg.swipes)) {
+                    batchReasoningMsg.swipes = [batchReasoningMsg.mes];
+                    batchReasoningMsg.swipe_info = [{}];
+                    batchReasoningMsg.swipe_id = 0;
+                }
+                batchReasoningMsg.swipes.push('');
+                batchReasoningMsg.swipe_id = batchReasoningMsg.swipes.length - 1;
+                batchReasoningMsg.mes = '';
+                if (!batchReasoningMsg.extra) batchReasoningMsg.extra = {};
+                batchReasoningMsg.extra.polyceph_thoughts = accumulatedThoughts;
+                batchReasoningMsg.swipe_info.push({ extra: { polyceph_thoughts: accumulatedThoughts } });
+                if (typeof stContext.updateMessageBlock === 'function') {
+                    stContext.updateMessageBlock(rIdx, batchReasoningMsg);
+                }
+                if (typeof stContext.saveChat === 'function') stContext.saveChat();
+            } else {
+                postMessageToChat({
+                    content: '', // Empty message, thoughts rendered in DOM
+                    name: 'Polyceph Reasoning',
+                    extra: { polyceph_source: 'polyceph', polyceph_batch: batchId, polyceph_input: userInput, polyceph_thoughts: accumulatedThoughts },
+                    api: stContext.mainApi,
+                    model: stContext.model,
+                });
+            }
         }
         //toastr.success('Pipeline finished.', 'Polyceph');
     } catch (e) {
