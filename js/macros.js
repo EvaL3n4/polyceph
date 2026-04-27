@@ -26,7 +26,7 @@ export function resolveChatHistory(text, cleanChat, stContext) {
 
         // 1. Select Source
         let source = (options.live === 'true') ? 
-            stContext.chat.filter(m => m && !m.extra?.polyceph_typing) : 
+            stContext.chat.filter(m => m && !m.extra?.polyceph_typing && !m.is_system) : 
             cleanChat;
 
         // 2. Filter Background Messages (preserve order)
