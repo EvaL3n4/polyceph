@@ -251,7 +251,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
     let accumulatedThoughts = [];
 
     // Filter out typing indicator from chat for macro resolution to avoid '...' in history
-    const cleanChat = stContext.chat.filter(m => m && !m.extra?.polyceph_typing && !m.is_system);
+    const cleanChat = stContext.chat.filter(m => m && !m.extra?.polyceph_typing && !m.is_system && !m.mes?.trim().startsWith('/'));
 
     // Fetch World Info prompt (Lorebook)
     const wiPrompt = await getWorldInfoForChat(cleanChat);

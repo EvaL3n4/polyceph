@@ -24,6 +24,11 @@ async function interceptSend(e) {
     }
 
     let text = textarea.value.trim();
+    if (text.startsWith('/')) {
+        console.debug(`[${MODULE_NAME}] Slash command detected, bypassing Polyceph intercept.`);
+        return;
+    }
+
     const context = SillyTavern.getContext();
 
     if (!text) {
@@ -37,16 +42,16 @@ async function interceptSend(e) {
 
             if (lastMsg.is_user && !lastMsg.extra?.polyceph_typing) {
                 console.log(`[${MODULE_NAME}] Empty input detected. Re-triggering pipeline on last user message.`);
-                
+
                 text = lastMsg.mes;
                 if (!lastMsg.extra) lastMsg.extra = {};
                 lastMsg.extra.polyceph_typing = true;
                 lastMsg.extra.polyceph_active_tasks = [];
-                
+
                 if (typeof context.updateMessageBlock === 'function') {
                     context.updateMessageBlock(context.chat.length - 1, lastMsg);
                 }
-                
+
                 try {
                     await startPipeline(text);
                 } catch (err) {
@@ -173,7 +178,7 @@ function setupIntercepts() {
         });
         observer.observe(rightForm, { childList: true, subtree: true });
     }
-    
+
     if (textArea) textArea.addEventListener('keydown', interceptSend, true);
     document.body.addEventListener('click', interceptSwipe, true);
 }
@@ -199,7 +204,7 @@ async function init() {
         context.eventSource.on(context.eventTypes.CHAT_CHANGED, renderPolycephThoughts);
         context.eventSource.on(context.eventTypes.MESSAGE_RECEIVED, renderPolycephThoughts);
         context.eventSource.on(context.eventTypes.CHAT_COMPLETED, renderPolycephThoughts);
-        
+
         // Update chat dropdown when settings are saved/changed
         context.eventSource.on(context.eventTypes.SETTINGS_UPDATED, () => updateChatSelectorOptions());
     }
