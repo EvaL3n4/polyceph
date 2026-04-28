@@ -72,7 +72,7 @@ export function generateThoughtsHTML(thoughtsArray, pipelineName) {
             <div class="polyceph-thought-summary">
                 <div class="polyceph-thought-summary-container" onclick="this.parentElement.parentElement.classList.toggle('polyceph-thoughts-open');">
                     <div class="polyceph-thought-summary-title">
-                        <b>Polyceph Reasoning</b>
+                        <b>Reasoning</b>
                         ${pipelineName ? `<span class="polyceph-header-metadata">${pipelineName}</span>` : ''}
                     </div>
                 </div>

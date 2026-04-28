@@ -304,7 +304,7 @@ export function createSettingsHTML() {
                         </div>
                         <div style="display: flex; align-items: center; gap: 8px;">
                             <input type="checkbox" id="polyceph_intercept_send_checkbox" ${settings.interceptSend !== false ? 'checked' : ''}>
-                            <label for="polyceph_intercept_send_checkbox" style="cursor: pointer;">Intercept Send Button (Legacy)</label>
+                            <label for="polyceph_intercept_send_checkbox" style="cursor: pointer;">Intercept Send Button</label>
                         </div>
                         <div style="display: flex; align-items: center; gap: 8px;">
                             <input type="checkbox" id="polyceph_intercept_enter_checkbox" ${settings.interceptEnter !== false ? 'checked' : ''}>
