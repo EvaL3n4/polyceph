@@ -410,7 +410,7 @@ export function postMessageToChat({ content, name = 'Assistant', isUser = false,
         ctx.addOneMessage(msg);
     }
 
-    if (ctx.eventSource && ctx.eventTypes) {
+    if (ctx.eventSource && ctx.eventTypes && SillyTavern.getContext().extensionSettings?.polyceph?.emulateCoreEvents) {
         ctx.eventSource.emit(ctx.eventTypes.MESSAGE_RECEIVED, messageIndex);
     }
 

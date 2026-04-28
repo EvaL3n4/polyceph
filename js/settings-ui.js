@@ -297,7 +297,7 @@ export function createSettingsHTML() {
                         <div class="polyceph-settings-section-content" id="polyceph_ui_settings_content">
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <input type="checkbox" id="polyceph_show_selector_checkbox" ${settings.showPipelineSelector !== false ? 'checked' : ''}>
-                                <label for="polyceph_show_selector_checkbox" style="cursor: pointer;">Show Pipeline Selector in Chat</label>
+                                <label for="polyceph_show_selector_checkbox" style="cursor: pointer;">Show Pipeline Selector in Input Bar</label>
                             </div>
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <input type="checkbox" id="polyceph_show_icon_checkbox" ${settings.showPipelineIcon !== false ? 'checked' : ''}>
@@ -335,6 +335,10 @@ export function createSettingsHTML() {
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <input type="checkbox" id="polyceph_intercept_enter_checkbox" ${settings.interceptEnter !== false ? 'checked' : ''}>
                                 <label for="polyceph_intercept_enter_checkbox" style="cursor: pointer;">Intercept Enter Key</label>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="polyceph_emulate_events_checkbox" ${settings.emulateCoreEvents ? 'checked' : ''}>
+                                <label for="polyceph_emulate_events_checkbox" style="cursor: pointer;" title="Allows third-party extensions (like Tracker Enhanced) to interact with Polyceph runs.">Emulate Core Generation Events</label>
                             </div>
                         </div>
                     </div>
@@ -497,6 +501,11 @@ export function addSettingsUI() {
 
     document.getElementById('polyceph_intercept_enter_checkbox')?.addEventListener('change', (e) => {
         settings.interceptEnter = e.target.checked;
+        saveSettings();
+    });
+
+    document.getElementById('polyceph_emulate_events_checkbox')?.addEventListener('change', (e) => {
+        settings.emulateCoreEvents = e.target.checked;
         saveSettings();
     });
 

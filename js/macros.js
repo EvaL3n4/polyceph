@@ -12,7 +12,7 @@ import { countTokens, getMaxContextTokens, getMaxResponseTokens, getMaxPromptTok
 export function resolveChatHistory(text, cleanChat, stContext) {
     if (!text) return text;
 
-    // Regex for: {{chat_history|last:10|live:true|bg_last:2}}
+    // Regex for: {{chat_history|last:10|live:true|bg_last:2|injections:true}}
     return text.replace(/\{\{chat_history(?:\|([^}]+))?\}\}/g, (match, params) => {
         const options = {};
         if (params) {
@@ -21,6 +21,8 @@ export function resolveChatHistory(text, cleanChat, stContext) {
                 if (key) options[key] = val;
             });
         }
+
+        const includeInjections = options.no_extensions !== 'true';
 
         // 1. Select Source
         let source = (options.live === 'true') ? 
@@ -43,20 +45,80 @@ export function resolveChatHistory(text, cleanChat, stContext) {
             }
         }
 
-        // 3. Map to Strings
+        // 3. Collect Injections if enabled
+        const injections = [];
+        if (includeInjections && stContext.extensionPrompts) {
+            Object.keys(stContext.extensionPrompts).forEach(key => {
+                const prompt = stContext.extensionPrompts[key];
+                if (prompt && prompt.value && prompt.value.trim()) {
+                    injections.push({
+                        id: key,
+                        value: prompt.value.trim(),
+                        depth: Number(prompt.depth || 0),
+                        position: Number(prompt.position || 0),
+                        role: Number(prompt.role || 0)
+                    });
+                }
+            });
+        }
+
+        // 4. Map and Weave
         const isCC = stContext.mainApi === 'openai';
-        let history = filteredMessages.map(m => {
-            if (isCC) {
-                let mRole = 'assistant';
+        const finalMessages = [];
+        
+        // Loop backwards to match ST's depth logic
+        for (let i = filteredMessages.length - 1; i >= 0; i--) {
+            const depth = filteredMessages.length - 1 - i;
+            const msg = filteredMessages[i];
+
+            // Injections at BOTTOM of this depth (Position 1)
+            if (includeInjections) {
+                injections.filter(inj => inj.depth === depth && inj.position === 1).forEach(inj => {
+                    finalMessages.unshift({ mes: inj.value, role: inj.role, is_injection: true });
+                });
+            }
+
+            // The Message itself
+            finalMessages.unshift({ ...msg, is_injection: false });
+
+            // Injections at TOP of this depth (Position 0)
+            if (includeInjections) {
+                injections.filter(inj => inj.depth === depth && inj.position === 0).forEach(inj => {
+                    finalMessages.unshift({ mes: inj.value, role: inj.role, is_injection: true });
+                });
+            }
+        }
+
+        // Handle depths beyond chat length (e.g., Depth 1000 for top of prompt)
+        if (includeInjections) {
+            injections.filter(inj => inj.depth >= filteredMessages.length).forEach(inj => {
+                finalMessages.unshift({ mes: inj.value, role: inj.role, is_injection: true });
+            });
+        }
+
+        // 5. Format to strings
+        let history = finalMessages.map(m => {
+            let mRole = 'assistant';
+            if (m.is_injection) {
+                if (m.role === 1) mRole = 'user';
+                else if (m.role === 2) mRole = 'assistant';
+                else mRole = 'system';
+            } else {
                 if (m.extra?.polyceph_hidden) mRole = 'assistant';
                 else if (m.is_user) mRole = 'user';
                 else if (m.is_system) mRole = 'system';
+            }
+
+            if (isCC) {
                 return `[[ROLE:${mRole}]]\n${m.mes}\n[[/ROLE]]`;
             }
-            return `${m.name}: ${m.mes}`;
+            
+            // For text completion, we still use a readable format
+            if (mRole === 'system') return `### System Instruction:\n${m.mes}`;
+            return `${m.name || (m.is_user ? 'User' : 'Assistant')}: ${m.mes}`;
         });
 
-        // 4. Apply Final Limit
+        // 6. Apply Final Limit
         if (options.last !== undefined) {
             const lastN = parseInt(options.last);
             if (!isNaN(lastN)) {
@@ -82,7 +144,7 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt) {
     // Dynamically import ST's native classes for accurate token management
     let ChatCompletion, Message;
     try {
-        const oaiModule = await import('../../openai.js');
+        const oaiModule = await import('../../../openai.js');
         ChatCompletion = oaiModule.ChatCompletion;
         Message = oaiModule.Message;
     } catch (err) {

@@ -15,7 +15,7 @@ export function stopPipeline() {
     if (currentPipelineAbortController) {
         console.log(`[${MODULE_NAME}] Pipeline STOP requested.`);
         currentPipelineAbortController.abort();
-        
+
         const context = SillyTavern.getContext();
 
         // Tell SillyTavern to abort any active background generations
@@ -29,7 +29,7 @@ export function stopPipeline() {
             typingMsg.extra.polyceph_stopping = true;
             updateTypingIndicator();
         }
-        
+
         toastr.warning('Stopping pipeline...', 'Polyceph');
     }
 }
@@ -188,7 +188,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                 new Promise((_, reject) => setTimeout(() => reject(new Error('Generation Timeout')), timeoutMs))
             ];
             if (abortPromise) raceArr.push(abortPromise);
-            
+
             responseData = await Promise.race(raceArr);
         } else {
             responseData = await (abortPromise ? Promise.race([apiPromise, abortPromise]) : apiPromise);
@@ -277,6 +277,17 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
 
     const activePipeline = getActivePipeline();
     const pipelineName = activePipeline?.name || 'Default';
+
+    // Core Event Emulation (Start)
+    if (settings.emulateCoreEvents && stContext.eventSource && stContext.eventTypes) {
+        const emulateOptions = {
+            automatic_trigger: true,
+            force_chid: stContext.characterId,
+            signal: signal
+        };
+        await stContext.eventSource.emit(stContext.eventTypes.GENERATION_STARTED, 'polyceph', emulateOptions, false);
+        await stContext.eventSource.emit(stContext.eventTypes.GENERATION_AFTER_COMMANDS, 'polyceph', emulateOptions, false);
+    }
 
     const contextVault = {
         'user_input': userInput,
@@ -617,9 +628,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
                                             stContext.swipe.refresh(true);
                                         }
 
-                                        if (stContext.eventSource && stContext.eventTypes) {
-                                            stContext.eventSource.emit(stContext.eventTypes.MESSAGE_RECEIVED, actualMesId);
-                                        }
+                                        // Final message event handled at pipeline level if enabled
                                     }
                                 } else {
                                     if (signal.aborted) return;
@@ -689,6 +698,15 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
                     api: stContext.mainApi,
                     model: stContext.model,
                 });
+            }
+        }
+
+        // Core Event Emulation (End)
+        if (settings.emulateCoreEvents && stContext.eventSource && stContext.eventTypes) {
+            const lastMessageIdx = stContext.chat.length - 1;
+            // Only fire if the last message is from Polyceph
+            if (stContext.chat[lastMessageIdx]?.extra?.polyceph_source === 'polyceph') {
+                await stContext.eventSource.emit(stContext.eventTypes.MESSAGE_RECEIVED, lastMessageIdx);
             }
         }
         //toastr.success('Pipeline finished.', 'Polyceph');
