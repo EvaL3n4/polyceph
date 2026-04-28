@@ -56,6 +56,46 @@ export async function switchProfile(profileId) {
     }
 }
 
+let _capturedProfileId = null;
+
+/**
+ * Captures the current profile ID before pipeline execution.
+ */
+export function captureProfileState() {
+    if (_capturedProfileId === null) {
+        const context = SillyTavern.getContext();
+        _capturedProfileId = context.extensionSettings?.['connectionManager']?.selectedProfile;
+        console.log(`[${MODULE_NAME}] Profile state captured: "${_capturedProfileId}".`);
+    }
+}
+
+/**
+ * Restores the profile to the captured state.
+ */
+export async function restoreProfileState() {
+    if (!_capturedProfileId) {
+        console.log(`[${MODULE_NAME}] No captured profile state to restore.`);
+        return true;
+    }
+
+    const context = SillyTavern.getContext();
+    const current = context.extensionSettings?.['connectionManager']?.selectedProfile;
+    if (current === _capturedProfileId) {
+        console.log(`[${MODULE_NAME}] Profile already at captured state "${_capturedProfileId}".`);
+        return true;
+    }
+
+    console.log(`[${MODULE_NAME}] Restoring profile to "${_capturedProfileId}".`);
+    return await switchProfile(_capturedProfileId);
+}
+
+/**
+ * Clears the captured profile state.
+ */
+export function clearProfileState() {
+    _capturedProfileId = null;
+}
+
 
 
 /**

@@ -1,5 +1,5 @@
 import { MODULE_NAME } from './constants.js';
-import { settings, switchProfile, getActivePipeline, availableProfiles, saveSettings } from './state.js';
+import { settings, switchProfile, getActivePipeline, availableProfiles, saveSettings, captureProfileState, restoreProfileState, clearProfileState } from './state.js';
 import { generateId, waitForApiReady } from './utils.js';
 import { expandPrompt } from './macros.js';
 import { getMaxContextTokens, getMaxResponseTokens, countTokens, generateViaApi, postMessageToChat, getWorldInfoForChat, getActiveCharacterInfo, getMainSystemPrompt } from './compat-shared.js';
@@ -265,6 +265,9 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
     if (stContext.eventSource) {
         stContext.eventSource.emit('polyceph-pipeline-started');
     }
+
+    // Capture the current profile so it can be restored after the run
+    captureProfileState();
 
     console.log(`[${MODULE_NAME}] runPipeline started`, { userInput: userInput?.substring(0, 50), batchId: generateSwipesForBatchId });
     //toastr.info('Starting Polyceph Pipeline...', 'Polyceph');
@@ -695,11 +698,14 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
     } finally {
         // Restore the user's original preset and clean up
         if (settings.restore_after_run) {
-            console.log(`[${MODULE_NAME}] Pipeline finished. Restoring original preset state.`);
+            console.log(`[${MODULE_NAME}] Pipeline finished. Restoring original profile and preset state.`);
+            await restoreProfileState();
             restorePresetState();
+            clearProfileState();
             clearPresetState();
         } else {
             console.log(`[${MODULE_NAME}] Pipeline finished. Restoration disabled, staying on current preset.`);
+            clearProfileState();
             clearPresetState(); // Still clear the state so next run captures fresh
         }
         await removeTypingIndicator();
