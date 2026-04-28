@@ -219,6 +219,14 @@ async function init() {
         context.eventSource.on('polyceph-settings-changed', () => {
             updateSendButtonVisibility();
         });
+
+        // Listen for pipeline activity to swap Send/Stop buttons
+        context.eventSource.on('polyceph-pipeline-started', () => {
+            updateSendButtonVisibility();
+        });
+        context.eventSource.on('polyceph-pipeline-ended', () => {
+            updateSendButtonVisibility();
+        });
     }
 
     // Initial render for already existing messages

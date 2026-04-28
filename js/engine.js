@@ -7,13 +7,30 @@ import { capturePresetState, restorePresetState, clearPresetState, applyPreset, 
 
 let currentPipelineAbortController = null;
 
+export function isPipelineActive() {
+    return !!currentPipelineAbortController;
+}
+
 export function stopPipeline() {
     if (currentPipelineAbortController) {
         console.log(`[${MODULE_NAME}] Pipeline STOP requested.`);
         currentPipelineAbortController.abort();
-        currentPipelineAbortController = null;
-        removeTypingIndicator();
-        toastr.warning('Pipeline execution stopped.', 'Polyceph');
+        
+        const context = SillyTavern.getContext();
+
+        // Tell SillyTavern to abort any active background generations
+        if (typeof context.abortGeneration === 'function') {
+            context.abortGeneration();
+        }
+
+        // Mark indicator as stopping for visual feedback
+        const typingMsg = context.chat.find(m => m && m.extra && m.extra.polyceph_typing);
+        if (typingMsg) {
+            typingMsg.extra.polyceph_stopping = true;
+            updateTypingIndicator();
+        }
+        
+        toastr.warning('Stopping pipeline...', 'Polyceph');
     }
 }
 
@@ -134,11 +151,13 @@ function parsePromptToMessages(text, api = '') {
     return mergedMessages;
 }
 
-export async function generateQuietly(profileName, prompt, api = '') {
+export async function generateQuietly(profileName, prompt, api = '', signal = null) {
     if (!profileName || profileName === 'none') return prompt;
 
     // Ensure API is ready and settled before starting generation
     await waitForApiReady(3000);
+
+    if (signal && signal.aborted) throw new Error('Aborted');
 
     try {
         const context = SillyTavern.getContext();
@@ -158,13 +177,21 @@ export async function generateQuietly(profileName, prompt, api = '') {
 
         const timeoutMs = settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 60000;
 
+        const abortPromise = signal ? new Promise((_, reject) => {
+            if (signal.aborted) reject(new Error('Aborted'));
+            signal.addEventListener('abort', () => reject(new Error('Aborted')), { once: true });
+        }) : null;
+
         if (timeoutMs > 0) {
-            responseData = await Promise.race([
+            const raceArr = [
                 apiPromise,
                 new Promise((_, reject) => setTimeout(() => reject(new Error('Generation Timeout')), timeoutMs))
-            ]);
+            ];
+            if (abortPromise) raceArr.push(abortPromise);
+            
+            responseData = await Promise.race(raceArr);
         } else {
-            responseData = await apiPromise;
+            responseData = await (abortPromise ? Promise.race([apiPromise, abortPromise]) : apiPromise);
         }
 
         // NOTE: Stop string handling is delegated to SillyTavern's native pipeline.
@@ -211,6 +238,7 @@ async function removeTypingIndicator() {
     if (msg.extra) {
         delete msg.extra.polyceph_typing;
         delete msg.extra.polyceph_active_tasks;
+        delete msg.extra.polyceph_stopping;
     }
 
     if (typeof context.updateMessageBlock === 'function') {
@@ -233,6 +261,11 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
     currentPipelineAbortController = new AbortController();
     const signal = currentPipelineAbortController.signal;
 
+    const stContext = SillyTavern.getContext();
+    if (stContext.eventSource) {
+        stContext.eventSource.emit('polyceph-pipeline-started');
+    }
+
     console.log(`[${MODULE_NAME}] runPipeline started`, { userInput: userInput?.substring(0, 50), batchId: generateSwipesForBatchId });
     //toastr.info('Starting Polyceph Pipeline...', 'Polyceph');
 
@@ -247,7 +280,6 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
         'input': userInput
     };
     const batchId = generateSwipesForBatchId || 'batch_' + generateId();
-    const stContext = SillyTavern.getContext();
     let accumulatedThoughts = [];
 
     // Filter out typing indicator from chat for macro resolution to avoid '...' in history
@@ -323,6 +355,8 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
 
             // Process each profile group sequentially
             for (const [profileId, groupNodes] of Object.entries(profileGroups)) {
+                if (signal.aborted) return;
+
                 if (profileId !== 'none' && profileId !== 'Task') {
                     console.log(`[${MODULE_NAME}] Switching to profile group: ${profileId}`);
                     await switchProfile(profileId);
@@ -415,7 +449,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
 
                         for (let attempt = 0; attempt <= maxAttempts; attempt++) {
                             if (signal.aborted) return;
-                            let rawRes = await generateQuietly(node.profile, prompt, taskApi);
+                            let rawRes = await generateQuietly(node.profile, prompt, taskApi, signal);
                             if (signal.aborted) return;
 
                             if (!rawRes) {
@@ -669,5 +703,10 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
             clearPresetState(); // Still clear the state so next run captures fresh
         }
         await removeTypingIndicator();
+        currentPipelineAbortController = null;
+        const stContextEnd = SillyTavern.getContext();
+        if (stContextEnd.eventSource) {
+            stContextEnd.eventSource.emit('polyceph-pipeline-ended');
+        }
     }
 }

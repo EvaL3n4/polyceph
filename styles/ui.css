@@ -302,6 +302,33 @@
     color: var(--SmartThemeQuoteColor);
 }
 
+/* Custom Stop Button */
+#polyceph-stop-button {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--SmartThemeBodyColor);
+    margin-right: 0.2rem;
+    margin-left: 0.2rem;
+    transition: all 0.2s ease;
+    width: 32px;
+    height: 32px;
+    position: relative;
+    font-size: inherit;
+    background: var(--SmartThemeChatTintColor);
+}
+
+#polyceph-stop-button:hover {
+    color: #ff4d4d;
+    transform: none;
+}
+
+#polyceph-stop-button:hover .polyceph-send-button-overlay {
+    border-color: #ff4d4d;
+    color: #ff4d4d;
+}
+
 /* Robust hiding for background messages */
 .mes[ch_name="Background"],
 .mes[polyceph_hidden="true"] {

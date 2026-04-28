@@ -86,6 +86,8 @@ export function generateThoughtsHTML(thoughtsArray, pipelineName) {
 
 export function renderPolycephTyping(messageElement, chatMsg) {
     const activeTasks = chatMsg.extra?.polyceph_active_tasks || [];
+    const isStopping = chatMsg.extra?.polyceph_stopping === true;
+
     let stepInfo = 'Processing';
     if (activeTasks.length > 0) {
         stepInfo = `Step ${activeTasks[0].step}/${activeTasks[0].totalSteps}`;
@@ -120,18 +122,25 @@ export function renderPolycephTyping(messageElement, chatMsg) {
             stopPipeline();
         });
         $mesBlock.append($indicator);
-    } else {
-        $indicator.find('.polyceph-typing-step-label').text(`Polyceph ${stepInfo}`);
     }
 
-    const tasksHtml = activeTasks.map(task => `
-        <div class="polyceph-active-task">
-            <div class="polyceph-active-task-label">${task.label}</div>
-            <div class="polyceph-active-task-profile">${task.profile}</div>
-        </div>
-    `).join('');
-
-    $indicator.find('.polyceph-active-tasks-list').html(tasksHtml || '<div class="polyceph-active-task-label">Preparing...</div>');
+    // Update state-dependent content
+    if (isStopping) {
+        $indicator.find('.polyceph-typing-step-label').text(`Polyceph Stopping...`);
+        $indicator.find('.polyceph-active-tasks-list').html('<div class="polyceph-active-task-label">Cleaning up tasks...</div>');
+        $indicator.find('.fa-spinner').removeClass('fa-spinner fa-spin').addClass('fa-hourglass-half');
+        $indicator.find('.polyceph-stop-button').hide();
+    } else {
+        $indicator.find('.polyceph-typing-step-label').text(`Polyceph ${stepInfo}`);
+        const tasksHtml = activeTasks.map(task => `
+            <div class="polyceph-active-task">
+                <div class="polyceph-active-task-label">${task.label}</div>
+                <div class="polyceph-active-task-profile">${task.profile}</div>
+            </div>
+        `).join('');
+        $indicator.find('.polyceph-active-tasks-list').html(tasksHtml || '<div class="polyceph-active-task-label">Preparing...</div>');
+        $indicator.find('.polyceph-stop-button').show();
+    }
 }
 
 export function renderPolycephThoughts() {
