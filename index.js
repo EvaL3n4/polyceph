@@ -29,9 +29,7 @@ export async function handlePolycephSend(e) {
  * Interceptor for SillyTavern's native send actions (Enter key, send button).
  */
 export async function interceptSend(e) {
-    console.log(`[${MODULE_NAME}] [DEBUG-INTERCEPT] interceptSend triggered`, { type: e.type, target: e.target.id || e.target.tagName });
     if (settings.activePipelineId === 'none') {
-        console.log(`[${MODULE_NAME}] Polyceph set to 'None', skipping intercept.`);
         return;
     }
 
@@ -103,8 +101,6 @@ async function processSendAction() {
     const userName = context.name1 || 'User';
     const avatarStr = typeof context.getThumbnailUrl === 'function' && context.userAvatar ?
         context.getThumbnailUrl('avatar', context.userAvatar) : '';
-
-    console.log(`[${MODULE_NAME}] [DEBUG-ACTION] processSendAction started. Chat length before:`, context.chat.length);
 
     // Use standardized message posting from compat-shared
     postMessageToChat({
@@ -203,7 +199,6 @@ function setupIntercepts() {
 
             const sendBtn = e.target.closest('#send_but');
             if (sendBtn && settings.interceptSend !== false) {
-                console.log(`[${MODULE_NAME}] [DEBUG-CAPTURE] Intercepting native send button click.`, { target: e.target.id || e.target.tagName });
                 interceptSend(e);
             }
         };

@@ -20,33 +20,77 @@ export function injectChatPipelineSelector(sendHandler) {
     container.id = 'polyceph-chat-pipeline-container';
     container.className = 'polyceph-chat-pipeline-container';
 
-    const select = document.createElement('select');
-    select.id = 'polyceph-chat-pipeline-selector';
-    select.className = 'polyceph-chat-pipeline-selector text_pole';
-    select.title = 'Polyceph Pipeline';
+    const label = document.createElement('span');
+    label.id = 'polyceph-chat-pipeline-label';
+    label.className = 'polyceph-chat-pipeline-label';
+    label.title = 'Polyceph Pipeline';
     
-    updateChatSelectorOptions(select);
-
-    select.addEventListener('change', (e) => {
-        settings.activePipelineId = e.target.value;
-        saveSettings();
-        
-        updateSendButtonVisibility();
-
-        // Synchronize with Settings UI if it exists
-        const settingsSelector = document.getElementById('polyceph_pipeline_selector');
-        if (settingsSelector) {
-            settingsSelector.value = e.target.value;
-            // Trigger change to update the rest of the settings UI
-            settingsSelector.dispatchEvent(new Event('change'));
-        }
-    });
+    const dropdown = document.createElement('div');
+    dropdown.id = 'polyceph-chat-pipeline-dropdown';
+    dropdown.className = 'polyceph-custom-dropdown';
 
     const icon = document.createElement('span');
     icon.className = 'polyceph-chat-pipeline-icon';
     icon.innerText = '☍';
+    
+    const toggleMenu = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Populate dropdown
+        let html = `<div class="polyceph-dropdown-item ${settings.activePipelineId === 'none' ? 'selected' : ''}" data-value="none">None</div>`;
+        settings.pipelines.forEach(p => {
+            const isSelected = p.id === settings.activePipelineId;
+            html += `<div class="polyceph-dropdown-item ${isSelected ? 'selected' : ''}" data-value="${p.id}">${p.name}</div>`;
+        });
+        dropdown.innerHTML = html;
+
+        // Position dropdown relative to container
+        const rect = container.getBoundingClientRect();
+        dropdown.style.left = `${rect.left}px`;
+        dropdown.style.top = 'auto';
+        dropdown.style.bottom = `${window.innerHeight - rect.top + 5}px`;
+
+        // Ensure it's in the body for z-index/clipping protection
+        if (dropdown.parentElement !== document.body) {
+            document.body.appendChild(dropdown);
+        }
+
+        dropdown.classList.toggle('active');
+
+        // Bind items
+        dropdown.querySelectorAll('.polyceph-dropdown-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                const val = e.target.getAttribute('data-value');
+                settings.activePipelineId = val;
+                saveSettings();
+                updateChatSelectorOptions(); 
+                updateSendButtonVisibility();
+                dropdown.classList.remove('active');
+
+                // Sync with settings UI
+                const settingsSelector = document.getElementById('polyceph_pipeline_selector');
+                if (settingsSelector) {
+                    settingsSelector.value = val;
+                    settingsSelector.dispatchEvent(new Event('change'));
+                }
+            });
+        });
+    };
+
+    icon.addEventListener('click', toggleMenu);
+    label.addEventListener('click', toggleMenu);
+
+    // Global click to close dropdown
+    document.addEventListener('click', (e) => {
+        if (!dropdown.contains(e.target) && !icon.contains(e.target) && !label.contains(e.target)) {
+            dropdown.classList.remove('active');
+        }
+    });
+
     container.appendChild(icon);
-    container.appendChild(select);
+    container.appendChild(label);
+    container.appendChild(dropdown);
 
     // Custom Send Button
     const polySendBut = document.createElement('div');
@@ -120,9 +164,30 @@ export function updateSendButtonVisibility() {
     const isIntercept = settings.interceptSend !== false;
     const isRunning = isPipelineActive();
 
+    // Pipeline Selector visibility
+    if (container) {
+        if (isActive && settings.showPipelineSelector !== false) {
+            container.classList.remove('polyceph-hidden');
+            
+            // Icon visibility
+            const icon = container.querySelector('.polyceph-chat-pipeline-icon');
+            if (icon) icon.style.display = (settings.showPipelineIcon !== false) ? 'flex' : 'none';
+            
+            // Label visibility (Compact mode)
+            const label = container.querySelector('#polyceph-chat-pipeline-label');
+            if (label) {
+                if (settings.compactSelectorMode) {
+                    label.classList.add('polyceph-hidden');
+                } else {
+                    label.classList.remove('polyceph-hidden');
+                }
+            }
+        } else {
+            container.classList.add('polyceph-hidden');
+        }
+    }
+
     if (isActive) {
-        if (container) container.style.display = 'inline-flex';
-        
         if (isRunning) {
             // Pipeline running: show Polyceph stop button, hide everything else
             polyStopBut.style.display = 'flex';
@@ -136,8 +201,6 @@ export function updateSendButtonVisibility() {
             if (isIntercept) {
                 // Legacy Mode: Use ST's button, hide ours
                 polySendBut.style.display = 'none';
-                // Note: ST might hide its own button if it's running its own thing, 
-                // but if we aren't running, we let ST handle its own button visibility.
                 stSendBut.style.display = ''; 
             } else {
                 // Custom Button Mode: Show ours
@@ -146,8 +209,7 @@ export function updateSendButtonVisibility() {
             }
         }
     } else {
-        // Disabled: Hide all Polyceph UI
-        if (container) container.style.display = 'none';
+        // Disabled: Hide Polyceph buttons
         polySendBut.style.display = 'none';
         polyStopBut.style.display = 'none';
         stSendBut.style.display = '';
@@ -157,18 +219,14 @@ export function updateSendButtonVisibility() {
 /**
  * Updates the options in the chat pipeline selector based on current settings.
  */
-export function updateChatSelectorOptions(select) {
-    if (!select) select = document.getElementById('polyceph-chat-pipeline-selector');
-    if (!select) return;
+export function updateChatSelectorOptions() {
+    const label = document.getElementById('polyceph-chat-pipeline-label');
+    if (!label) return;
 
-    const noneSelected = settings.activePipelineId === 'none' ? 'selected' : '';
-    let html = `<option value="none" ${noneSelected}>None</option>`;
-    
-    settings.pipelines.forEach(p => {
-        const selected = p.id === settings.activePipelineId ? 'selected' : '';
-        html += `<option value="${p.id}" ${selected}>${p.name}</option>`;
-    });
-
-    select.innerHTML = html;
-    select.value = settings.activePipelineId;
+    if (settings.activePipelineId === 'none') {
+        label.innerText = 'None';
+    } else {
+        const p = settings.pipelines.find(p => p.id === settings.activePipelineId);
+        label.innerText = p ? p.name : 'Unknown';
+    }
 }

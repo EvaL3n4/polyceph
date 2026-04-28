@@ -289,26 +289,53 @@ export function createSettingsHTML() {
                         Reasoning pipeline options:
                     </div>
                     
-                    <div style="margin-bottom: 15px; display: flex; flex-direction: column; gap: 8px;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <input type="checkbox" id="polyceph_show_hidden_checkbox" ${settings.showHiddenMessages ? 'checked' : ''}>
-                            <label for="polyceph_show_hidden_checkbox" style="cursor: pointer;">Show Hidden Background Messages</label>
+                    <div class="polyceph-settings-section">
+                        <div class="polyceph-settings-section-header" id="polyceph_ui_settings_toggle">
+                            <span>UI Settings</span>
+                            <i class="fa-solid fa-chevron-down"></i>
                         </div>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <input type="checkbox" id="polyceph_show_reasoning_checkbox" ${settings.showReasoning !== false ? 'checked' : ''}>
-                            <label for="polyceph_show_reasoning_checkbox" style="cursor: pointer;">Show Polyceph Reasoning Blocks</label>
+                        <div class="polyceph-settings-section-content" id="polyceph_ui_settings_content">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="polyceph_show_selector_checkbox" ${settings.showPipelineSelector !== false ? 'checked' : ''}>
+                                <label for="polyceph_show_selector_checkbox" style="cursor: pointer;">Show Pipeline Selector in Chat</label>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="polyceph_show_icon_checkbox" ${settings.showPipelineIcon !== false ? 'checked' : ''}>
+                                <label for="polyceph_show_icon_checkbox" style="cursor: pointer;">Show Selector Icon</label>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="polyceph_compact_selector_checkbox" ${settings.compactSelectorMode ? 'checked' : ''}>
+                                <label for="polyceph_compact_selector_checkbox" style="cursor: pointer;">Compact Pipeline Selector</label>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="polyceph_show_reasoning_checkbox" ${settings.showReasoning !== false ? 'checked' : ''}>
+                                <label for="polyceph_show_reasoning_checkbox" style="cursor: pointer;">Show Polyceph Reasoning Blocks</label>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="polyceph_show_hidden_checkbox" ${settings.showHiddenMessages ? 'checked' : ''}>
+                                <label for="polyceph_show_hidden_checkbox" style="cursor: pointer;">Show Hidden Background Messages</label>
+                            </div>
                         </div>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <input type="checkbox" id="polyceph_restore_after_run_checkbox" ${settings.restore_after_run ? 'checked' : ''}>
-                            <label for="polyceph_restore_after_run_checkbox" style="cursor: pointer;">Restore Profile & Preset after Run</label>
+                    </div>
+
+                    <div class="polyceph-settings-section">
+                        <div class="polyceph-settings-section-header" id="polyceph_behavior_settings_toggle">
+                            <span>Behavior Settings</span>
+                            <i class="fa-solid fa-chevron-down"></i>
                         </div>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <input type="checkbox" id="polyceph_intercept_send_checkbox" ${settings.interceptSend !== false ? 'checked' : ''}>
-                            <label for="polyceph_intercept_send_checkbox" style="cursor: pointer;">Intercept Send Button</label>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <input type="checkbox" id="polyceph_intercept_enter_checkbox" ${settings.interceptEnter !== false ? 'checked' : ''}>
-                            <label for="polyceph_intercept_enter_checkbox" style="cursor: pointer;">Intercept Enter Key</label>
+                        <div class="polyceph-settings-section-content" id="polyceph_behavior_settings_content">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="polyceph_restore_after_run_checkbox" ${settings.restore_after_run ? 'checked' : ''}>
+                                <label for="polyceph_restore_after_run_checkbox" style="cursor: pointer;">Restore Profile & Preset after Run</label>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="polyceph_intercept_send_checkbox" ${settings.interceptSend !== false ? 'checked' : ''}>
+                                <label for="polyceph_intercept_send_checkbox" style="cursor: pointer;">Intercept Send Button (Single Send Button)</label>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="polyceph_intercept_enter_checkbox" ${settings.interceptEnter !== false ? 'checked' : ''}>
+                                <label for="polyceph_intercept_enter_checkbox" style="cursor: pointer;">Intercept Enter Key</label>
+                            </div>
                         </div>
                     </div>
 
@@ -473,6 +500,24 @@ export function addSettingsUI() {
         saveSettings();
     });
 
+    document.getElementById('polyceph_show_selector_checkbox')?.addEventListener('change', (e) => {
+        settings.showPipelineSelector = e.target.checked;
+        saveSettings();
+        if (SillyTavern.getContext().eventSource) SillyTavern.getContext().eventSource.emit('polyceph-settings-changed');
+    });
+
+    document.getElementById('polyceph_show_icon_checkbox')?.addEventListener('change', (e) => {
+        settings.showPipelineIcon = e.target.checked;
+        saveSettings();
+        if (SillyTavern.getContext().eventSource) SillyTavern.getContext().eventSource.emit('polyceph-settings-changed');
+    });
+
+    document.getElementById('polyceph_compact_selector_checkbox')?.addEventListener('change', (e) => {
+        settings.compactSelectorMode = e.target.checked;
+        saveSettings();
+        if (SillyTavern.getContext().eventSource) SillyTavern.getContext().eventSource.emit('polyceph-settings-changed');
+    });
+
     document.getElementById('polyceph_prompt_input')?.addEventListener('input', (e) => {
         settings.polycephPrompt = e.target.value;
         saveSettings();
@@ -519,6 +564,19 @@ export function addSettingsUI() {
         icon.classList.toggle('fa-chevron-down', !isActive);
         icon.classList.toggle('fa-chevron-up', isActive);
     });
+
+    const bindToggle = (btnId, contentId) => {
+        document.getElementById(btnId)?.addEventListener('click', () => {
+            const content = document.getElementById(contentId);
+            const icon = document.querySelector(`#${btnId} i`);
+            const isActive = content.classList.toggle('active');
+            icon.classList.toggle('fa-chevron-down', !isActive);
+            icon.classList.toggle('fa-chevron-up', isActive);
+        });
+    };
+
+    bindToggle('polyceph_ui_settings_toggle', 'polyceph_ui_settings_content');
+    bindToggle('polyceph_behavior_settings_toggle', 'polyceph_behavior_settings_content');
 
     // Pipeline Steps
     document.getElementById('polyceph_add_step_btn')?.addEventListener('click', () => {
