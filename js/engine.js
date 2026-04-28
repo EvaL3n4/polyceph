@@ -285,8 +285,10 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
             force_chid: stContext.characterId,
             signal: signal
         };
-        await stContext.eventSource.emit(stContext.eventTypes.GENERATION_STARTED, 'polyceph', emulateOptions, false);
-        await stContext.eventSource.emit(stContext.eventTypes.GENERATION_AFTER_COMMANDS, 'polyceph', emulateOptions, false);
+        console.log(`[${MODULE_NAME}] Emitting core generation events...`);
+        await stContext.eventSource.emit(stContext.eventTypes.GENERATION_STARTED, 'normal', emulateOptions, false);
+        await stContext.eventSource.emit(stContext.eventTypes.GENERATION_AFTER_COMMANDS, 'normal', emulateOptions, false);
+        console.log(`[${MODULE_NAME}] Core events finished. Active injections:`, Object.keys(stContext.extension_prompts || {}));
     }
 
     const contextVault = {
@@ -707,6 +709,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
             // Only fire if the last message is from Polyceph
             if (stContext.chat[lastMessageIdx]?.extra?.polyceph_source === 'polyceph') {
                 await stContext.eventSource.emit(stContext.eventTypes.MESSAGE_RECEIVED, lastMessageIdx);
+                console.log(`[${MODULE_NAME}] MESSAGE_RECEIVED event emitted for index: ${lastMessageIdx}`);
             }
         }
         //toastr.success('Pipeline finished.', 'Polyceph');

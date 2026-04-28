@@ -317,8 +317,8 @@
 /* Custom Dropdown Menu (Moved to Body level) */
 .polyceph-custom-dropdown {
     position: fixed !important;
-    z-index: 100000 !important;
-    background: var(--grey90a) !important;
+    z-index: 200000;
+    background: var(--SmartThemeChatTintColor);
     /* Switched to ST grey for better integration */
     backdrop-filter: blur(20px) !important;
     border: 1px solid var(--SmartThemeBorderColor) !important;
