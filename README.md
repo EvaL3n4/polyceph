@@ -61,7 +61,7 @@ Polyceph leverages SillyTavern's built-in **Connection Profiles**.
 
 Route data between tasks using these handlebars placeholders/macros:
 - `{{user_input}}`: The original text from the chat box, the last user message.
-- `{{chat_history|last:10|bg_last:2|live:true}}`: Advanced history filtering. Does not include the last user message.
+- `{{chat_history|last:10|bg_last:2|live:true}}`: Advanced history filtering. Automatically filters out system messages and slash commands. Does not include the last user message.
     - `last:N`: Limit total messages to N.
     - `bg_last:N`: Keep only the last N background messages (interspersed).
     - `live:true`: Use real-time chat (includes earlier pipeline results).
@@ -105,7 +105,7 @@ Polyceph is designed to be a transparent layer on top of SillyTavern's existing 
 
 When a pipeline task is executed, Polyceph performs the following steps:
 
-1.  **Macro Expansion** (`js/macros.js`): The task's prompt template is resolved. All `{{handlebars}}` placeholders — including `{{chat_history}}`, `{{cc_all_prompts}}`, `{{wi}}`, and standard SillyTavern macros like `{{char}}` — are expanded into their final text. For Chat Completion macros like `{{cc_all_prompts}}`, Polyceph reads the active **Prompt Manager** order and resolves each enabled prompt (Main, Persona Description, Character Description, etc.) in the exact sequence configured in your Chat Completion settings.
+1.  **Macro Expansion** (`js/macros.js`): The task's prompt template is resolved. All `{{handlebars}}` placeholders — including `{{chat_history}}`, `{{cc_all_prompts}}`, `{{wi}}`, and standard SillyTavern macros like `{{char}}` — are expanded into their final text. To ensure high-quality context, Polyceph automatically filters out system messages and slash commands before processing history-based macros. For Chat Completion macros like `{{cc_all_prompts}}`, Polyceph reads the active **Prompt Manager** order and resolves each enabled prompt (Main, Persona Description, Character Description, etc.) in the exact sequence configured in your Chat Completion settings.
 
 2.  **Role Tagging** (`js/engine.js`): The expanded prompt is parsed for `[[ROLE:system]]`, `[[ROLE:user]]`, and `[[ROLE:assistant]]` tags. These are converted into a structured message array (`[{role, content}, ...]`) that Chat Completion APIs expect. If no role tags are present, the entire prompt is sent as a single `system` message. The parser validates tag structure and warns in the console if:
     -   Content exists outside role tags (will be sent as an implicit `system` message).
@@ -129,6 +129,12 @@ When a pipeline task is executed, Polyceph performs the following steps:
 
 ## Engine Controls
 
-- **Request Delay**: Pause between API calls to avoid rate limits.
-- **Max Retries**: Automatically retry failed or empty model responses.
-- **Timeout**: Prevents the pipeline from hanging on slow or stuck connections.
+- **Request Delay**: Pause between API calls (in milliseconds) to avoid rate limits when running parallel tasks.
+- **Max Retries**: The number of times to automatically retry a failed or empty model response before giving up.
+- **Timeout**: The maximum time (in milliseconds) to wait for a single task's generation before timing out.
+- **Intercept Send Button (Legacy)**: If enabled, Polyceph will intercept clicks on SillyTavern's standard send button to trigger the pipeline. When disabled, a dedicated Polyceph send button appears next to the standard one.
+- **Intercept Enter Key**: If enabled, Polyceph will intercept the 'Enter' key in the chat area to trigger the pipeline.
+- **Restore Profile & Preset after Run**: Automatically returns SillyTavern to the connection profile and preset you were using before the pipeline started.
+- **Show Hidden Background Messages**: Toggles the visibility of `<background>` messages in the chat history (displays them with a special separator).
+- **Show Reasoning Blocks**: Toggles the display of collapsible reasoning blocks in chat messages.
+
