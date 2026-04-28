@@ -118,10 +118,10 @@ export async function getAvailableProfiles() {
         const data = await response.json();
         const possibleLocs = [
             data?.extension_settings?.connectionManager?.profiles,
-            data?.connectionManager?.profiles, 
+            data?.connectionManager?.profiles,
             data?.connection_profiles,
-            data?.profiles, 
-            data?.api?.profiles, 
+            data?.profiles,
+            data?.api?.profiles,
             data?.connectionProfiles
         ];
 
@@ -175,13 +175,13 @@ export function refreshPresets() {
     const ctx = SillyTavern.getContext();
     const mainApi = ctx.mainApi;
     const apis = new Set();
-    
+
     // Always include main API
     if (mainApi) {
         console.log(`[${MODULE_NAME}] Adding main API to refresh: ${mainApi}`);
         apis.add(mainApi);
     }
-    
+
     // Add APIs from profiles
     for (const profile of availableProfiles) {
         if (profile.api && !apis.has(profile.api)) {
@@ -230,7 +230,7 @@ export function loadSettings() {
         delete saved.enabled;
 
         settings = { ...defaultSettings, ...saved };
-        
+
         // Ensure activePipelineId is valid
         if (settings.activePipelineId !== 'none' && !settings.pipelines.find(p => p.id === settings.activePipelineId)) {
             settings.activePipelineId = settings.pipelines[0]?.id || 'default';
@@ -247,10 +247,10 @@ export function loadSettings() {
                 }
 
                 if (!s.tasks) {
-                    s.tasks = [{ 
-                        id: 'task_' + Math.random().toString(36).substring(2, 9), 
-                        profile: s.models?.[0] || '', 
-                        template: s.template || '{{user_input}}' 
+                    s.tasks = [{
+                        id: 'task_' + Math.random().toString(36).substring(2, 9),
+                        profile: s.models?.[0] || '',
+                        template: s.template || '{{user_input}}'
                     }];
                 }
 

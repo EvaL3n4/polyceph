@@ -270,7 +270,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
     let batchReasoningMsg = null;
     if (generateSwipesForBatchId) {
         const batchMsgs = stContext.chat.filter(m => m.extra?.polyceph_batch === generateSwipesForBatchId);
-        batchBgMessages   = batchMsgs.filter(m =>  m.extra?.polyceph_hidden);
+        batchBgMessages = batchMsgs.filter(m => m.extra?.polyceph_hidden);
         batchCharMessages = batchMsgs.filter(m => !m.extra?.polyceph_hidden && m.name !== 'Polyceph Reasoning');
         batchReasoningMsg = batchMsgs.find(m => m.name === 'Polyceph Reasoning') || null;
     }
@@ -660,8 +660,14 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
         console.error(`[${MODULE_NAME}] Pipeline Error`, e);
     } finally {
         // Restore the user's original preset and clean up
-        restorePresetState();
-        clearPresetState();
+        if (settings.restore_after_run) {
+            console.log(`[${MODULE_NAME}] Pipeline finished. Restoring original preset state.`);
+            restorePresetState();
+            clearPresetState();
+        } else {
+            console.log(`[${MODULE_NAME}] Pipeline finished. Restoration disabled, staying on current preset.`);
+            clearPresetState(); // Still clear the state so next run captures fresh
+        }
         await removeTypingIndicator();
     }
 }

@@ -298,6 +298,10 @@ export function createSettingsHTML() {
                             <input type="checkbox" id="polyceph_show_reasoning_checkbox" ${settings.showReasoning !== false ? 'checked' : ''}>
                             <label for="polyceph_show_reasoning_checkbox" style="cursor: pointer;">Show Polyceph Reasoning Blocks</label>
                         </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <input type="checkbox" id="polyceph_restore_after_run_checkbox" ${settings.restore_after_run ? 'checked' : ''}>
+                            <label for="polyceph_restore_after_run_checkbox" style="cursor: pointer;">Restore Profile & Preset after Run</label>
+                        </div>
                     </div>
 
                     <div style="margin-bottom: 20px;">
@@ -439,6 +443,11 @@ export function addSettingsUI() {
     document.getElementById('polyceph_show_reasoning_checkbox')?.addEventListener('change', (e) => {
         settings.showReasoning = e.target.checked;
         syncHiddenMessageVisibility();
+        saveSettings();
+    });
+
+    document.getElementById('polyceph_restore_after_run_checkbox')?.addEventListener('change', (e) => {
+        settings.restore_after_run = e.target.checked;
         saveSettings();
     });
 

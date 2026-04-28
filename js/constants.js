@@ -1,5 +1,5 @@
 export const MODULE_NAME = 'polyceph';
-export const VERSION = '0.4.5';
+export const VERSION = '0.4.6';
 
 export const defaultSettings = {
     delayMs: 250,
@@ -9,6 +9,7 @@ export const defaultSettings = {
     activePipelineId: 'default',
     showHiddenMessages: false,
     showReasoning: true,
+    restore_after_run: true,
     polycephPrompt: '',
     pipelines: [
         {
