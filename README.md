@@ -132,7 +132,7 @@ When a pipeline task is executed, Polyceph performs the following steps:
 - **Request Delay**: Pause between API calls (in milliseconds) to avoid rate limits when running parallel tasks.
 - **Max Retries**: The number of times to automatically retry a failed or empty model response before giving up.
 - **Timeout**: The maximum time (in milliseconds) to wait for a single task's generation before timing out.
-- **Intercept Send Button**: If enabled, Polyceph will intercept clicks on SillyTavern's standard send button to trigger the pipeline. When disabled, a dedicated Polyceph send button appears next to the standard one.
+- **Intercept Send Button**: If enabled, Polyceph will intercept clicks on SillyTavern's standard send button to trigger the pipeline. When disabled, a dedicated Polyceph send button appears next to the standard one. Recommended to disable if it does not play nice with other extensions.
 - **Intercept Enter Key**: If enabled, Polyceph will intercept the 'Enter' key in the chat area to trigger the pipeline.
 - **Restore Profile & Preset after Run**: Automatically returns SillyTavern to the connection profile and preset you were using before the pipeline started.
 - **Show Hidden Background Messages**: Toggles the visibility of `<background>` messages in the chat history (displays them with a special separator).

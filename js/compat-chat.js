@@ -45,6 +45,7 @@ export function getChatCompletionParams() {
         // --- Limits (used by Polyceph for budgeting) ---
         maxContextTokens: Number(cc.openai_max_context) || 4096,
         maxResponseTokens: Number(cc.openai_max_tokens) || 300,
+        unlockedContext: !!cc.max_context_unlocked,
 
         // --- Model identification ---
         model: typeof ctx.getChatCompletionModel === 'function'

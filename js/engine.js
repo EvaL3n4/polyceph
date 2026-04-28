@@ -442,7 +442,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
 
                     try {
                         // Fully expand the prompt using the new recursive macro system
-                        const prompt = expandPrompt(node.template || '', settings, contextVault, cleanChat, stContext, wiPrompt);
+                        const prompt = await expandPrompt(node.template || '', settings, contextVault, cleanChat, stContext, wiPrompt);
 
                         if (signal.aborted) return;
 

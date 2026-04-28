@@ -183,7 +183,18 @@ export function getMaxContextTokens() {
 
     if (api === 'openai') {
         // oai_settings.openai_max_context is the active preset's value
+        // ST already enforces the unlocked context limit on this value via the UI
         return Number(ctx.chatCompletionSettings?.openai_max_context) || 4096;
+    }
+
+    if (api === 'novel') {
+        let max = Number(ctx.maxContext) || 2048;
+        const model = ctx.novelAISettings?.model_novel || '';
+        // Mirroring ST's hard caps for NAI models in script.js:L5845
+        if (model.includes('clio') || model.includes('kayra') || model.includes('erato')) {
+            max = Math.min(max, 8192);
+        }
+        return max;
     }
 
     // For text completion APIs, max_context is the global variable

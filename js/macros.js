@@ -1,6 +1,4 @@
-/**
- * Polyceph Macro Resolution System
- */
+import { countTokens, getMaxContextTokens, getMaxResponseTokens, getMaxPromptTokens } from './compat-shared.js';
 
 /**
  * Resolves Polyceph-specific chat history macros.
@@ -72,14 +70,27 @@ export function resolveChatHistory(text, cleanChat, stContext) {
 
 /**
  * Resolves all active SillyTavern Chat Completion prompts into a single string.
+ * Implements token-based history trimming to respect context limits by leveraging
+ * SillyTavern's native ChatCompletion and Message classes.
  */
-export function resolveCCMacros(text, cleanChat, stContext, wiPrompt) {
+export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt) {
     if (!text) return text;
 
     const ccSettings = stContext.chatCompletionSettings;
     if (!ccSettings || !ccSettings.prompts) return text;
 
-    // Use current character's unique ID
+    // Dynamically import ST's native classes for accurate token management
+    let ChatCompletion, Message;
+    try {
+        const oaiModule = await import('../../openai.js');
+        ChatCompletion = oaiModule.ChatCompletion;
+        Message = oaiModule.Message;
+    } catch (err) {
+        console.error('[polyceph] Failed to import native SillyTavern classes. Token-aware trimming will be disabled.', err);
+        return text.replace(/\{\{cc_all_prompts(?:\(budget=(\d+)\))?\}\}/g, '(Error: Native ST classes missing)');
+    }
+
+    // Identify prompt order for the current context
     const charData = stContext.characters[stContext.characterId] || {};
     const charId = charData.id || 0;
     const allOrders = ccSettings.prompt_order || [];
@@ -90,31 +101,19 @@ export function resolveCCMacros(text, cleanChat, stContext, wiPrompt) {
                              allOrders[0];
     
     const rawPromptOrder = promptOrderEntry?.order || [];
-    
-    // Ensure all prompts from ccSettings are represented in the order
-    // (ST sometimes has markers missing from the character's prompt_order list)
     const promptOrder = [...rawPromptOrder];
     
+    // Ensure all enabled prompts have an entry in promptOrder
     ccSettings.prompts.forEach(p => {
         if (!promptOrder.some(e => e.identifier === p.identifier)) {
-            if (p.identifier === 'personaDescription') {
-                // Inject persona after worldInfoBefore or main
-                let idx = promptOrder.findIndex(e => e.identifier === 'worldInfoBefore');
-                if (idx === -1) idx = promptOrder.findIndex(e => e.identifier === 'main');
-                promptOrder.splice(idx + 1, 0, { identifier: 'personaDescription', enabled: true });
-            } else {
-                promptOrder.push({ identifier: p.identifier, enabled: true });
-            }
+            promptOrder.push({ identifier: p.identifier, enabled: true });
         }
     });
 
-    const isEnabled = (id) => {
-        if (id === 'main') return true;
-        const entry = promptOrder.find(e => e.identifier === id);
-        return entry ? entry.enabled : true;
-    };
-
-    const resolveIdentifier = (id) => {
+    /**
+     * Internal helper to resolve a single identifier's content.
+     */
+    const resolveIdentifier = (id, chatSource) => {
         const prompt = ccSettings.prompts.find(p => p.identifier === id);
         if (!prompt) return '';
         
@@ -138,10 +137,10 @@ export function resolveCCMacros(text, cleanChat, stContext, wiPrompt) {
                     return wrap(desc);
                 }
                 case 'worldInfoBefore': return wrap(wiPrompt || '');
-                case 'worldInfoAfter': return ''; // World info usually comes as one block
+                case 'worldInfoAfter': return '';
                 case 'dialogueExamples': return wrap(charFields.mesExamples || char?.mes_example || '');
                 case 'chatHistory': {
-                    return cleanChat.map(m => {
+                    return chatSource.map(m => {
                         let mRole = 'assistant';
                         if (m.extra?.polyceph_hidden) mRole = 'assistant';
                         else if (m.is_user) mRole = 'user';
@@ -157,41 +156,87 @@ export function resolveCCMacros(text, cleanChat, stContext, wiPrompt) {
 
     let result = text;
 
-    // 1. Resolve {{cc_all_prompts}}
-    result = result.replace(/\{\{cc_all_prompts\}\}/g, () => {
-        const parts = [];
-        // Use promptOrder to maintain the correct sequence
-        promptOrder.forEach(entry => {
-            if (!entry.enabled) return;
-            const content = resolveIdentifier(entry.identifier);
-            if (content.trim()) parts.push(content.trim());
-        });
-        return parts.join('\n\n');
-    });
+    // 1. Resolve {{cc_all_prompts}} with token-aware trimming
+    const allPromptsMatch = result.match(/\{\{cc_all_prompts\}\}/);
+    if (allPromptsMatch) {
+        // Initialize Native ST ChatCompletion to manage budget
+        const chatCompletion = new ChatCompletion();
+        const maxContext = getMaxContextTokens();
+        const maxResponse = getMaxResponseTokens();
+        chatCompletion.setTokenBudget(maxContext, maxResponse);
 
-    // 2. Resolve individual macros
-    result = result.replace(/\{\{cc_main_prompt\}\}/g, () => resolveIdentifier('main'));
-    result = result.replace(/\{\{cc_aux_prompt\}\}/g, () => resolveIdentifier('nsfw'));
-    result = result.replace(/\{\{cc_nsfw_prompt\}\}/g, () => resolveIdentifier('nsfw'));
-    result = result.replace(/\{\{cc_post_history_instructions\}\}/g, () => resolveIdentifier('jailbreak'));
-    result = result.replace(/\{\{cc_jailbreak_prompt\}\}/g, () => resolveIdentifier('jailbreak'));
-    result = result.replace(/\{\{cc_enhance_definitions\}\}/g, () => resolveIdentifier('enhanceDefinitions'));
+        // Calculate Static Overhead: pipeline prompt + other CC prompts
+        // We resolve standard macros in the template first to get accurate overhead
+        let shadowPrompt = result.replace(/\{\{cc_all_prompts\}\}/g, '');
+        if (typeof stContext.substituteParams === 'function') {
+            shadowPrompt = stContext.substituteParams(shadowPrompt);
+        }
+
+        const shadowTokens = await countTokens(shadowPrompt);
+        chatCompletion.reserveBudget(shadowTokens);
+
+        // Reserve budget for other static CC prompts
+        const staticCCParts = [];
+        for (const entry of promptOrder) {
+            if (!entry.enabled || entry.identifier === 'chatHistory') continue;
+            const content = resolveIdentifier(entry.identifier, []);
+            if (content.trim()) {
+                const msg = await Message.createAsync('system', content, entry.identifier);
+                if (chatCompletion.canAfford(msg)) {
+                    chatCompletion.add(msg);
+                    staticCCParts.push(content);
+                }
+            }
+        }
+
+        // Determine final history budget
+        let historyBudget = chatCompletion.tokenBudget - 100; // 100 token safety margin
+
+        // Trim History using native canAfford logic
+        const trimmedChat = [];
+        if (historyBudget > 0) {
+            let currentHistoryTokens = 0;
+            for (let i = cleanChat.length - 1; i >= 0; i--) {
+                const m = cleanChat[i];
+                const role = m.is_user ? 'user' : 'assistant';
+                // Estimate with 8 token message overhead
+                const msg = await Message.createAsync(role, m.mes, `chatHistory-${i}`);
+                if (currentHistoryTokens + msg.getTokens() + 8 > historyBudget) break;
+                
+                trimmedChat.unshift(m);
+                currentHistoryTokens += msg.getTokens() + 8;
+            }
+        }
+
+        // Final Assembly
+        const allPrompts = [];
+        for (const entry of promptOrder) {
+            if (!entry.enabled) continue;
+            const content = resolveIdentifier(entry.identifier, trimmedChat);
+            if (content.trim()) allPrompts.push(content.trim());
+        }
+
+        console.log(`[polyceph] CC Macro Resolution - Budget: ${historyBudget}, Overhead: ${shadowTokens}, Context: ${maxContext}`);
+        
+        const combined = allPrompts.join('\n\n');
+        result = result.replace(/\{\{cc_all_prompts\}\}/g, combined);
+    }
+
+    // 2. Resolve individual macros (no trimming for specific requests)
+    if (result.includes('{{cc_main_prompt}}')) result = result.replace(/\{\{cc_main_prompt\}\}/g, () => resolveIdentifier('main', cleanChat));
+    if (result.includes('{{cc_aux_prompt}}')) result = result.replace(/\{\{cc_aux_prompt\}\}/g, () => resolveIdentifier('nsfw', cleanChat));
+    if (result.includes('{{cc_nsfw_prompt}}')) result = result.replace(/\{\{cc_nsfw_prompt\}\}/g, () => resolveIdentifier('nsfw', cleanChat));
+    if (result.includes('{{cc_post_history_instructions}}')) result = result.replace(/\{\{cc_post_history_instructions\}\}/g, () => resolveIdentifier('jailbreak', cleanChat));
+    if (result.includes('{{cc_jailbreak_prompt}}')) result = result.replace(/\{\{cc_jailbreak_prompt\}\}/g, () => resolveIdentifier('jailbreak', cleanChat));
+    if (result.includes('{{cc_enhance_definitions}}')) result = result.replace(/\{\{cc_enhance_definitions\}\}/g, () => resolveIdentifier('enhanceDefinitions', cleanChat));
 
     return result;
 }
 
 /**
  * Fully expands a prompt by resolving Polyceph-specific recursion and custom macros.
- * 
- * @param {string} template - The starting template
- * @param {object} settings - Extension settings
- * @param {object} contextVault - The current macro values
- * @param {Array} cleanChat - Chat snapshot
- * @param {object} stContext - SillyTavern context
- * @param {string} wiPrompt - Pre-calculated World Info string
- * @returns {string} - Fully expanded prompt string
  */
-export function expandPrompt(template, settings, contextVault, cleanChat, stContext, wiPrompt) {
+export async function expandPrompt(template, settings, contextVault, cleanChat, stContext, wiPrompt) {
     let result = template || '';
 
     // 1. Resolve recursive {{polyceph_prompt}}
@@ -201,8 +246,8 @@ export function expandPrompt(template, settings, contextVault, cleanChat, stCont
     // 2. Resolve Chat History (with params)
     result = resolveChatHistory(result, cleanChat, stContext);
 
-    // 3. Resolve Chat Completion Prompts
-    result = resolveCCMacros(result, cleanChat, stContext, wiPrompt);
+    // 3. Resolve Chat Completion Prompts (Token-aware)
+    result = await resolveCCMacros(result, cleanChat, stContext, wiPrompt);
 
     // 4. Resolve {{user_input}} with explicit user role
     const resolvedInput = contextVault?.['user_input'] || settings.userInput || '';
