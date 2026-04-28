@@ -302,6 +302,14 @@ export function createSettingsHTML() {
                             <input type="checkbox" id="polyceph_restore_after_run_checkbox" ${settings.restore_after_run ? 'checked' : ''}>
                             <label for="polyceph_restore_after_run_checkbox" style="cursor: pointer;">Restore Profile & Preset after Run</label>
                         </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <input type="checkbox" id="polyceph_intercept_send_checkbox" ${settings.interceptSend !== false ? 'checked' : ''}>
+                            <label for="polyceph_intercept_send_checkbox" style="cursor: pointer;">Intercept Send Button (Legacy)</label>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <input type="checkbox" id="polyceph_intercept_enter_checkbox" ${settings.interceptEnter !== false ? 'checked' : ''}>
+                            <label for="polyceph_intercept_enter_checkbox" style="cursor: pointer;">Intercept Enter Key</label>
+                        </div>
                     </div>
 
                     <div style="margin-bottom: 20px;">
@@ -448,6 +456,20 @@ export function addSettingsUI() {
 
     document.getElementById('polyceph_restore_after_run_checkbox')?.addEventListener('change', (e) => {
         settings.restore_after_run = e.target.checked;
+        saveSettings();
+    });
+
+    document.getElementById('polyceph_intercept_send_checkbox')?.addEventListener('change', (e) => {
+        settings.interceptSend = e.target.checked;
+        saveSettings();
+        // Emit a custom event or call a global function to update UI
+        if (SillyTavern.getContext().eventSource) {
+            SillyTavern.getContext().eventSource.emit('polyceph-settings-changed');
+        }
+    });
+
+    document.getElementById('polyceph_intercept_enter_checkbox')?.addEventListener('change', (e) => {
+        settings.interceptEnter = e.target.checked;
         saveSettings();
     });
 

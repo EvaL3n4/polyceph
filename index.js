@@ -3,13 +3,13 @@ import { loadSettings, getAvailableProfiles, refreshPresets, settings } from './
 import { renderPolycephThoughts, syncHiddenMessageVisibility } from './js/ui.js';
 import { addSettingsUI } from './js/settings-ui.js';
 import { startPipeline, runPipeline } from './js/engine.js';
-import { injectChatPipelineSelector, updateChatSelectorOptions } from './js/chat-ui.js';
+import { injectChatPipelineSelector, updateChatSelectorOptions, updateSendButtonVisibility } from './js/chat-ui.js';
 
 // -------------------------------------------------------------------------
 // Interception Hook
 // -------------------------------------------------------------------------
 
-async function interceptSend(e) {
+export async function interceptSend(e) {
     console.log(`[${MODULE_NAME}] interceptSend triggered`, e.type);
     if (settings.activePipelineId === 'none') {
         console.log(`[${MODULE_NAME}] Polyceph set to 'None', skipping intercept.`);
@@ -160,7 +160,7 @@ function setupIntercepts() {
     if (rightForm) {
         const handleSendEvent = (e) => {
             const sendBtn = e.target.closest('#send_but');
-            if (sendBtn) {
+            if (sendBtn && settings.interceptSend !== false) {
                 interceptSend(e);
             }
         };
@@ -179,7 +179,11 @@ function setupIntercepts() {
         observer.observe(rightForm, { childList: true, subtree: true });
     }
 
-    if (textArea) textArea.addEventListener('keydown', interceptSend, true);
+    if (textArea) textArea.addEventListener('keydown', (e) => {
+        if (settings.interceptEnter !== false) {
+            interceptSend(e);
+        }
+    }, true);
     document.body.addEventListener('click', interceptSwipe, true);
 }
 
@@ -197,7 +201,7 @@ async function init() {
 
     addSettingsUI();
     setupIntercepts();
-    injectChatPipelineSelector();
+    injectChatPipelineSelector(interceptSend);
 
     const context = SillyTavern.getContext();
     if (context.eventSource && context.eventTypes) {
@@ -206,7 +210,15 @@ async function init() {
         context.eventSource.on(context.eventTypes.CHAT_COMPLETED, renderPolycephThoughts);
 
         // Update chat dropdown when settings are saved/changed
-        context.eventSource.on(context.eventTypes.SETTINGS_UPDATED, () => updateChatSelectorOptions());
+        context.eventSource.on(context.eventTypes.SETTINGS_UPDATED, () => {
+            updateChatSelectorOptions();
+            updateSendButtonVisibility();
+        });
+
+        // Listen for our custom settings change event
+        context.eventSource.on('polyceph-settings-changed', () => {
+            updateSendButtonVisibility();
+        });
     }
 
     // Initial render for already existing messages

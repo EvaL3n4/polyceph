@@ -1,5 +1,5 @@
 export const MODULE_NAME = 'polyceph';
-export const VERSION = '0.4.6';
+export const VERSION = '0.5.0';
 
 export const defaultSettings = {
     delayMs: 250,
@@ -7,6 +7,8 @@ export const defaultSettings = {
     maxRetries: 3,
     retryDelayMs: 2000,
     activePipelineId: 'default',
+    interceptSend: true,
+    interceptEnter: true,
     showHiddenMessages: false,
     showReasoning: true,
     restore_after_run: true,
