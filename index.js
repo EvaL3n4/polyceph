@@ -4,24 +4,43 @@ import { renderPolycephThoughts, syncHiddenMessageVisibility } from './js/ui.js'
 import { addSettingsUI } from './js/settings-ui.js';
 import { startPipeline, runPipeline } from './js/engine.js';
 import { injectChatPipelineSelector, updateChatSelectorOptions, updateSendButtonVisibility } from './js/chat-ui.js';
+import { postMessageToChat } from './js/compat-shared.js';
 
 // -------------------------------------------------------------------------
 // Interception Hook
 // -------------------------------------------------------------------------
 
+/**
+ * Dedicated handler for the custom Polyceph send button.
+ * Avoids interception logic designed for SillyTavern's native buttons.
+ */
+export async function handlePolycephSend(e) {
+    if (settings.activePipelineId === 'none') return;
+    console.log(`[${MODULE_NAME}] Polyceph send button clicked.`);
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+    }
+    return await processSendAction();
+}
+
+/**
+ * Interceptor for SillyTavern's native send actions (Enter key, send button).
+ */
 export async function interceptSend(e) {
-    console.log(`[${MODULE_NAME}] interceptSend triggered`, e.type);
+    console.log(`[${MODULE_NAME}] [DEBUG-INTERCEPT] interceptSend triggered`, { type: e.type, target: e.target.id || e.target.tagName });
     if (settings.activePipelineId === 'none') {
         console.log(`[${MODULE_NAME}] Polyceph set to 'None', skipping intercept.`);
         return;
     }
 
-    const textarea = document.getElementById('send_textarea');
-    if (!textarea) return;
-
     if (e.type === 'keydown' && (e.key !== 'Enter' || e.shiftKey)) {
         return;
     }
+
+    const textarea = document.getElementById('send_textarea');
+    if (!textarea) return;
 
     let text = textarea.value.trim();
     if (text.startsWith('/')) {
@@ -29,86 +48,91 @@ export async function interceptSend(e) {
         return;
     }
 
+    // Block native behavior immediately to prevent SillyTavern from adding the message
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+
+    return await processSendAction();
+}
+
+let lastSendTime = 0;
+
+/**
+ * Core logic for processing a send action, whether from native intercept or custom button.
+ */
+async function processSendAction() {
+    const now = Date.now();
+    if (now - lastSendTime < 500) {
+        console.warn(`[${MODULE_NAME}] Duplicate send action blocked by debouncing (diff: ${now - lastSendTime}ms).`);
+        return;
+    }
+    lastSendTime = now;
+
+    const textarea = document.getElementById('send_textarea');
+    const text = textarea ? textarea.value.trim() : '';
     const context = SillyTavern.getContext();
 
+    // EMPTY INPUT: Re-trigger pipeline on last message if it's from the user
     if (!text) {
-        // If text is empty, check if last message is from user to re-trigger
         const lastMsg = context.chat[context.chat.length - 1];
-        if (lastMsg) {
-            // ALWAYS prevent default if Polyceph is active on an empty send
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
+        if (lastMsg && lastMsg.is_user && !lastMsg.extra?.polyceph_typing) {
+            console.log(`[${MODULE_NAME}] Empty input detected. Re-triggering pipeline on last user message.`);
 
-            if (lastMsg.is_user && !lastMsg.extra?.polyceph_typing) {
-                console.log(`[${MODULE_NAME}] Empty input detected. Re-triggering pipeline on last user message.`);
+            if (!lastMsg.extra) lastMsg.extra = {};
+            lastMsg.extra.polyceph_typing = true;
+            lastMsg.extra.polyceph_active_tasks = [];
 
-                text = lastMsg.mes;
-                if (!lastMsg.extra) lastMsg.extra = {};
-                lastMsg.extra.polyceph_typing = true;
-                lastMsg.extra.polyceph_active_tasks = [];
-
-                if (typeof context.updateMessageBlock === 'function') {
-                    context.updateMessageBlock(context.chat.length - 1, lastMsg);
-                }
-
-                try {
-                    await startPipeline(text);
-                } catch (err) {
-                    console.error(`[${MODULE_NAME}] Pipeline execution failed:`, err);
-                    toastr.error('Pipeline execution failed. Check console for details.', 'Polyceph');
-                }
+            if (typeof context.updateMessageBlock === 'function') {
+                context.updateMessageBlock(context.chat.length - 1, lastMsg);
             }
-            return;
+
+            try {
+                await startPipeline(lastMsg.mes);
+            } catch (err) {
+                console.error(`[${MODULE_NAME}] Pipeline re-trigger failed:`, err);
+                toastr.error('Pipeline execution failed.', 'Polyceph');
+            }
         }
         return;
     }
 
-    e.preventDefault();
-    e.stopPropagation();
-    e.stopImmediatePropagation();
-    textarea.value = '';
+    // NON-EMPTY INPUT: Create and add a new user message
+    if (textarea) textarea.value = '';
 
     const userName = context.name1 || 'User';
     const avatarStr = typeof context.getThumbnailUrl === 'function' && context.userAvatar ?
         context.getThumbnailUrl('avatar', context.userAvatar) : '';
 
-    const message = {
+    console.log(`[${MODULE_NAME}] [DEBUG-ACTION] processSendAction started. Chat length before:`, context.chat.length);
+
+    // Use standardized message posting from compat-shared
+    postMessageToChat({
+        content: text,
         name: userName,
-        is_user: true,
+        isUser: true,
         is_system: false,
         send_date: typeof context.humanizedDateTime === 'function' ? context.humanizedDateTime() : new Date().toLocaleString(),
         mes: text,
-        force_avatar: avatarStr,
+        forceAvatar: avatarStr,
         extra: { polyceph_typing: true, polyceph_active_tasks: [] },
         swipes: [text],
         swipe_id: 0,
         swipe_info: [{}]
-    };
+    });
 
+    console.log(`[${MODULE_NAME}] User message added. Chat length after:`, context.chat.length);
+    if (typeof context.saveChat === 'function') context.saveChat();
+
+    // Stagger the pipeline start slightly to allow UI to catch up
     setTimeout(async () => {
-        console.log(`[${MODULE_NAME}] Adding user message. Chat length before:`, context.chat.length);
-        context.chat.push(message);
-        if (typeof context.addOneMessage === 'function') {
-            await context.addOneMessage(message);
-        } else {
-            if (context.eventSource && context.eventTypes) {
-                context.eventSource.emit(context.eventTypes.MESSAGE_RECEIVED, context.chat.length - 1);
-            }
+        try {
+            await startPipeline(text);
+        } catch (err) {
+            console.error(`[${MODULE_NAME}] Pipeline execution failed:`, err);
+            toastr.error('Pipeline execution failed.', 'Polyceph');
         }
-        console.log(`[${MODULE_NAME}] User message added. Chat length after:`, context.chat.length);
-        if (typeof context.saveChat === 'function') context.saveChat();
-
-        // Stagger the pipeline start slightly
-        setTimeout(async () => {
-            try {
-                await startPipeline(text);
-            } catch (err) {
-                console.error(`[${MODULE_NAME}] Pipeline execution failed:`, err);
-                toastr.error('Pipeline execution failed. Check console for details.', 'Polyceph');
-            }
-        }, 50);
-    }, 0);
+    }, 50);
 }
 
 function interceptSwipe(e) {
@@ -154,13 +178,32 @@ function interceptSwipe(e) {
 }
 
 function setupIntercepts() {
+    const sendForm = document.getElementById('send_form');
     const rightForm = document.getElementById('rightSendForm');
     const textArea = document.getElementById('send_textarea');
 
+    if (sendForm) {
+        // Intercept form submission (e.g. from extensions or scripts calling form.submit())
+        sendForm.addEventListener('submit', (e) => {
+            if (settings.activePipelineId !== 'none') {
+                console.log(`[${MODULE_NAME}] Form submit intercepted.`);
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+            }
+        }, true);
+    }
+
     if (rightForm) {
         const handleSendEvent = (e) => {
+            // Explicitly ignore events from Polyceph's own UI elements
+            if (e.target.closest('#polyceph-send-button') || e.target.closest('#polyceph-stop-button') || e.target.closest('#polyceph-chat-pipeline-container')) {
+                return;
+            }
+
             const sendBtn = e.target.closest('#send_but');
             if (sendBtn && settings.interceptSend !== false) {
+                console.log(`[${MODULE_NAME}] [DEBUG-CAPTURE] Intercepting native send button click.`, { target: e.target.id || e.target.tagName });
                 interceptSend(e);
             }
         };
@@ -173,7 +216,7 @@ function setupIntercepts() {
         const observer = new MutationObserver(() => {
             if (!document.getElementById('polyceph-chat-pipeline-container')) {
                 console.log(`[${MODULE_NAME}] Chat form changed, re-injecting selector.`);
-                injectChatPipelineSelector();
+                injectChatPipelineSelector(handlePolycephSend);
             }
         });
         observer.observe(rightForm, { childList: true, subtree: true });
@@ -201,7 +244,7 @@ async function init() {
 
     addSettingsUI();
     setupIntercepts();
-    injectChatPipelineSelector(interceptSend);
+    injectChatPipelineSelector(handlePolycephSend);
 
     const context = SillyTavern.getContext();
     if (context.eventSource && context.eventTypes) {
