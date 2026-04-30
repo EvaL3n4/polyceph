@@ -1,4 +1,5 @@
 import { MODULE_NAME } from './constants.js';
+import { logger } from './logger.js';
 import { getActivePipeline, settings } from './state.js';
 import { stopPipeline } from './engine.js';
 
@@ -243,6 +244,8 @@ export function renderPolycephThoughts() {
         } else {
             $(messageElement).append($thoughtsContainer);
         }
+
+        logger.debug(`Injected ${thoughts.length} thoughts into message ${mesId} (Swipe: ${currentSwipeId})`);
 
         messageElement.setAttribute('polyceph_thoughts_id', thoughtsId);
     });

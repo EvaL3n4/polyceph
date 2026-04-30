@@ -21,6 +21,7 @@
  */
 
 import { MODULE_NAME } from './constants.js';
+import { logger } from './logger.js';
 
 /**
  * Reads the active Chat Completion generation parameters from SillyTavern.
@@ -37,7 +38,7 @@ export function getChatCompletionParams() {
     const cc = ctx.chatCompletionSettings;
 
     if (!cc) {
-        console.warn(`[${MODULE_NAME}] chatCompletionSettings not available.`);
+        logger.warn('chatCompletionSettings not available.');
         return {};
     }
 

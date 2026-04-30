@@ -4,6 +4,7 @@ import { generateId, waitForApiReady } from './utils.js';
 import { expandPrompt } from './macros.js';
 import { getMaxContextTokens, getMaxResponseTokens, countTokens, generateViaApi, postMessageToChat, ensureChatSaved, getWorldInfoForChat, getActiveCharacterInfo, getMainSystemPrompt } from './compat-shared.js';
 import { capturePresetState, restorePresetState, clearPresetState, applyPreset, getCurrentPresetName } from './compat-presets.js';
+import { logger } from './logger.js';
 
 let currentPipelineAbortController = null;
 let currentMutexHolder = null;
@@ -28,7 +29,7 @@ export function isPipelineActive() {
 
 export function stopPipeline() {
     if (currentPipelineAbortController) {
-        console.log(`[${MODULE_NAME}] Pipeline STOP requested.`);
+        logger.info('Pipeline STOP requested.');
         currentPipelineAbortController.abort();
 
         const context = SillyTavern.getContext();
@@ -142,7 +143,7 @@ function parsePromptToMessages(text, api = '') {
 
     // Validation: check for content outside role tags (only for Chat Completion)
     if (hasOrphanedContent && remainingText.trim().length > 0 && api === 'openai') {
-        console.debug(`[${MODULE_NAME}] Prompt contains implicit 'system' content outside [[ROLE:...]] tags.`);
+        logger.debug("Prompt contains implicit 'system' content outside [[ROLE:...]] tags.");
     }
 
     // Validation: check for malformed tags that the regex didn't match
@@ -150,7 +151,7 @@ function parsePromptToMessages(text, api = '') {
         const openCount = (text.match(/\[\[ROLE:/gi) || []).length;
         const closeCount = (text.match(/\[\[\/ROLE\]\]/gi) || []).length;
         if (openCount !== closeCount) {
-            console.warn(`[${MODULE_NAME}] Mismatched role tags: ${openCount} opening vs ${closeCount} closing. Some content may be incorrectly assigned.`);
+            logger.warn(`Mismatched role tags: ${openCount} opening vs ${closeCount} closing. Some content may be incorrectly assigned.`);
         }
     }
 
@@ -181,7 +182,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
         const maxPromptTokens = getMaxContextTokens() - getMaxResponseTokens();
         const promptTokens = await countTokens(prompt);
         if (promptTokens > maxPromptTokens) {
-            console.warn(`[${MODULE_NAME}] Prompt (${promptTokens} tokens) exceeds max prompt budget (${maxPromptTokens} tokens). Generation may be truncated by the API.`);
+            logger.warn(`Prompt (${promptTokens} tokens) exceeds max prompt budget (${maxPromptTokens} tokens). Generation may be truncated by the API.`);
         }
 
         let responseData = "";
@@ -219,7 +220,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
         if (responseData) return responseData;
         return "(Generation returned empty)";
     } catch (err) {
-        console.error(`[${MODULE_NAME}] generation failed:`, err);
+        logger.error('generation failed:', err);
         return "(Error during generation)";
     }
 }
@@ -264,10 +265,10 @@ async function removeTypingIndicator() {
 
 export async function startPipeline(text) {
     try {
-        console.log(`[${MODULE_NAME}] Starting pipeline for text:`, text.substring(0, 50) + '...');
+        logger.info('Starting pipeline for text:', text.substring(0, 50) + '...');
         await runPipeline(text);
     } catch (err) {
-        console.error(`[${MODULE_NAME}] Error starting pipeline:`, err);
+        logger.error('Error starting pipeline:', err);
     }
 }
 
@@ -283,7 +284,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
 
     if (typeof window.is_send_press !== 'undefined') window.is_send_press = true;
 
-    console.log(`[${MODULE_NAME}] runPipeline started`, { userInput: userInput?.substring(0, 50), batchId: generateSwipesForBatchId });
+    logger.info('runPipeline started', { userInput: userInput?.substring(0, 50), batchId: generateSwipesForBatchId });
 
     // Core Event Emulation (Start)
     // We do this FIRST so extensions like Tracker Enhanced use the USER'S stable profile
@@ -294,7 +295,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
             signal: signal
         };
 
-        console.log(`[${MODULE_NAME}] Emitting core generation events (Cooperative mode)...`);
+        logger.debug('Emitting core generation events (Cooperative mode)...');
 
         // Capture mutex first to block other extensions from starting during emulation
         stContext.eventSource.emit(generationMutexEvents.MUTEX_CAPTURED, { extension_name: MODULE_NAME });
@@ -307,11 +308,11 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
         await stContext.eventSource.emit(stContext.eventTypes.GENERATION_AFTER_COMMANDS, 'normal', emulateOptions, false);
 
         // We don't wait for release anymore; we are the holder.
-        console.log(`[${MODULE_NAME}] Mutex captured and core events fired. Proceeding with pipeline.`);
+        logger.debug('Mutex captured and core events fired. Proceeding with pipeline.');
 
         // Mutex is already held from the start of the core events
-        console.log(`[${MODULE_NAME}] Pipeline active with mutex lock.`);
-        console.log(`[${MODULE_NAME}] Core events finished. Active injections:`, Object.keys(stContext.extension_prompts || {}));
+        logger.debug('Pipeline active with mutex lock.');
+        logger.debug('Core events finished. Active injections:', Object.keys(stContext.extension_prompts || {}));
     }
 
     // Capture the current profile so it can be restored after the run
@@ -354,7 +355,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
         batchReasoningMsg = batchMsgs.find(m => m.name === 'Polyceph Reasoning') || null;
     }
 
-    console.log(`[${MODULE_NAME}] Pipeline context initialized. Clean chat size:`, cleanChat.length);
+    logger.debug('Pipeline context initialized. Clean chat size:', cleanChat.length);
 
     // In swipe mode, attach typing indicator to the triggering user message instead of creating a new one
     if (generateSwipesForBatchId && triggeringUserMesId !== -1) {
@@ -370,7 +371,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
     } else {
         await startTypingIndicator();
     }
-    console.log(`[${MODULE_NAME}] Typing indicator started.`);
+    logger.debug('Typing indicator started.');
 
     try {
         const activePipeline = getActivePipeline();
@@ -405,7 +406,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
                 if (signal.aborted) return;
 
                 if (profileId !== 'none' && profileId !== 'Task') {
-                    console.log(`[${MODULE_NAME}] Switching to profile group: ${profileId}`);
+                    logger.info(`Switching to profile group: ${profileId}`);
                     await switchProfile(profileId);
                     if (signal.aborted) return;
                     // Allow ST UI state to settle profile load
@@ -432,12 +433,12 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
                     if (taskPreset !== 'Current') {
                         const currentPreset = getCurrentPresetName();
                         if (currentPreset !== taskPreset) {
-                            console.log(`[${MODULE_NAME}] Applying task preset: "${taskPreset}" (was: "${currentPreset}")`);
+                            logger.info(`Applying task preset: "${taskPreset}" (was: "${currentPreset}")`);
                             presetSwitched = applyPreset(taskPreset);
                             if (presetSwitched) {
                                 await new Promise(r => setTimeout(r, 300));
                             } else {
-                                console.error(`[${MODULE_NAME}] Failed to apply preset "${taskPreset}". It may not exist for the active API.`);
+                                logger.error(`Failed to apply preset "${taskPreset}". It may not exist for the active API.`);
                             }
                         }
                     } else {
@@ -484,9 +485,12 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
                             : (stContext.chatCompletionSettings?.openai_model || '');
                     }
 
+                    logger.debug(`Task Start: "${node.label || node.id}" (Profile: ${profileDisplayName}, API: ${taskApi})`);
+
                     try {
                         // Fully expand the prompt using the new recursive macro system
                         const prompt = await expandPrompt(node.template || '', settings, contextVault, cleanChat, stContext, wiPrompt);
+                        logger.debug(`Task Prompt Resolved (${node.label || node.id}): ${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}`);
 
                         if (signal.aborted) return;
 
@@ -497,6 +501,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
                         for (let attempt = 0; attempt <= maxAttempts; attempt++) {
                             if (signal.aborted) return;
                             let rawRes = await generateQuietly(node.profile, prompt, taskApi, signal);
+                            logger.debug(`Task Response Raw (${node.label || node.id}, Attempt ${attempt + 1}): ${rawRes?.substring(0, 100)}${rawRes?.length > 100 ? '...' : ''}`);
                             if (signal.aborted) return;
 
                             if (!rawRes) {
@@ -678,7 +683,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
                             }
                         }
                     } catch (e) {
-                        console.error(`[${MODULE_NAME}] Task failed: Step ${sIdIndx}, Task ${taskIdIndx}`, e);
+                        logger.error(`Task failed: Step ${sIdIndx}, Task ${taskIdIndx}`, e);
                         resultsByIndex[nodeIndex] = `Error: ${e.message}`;
                     } finally {
                         // Task completion cleanup
@@ -738,20 +743,20 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
         //toastr.success('Pipeline finished.', 'Polyceph');
     } catch (e) {
         toastr.error('Pipeline execution encountered an error.', 'Polyceph');
-        console.error(`[${MODULE_NAME}] Pipeline Error`, e);
+        logger.error('Pipeline Error', e);
     } finally {
         // Give UI a moment to settle before restoration
         await new Promise(r => setTimeout(r, 300));
 
         // Restore the user's original preset and clean up
         if (settings.restore_after_run) {
-            console.log(`[${MODULE_NAME}] Pipeline finished. Restoring original profile and preset state.`);
+            logger.info('Pipeline finished. Restoring original profile and preset state.');
 
             // Create a listener for the restoration completion
             const stContext = SillyTavern.getContext();
             const restorationPromise = new Promise(resolve => {
                 const handler = () => {
-                    console.log(`[${MODULE_NAME}] Detected connection_profile_loaded event.`);
+                    logger.debug('Detected connection_profile_loaded event.');
                     resolve();
                 };
                 stContext.eventSource.once('connection_profile_loaded', handler);
@@ -766,7 +771,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
             clearProfileState();
             clearPresetState();
         } else {
-            console.log(`[${MODULE_NAME}] Pipeline finished. Restoration disabled, staying on current preset.`);
+            logger.info('Pipeline finished. Restoration disabled, staying on current preset.');
             clearProfileState();
             clearPresetState(); // Still clear the state so next run captures fresh
         }
@@ -796,7 +801,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
                     setTimeout(async () => {
                         // 1. Fire core events WHILE HOLDING MUTEX
                         // This ensures background tasks (Summary, Vectors) finish before extensions capture the mutex
-                        console.log(`[${MODULE_NAME}] Firing core events (Holding Mutex)...`);
+                        logger.debug('Firing core events (Holding Mutex)...');
                         stContextEnd.eventSource.emit(stContextEnd.eventTypes.MESSAGE_RECEIVED, lastMessageIdx);
                         stContextEnd.eventSource.emit(stContextEnd.eventTypes.CHARACTER_MESSAGE_RENDERED, lastMessageIdx);
 
@@ -804,7 +809,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
                         await new Promise(r => setTimeout(r, 200));
 
                         // 3. FINALLY RELEASE MUTEX
-                        console.log(`[${MODULE_NAME}] Releasing generation mutex (Teardown Complete).`);
+                        logger.debug('Releasing generation mutex (Teardown Complete).');
                         stContextEnd.eventSource.emit(generationMutexEvents.MUTEX_RELEASED, { extension_name: MODULE_NAME });
                     }, 200);
                 } else {
@@ -814,7 +819,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
             } else {
                 // If core emulation is off, release after a small delay
                 setTimeout(() => {
-                    console.log(`[${MODULE_NAME}] Releasing generation mutex (Simple).`);
+                    logger.debug('Releasing generation mutex (Simple).');
                     stContextEnd.eventSource.emit(generationMutexEvents.MUTEX_RELEASED, { extension_name: MODULE_NAME });
                 }, 200);
             }

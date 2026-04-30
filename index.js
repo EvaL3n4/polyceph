@@ -5,6 +5,7 @@ import { addSettingsUI } from './js/settings-ui.js';
 import { startPipeline, runPipeline } from './js/engine.js';
 import { injectChatPipelineSelector, updateChatSelectorOptions, updateSendButtonVisibility } from './js/chat-ui.js';
 import { postMessageToChat } from './js/compat-shared.js';
+import { logger } from './js/logger.js';
 
 // -------------------------------------------------------------------------
 // Interception Hook
@@ -16,7 +17,7 @@ import { postMessageToChat } from './js/compat-shared.js';
  */
 export async function handlePolycephSend(e) {
     if (settings.activePipelineId === 'none') return;
-    console.log(`[${MODULE_NAME}] Polyceph send button clicked.`);
+    logger.debug('Polyceph send button clicked.');
     if (e) {
         e.preventDefault();
         e.stopPropagation();
@@ -42,7 +43,7 @@ export async function interceptSend(e) {
 
     let text = textarea.value.trim();
     if (text.startsWith('/')) {
-        console.debug(`[${MODULE_NAME}] Slash command detected, bypassing Polyceph intercept.`);
+        logger.debug('Slash command detected, bypassing Polyceph intercept.');
         return;
     }
 
@@ -62,7 +63,7 @@ let lastSendTime = 0;
 async function processSendAction() {
     const now = Date.now();
     if (now - lastSendTime < 500) {
-        console.warn(`[${MODULE_NAME}] Duplicate send action blocked by debouncing (diff: ${now - lastSendTime}ms).`);
+        logger.warn(`Duplicate send action blocked by debouncing (diff: ${now - lastSendTime}ms).`);
         return;
     }
     lastSendTime = now;
@@ -78,7 +79,7 @@ async function processSendAction() {
     if (!text) {
         const lastMsg = context.chat[context.chat.length - 1];
         if (lastMsg && lastMsg.is_user && !lastMsg.extra?.polyceph_typing) {
-            console.log(`[${MODULE_NAME}] Empty input detected. Re-triggering pipeline on last user message.`);
+            logger.info('Empty input detected. Re-triggering pipeline on last user message.');
 
             if (!lastMsg.extra) lastMsg.extra = {};
             lastMsg.extra.polyceph_typing = true;
@@ -95,7 +96,7 @@ async function processSendAction() {
             try {
                 await startPipeline(lastMsg.mes);
             } catch (err) {
-                console.error(`[${MODULE_NAME}] Pipeline re-trigger failed:`, err);
+                logger.error('Pipeline re-trigger failed:', err);
                 toastr.error('Pipeline execution failed.', 'Polyceph');
             }
         }
@@ -129,14 +130,14 @@ async function processSendAction() {
         swipe_info: [{}]
     });
 
-    console.log(`[${MODULE_NAME}] User message added. Chat length after:`, context.chat.length);
+    logger.debug('User message added. Chat length after:', context.chat.length);
     if (typeof context.saveChat === 'function') context.saveChat();
 
     // Start the pipeline and wait for it to complete or at least establish its lock
     try {
         await startPipeline(text);
     } catch (err) {
-        console.error(`[${MODULE_NAME}] Pipeline execution failed:`, err);
+        logger.error('Pipeline execution failed:', err);
         toastr.error('Pipeline execution failed.', 'Polyceph');
     }
 }
@@ -192,7 +193,7 @@ function setupIntercepts() {
         // Intercept form submission (e.g. from extensions or scripts calling form.submit())
         sendForm.addEventListener('submit', (e) => {
             if (settings.activePipelineId !== 'none') {
-                console.log(`[${MODULE_NAME}] Form submit intercepted.`);
+                logger.debug('Form submit intercepted.');
                 e.preventDefault();
                 e.stopPropagation();
                 e.stopImmediatePropagation();
@@ -220,7 +221,7 @@ function setupIntercepts() {
         // Monitor for DOM changes (like enabling impersonate button) to re-inject selector
         const observer = new MutationObserver(() => {
             if (!document.getElementById('polyceph-chat-pipeline-container')) {
-                console.log(`[${MODULE_NAME}] Chat form changed, re-injecting selector.`);
+                logger.debug('Chat form changed, re-injecting selector.');
                 injectChatPipelineSelector(handlePolycephSend);
             }
         });
@@ -240,7 +241,7 @@ function setupIntercepts() {
 // -------------------------------------------------------------------------
 
 async function init() {
-    console.log(`[${MODULE_NAME}] Initializing Polyceph v${VERSION}...`);
+    logger.info(`Initializing Polyceph v${VERSION}...`);
 
     loadSettings();
     syncHiddenMessageVisibility();
@@ -280,7 +281,7 @@ async function init() {
     // Initial render for already existing messages
     renderPolycephThoughts();
 
-    console.log(`[${MODULE_NAME}] Polyceph loaded.`);
+    logger.info('Polyceph loaded.');
 }
 
 if (typeof jQuery !== 'undefined') {

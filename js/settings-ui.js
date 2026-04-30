@@ -2,6 +2,7 @@ import { availableProfiles, availablePresetsByApi, settings, saveSettings, getAv
 import { autoResizeTextarea, generateId } from './utils.js';
 import { MODULE_NAME } from './constants.js';
 import { syncHiddenMessageVisibility } from './ui.js';
+import { setLogLevel, logger } from './logger.js';
 
 function getPresetOptionsHTML(profileId, currentPreset) {
     const profile = availableProfiles.find(p => p.id === profileId);
@@ -11,12 +12,12 @@ function getPresetOptionsHTML(profileId, currentPreset) {
     if (!apiId) {
         apiId = SillyTavern.getContext().mainApi || '';
         fallbackReason = profile ? `Profile "${profile.name}" has no API defined.` : `Profile ID "${profileId}" not found.`;
-        console.warn(`[${MODULE_NAME}] Using fallback API "${apiId}" for preset dropdown. Reason: ${fallbackReason}`);
+        logger.warn(`Using fallback API "${apiId}" for preset dropdown. Reason: ${fallbackReason}`);
     }
 
     const presets = availablePresetsByApi[apiId] || [];
     if (presets.length === 0 && apiId) {
-        console.warn(`[${MODULE_NAME}] No presets found for API "${apiId}" in cache.`);
+        logger.warn(`No presets found for API "${apiId}" in cache.`);
     }
 
     return `<option value="Current" ${(!currentPreset || currentPreset === 'Current') ? 'selected' : ''}>Current Preset</option>` +
@@ -340,6 +341,16 @@ export function createSettingsHTML() {
                                 <input type="checkbox" id="polyceph_emulate_events_checkbox" ${settings.emulateCoreEvents ? 'checked' : ''}>
                                 <label for="polyceph_emulate_events_checkbox" style="cursor: pointer;" title="Allows third-party extensions (like Tracker Enhanced) to interact with Polyceph runs.">Emulate Core Generation Events</label>
                             </div>
+                            <div style="display: flex; align-items: center; gap: 8px; margin-top: 5px;">
+                                <b style="min-width: 120px; font-size: 0.9em; opacity: 0.8;" title="Control the verbosity of console logs.">Log Level</b>
+                                <select id="polyceph_log_level_selector" class="text_pole" style="flex: 1;">
+                                    <option value="0" ${settings.logLevel === 0 ? 'selected' : ''}>None</option>
+                                    <option value="1" ${settings.logLevel === 1 ? 'selected' : ''}>Error</option>
+                                    <option value="2" ${settings.logLevel === 2 ? 'selected' : ''}>Warn</option>
+                                    <option value="3" ${settings.logLevel === 3 ? 'selected' : ''}>Info</option>
+                                    <option value="4" ${settings.logLevel === 4 ? 'selected' : ''}>Debug</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
 
@@ -506,6 +517,12 @@ export function addSettingsUI() {
 
     document.getElementById('polyceph_emulate_events_checkbox')?.addEventListener('change', (e) => {
         settings.emulateCoreEvents = e.target.checked;
+        saveSettings();
+    });
+
+    document.getElementById('polyceph_log_level_selector')?.addEventListener('change', (e) => {
+        settings.logLevel = parseInt(e.target.value);
+        setLogLevel(settings.logLevel);
         saveSettings();
     });
 

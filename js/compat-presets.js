@@ -17,6 +17,7 @@
  */
 
 import { MODULE_NAME } from './constants.js';
+import { logger } from './logger.js';
 
 /**
  * Gets the SillyTavern PresetManager for a specific API.
@@ -28,7 +29,7 @@ import { MODULE_NAME } from './constants.js';
 function getPresetManagerSafe(apiId = '') {
     const ctx = SillyTavern.getContext();
     if (typeof ctx.getPresetManager !== 'function') {
-        console.warn(`[${MODULE_NAME}] getPresetManager not available on this ST version.`);
+        logger.warn('getPresetManager not available on this ST version.');
         return null;
     }
 
@@ -44,7 +45,7 @@ function getPresetManagerSafe(apiId = '') {
         const config = ctx.CONNECT_API_MAP[apiId];
         if (config.selected) {
             canonicalApi = config.selected;
-            console.log(`[${MODULE_NAME}] Mapped API "${apiId}" to canonical "${canonicalApi}" using CONNECT_API_MAP.`);
+            logger.debug(`Mapped API "${apiId}" to canonical "${canonicalApi}" using CONNECT_API_MAP.`);
         }
     }
 
@@ -72,7 +73,7 @@ export function getAvailablePresets(apiId = '') {
         const presets = pm.getAllPresets();
         return Array.isArray(presets) ? presets : [];
     } catch (e) {
-        console.warn(`[${MODULE_NAME}] Error fetching presets for API "${apiId}":`, e);
+        logger.warn(`Error fetching presets for API "${apiId}":`, e);
         return [];
     }
 }
@@ -114,13 +115,13 @@ export function applyPreset(name) {
     try {
         const currentName = pm.getSelectedPresetName();
         if (currentName === name) {
-            console.log(`[${MODULE_NAME}] Preset "${name}" already active.`);
+            logger.debug(`Preset "${name}" already active.`);
             return true;
         }
 
         const allPresets = pm.getAllPresets();
         if (!Array.isArray(allPresets) || allPresets.length === 0) {
-            console.warn(`[${MODULE_NAME}] No presets available for current API.`);
+            logger.warn('No presets available for current API.');
             return false;
         }
 
@@ -131,15 +132,15 @@ export function applyPreset(name) {
             const presetValue = pm.findPreset(exactMatch);
             if (presetValue != null) {
                 pm.selectPreset(presetValue);
-                console.log(`[${MODULE_NAME}] Preset switched to "${exactMatch}".`);
+                logger.info(`Preset switched to "${exactMatch}".`);
                 return true;
             }
         }
 
-        console.warn(`[${MODULE_NAME}] Preset "${name}" not found.`);
+        logger.warn(`Preset "${name}" not found.`);
         return false;
     } catch (e) {
-        console.error(`[${MODULE_NAME}] Error applying preset "${name}":`, e);
+        logger.error(`Error applying preset "${name}":`, e);
         return false;
     }
 }
@@ -161,9 +162,9 @@ let _capturedPresetName = null;
 export function capturePresetState() {
     if (_capturedPresetName === null) {
         _capturedPresetName = getCurrentPresetName();
-        console.log(`[${MODULE_NAME}] Preset state captured: "${_capturedPresetName}".`);
+        logger.debug(`Preset state captured: "${_capturedPresetName}".`);
     } else {
-        console.log(`[${MODULE_NAME}] Preset state already captured: "${_capturedPresetName}". Skipping.`);
+        logger.debug(`Preset state already captured: "${_capturedPresetName}". Skipping.`);
     }
     return _capturedPresetName;
 }
@@ -185,17 +186,17 @@ export function getCapturedPresetName() {
  */
 export function restorePresetState() {
     if (!_capturedPresetName) {
-        console.log(`[${MODULE_NAME}] No captured preset state to restore.`);
+        logger.debug('No captured preset state to restore.');
         return true;
     }
 
     const current = getCurrentPresetName();
     if (current === _capturedPresetName) {
-        console.log(`[${MODULE_NAME}] Preset already at captured state "${_capturedPresetName}".`);
+        logger.debug(`Preset already at captured state "${_capturedPresetName}".`);
         return true;
     }
 
-    console.log(`[${MODULE_NAME}] Restoring preset from "${current}" to "${_capturedPresetName}".`);
+    logger.info(`Restoring preset from "${current}" to "${_capturedPresetName}".`);
     const result = applyPreset(_capturedPresetName);
     return result;
 }

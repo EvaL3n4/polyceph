@@ -28,6 +28,7 @@
  */
 
 import { MODULE_NAME } from './constants.js';
+import { logger } from './logger.js';
 
 // ---------------------------------------------------------------------------
 // Stopping Strings
@@ -102,7 +103,7 @@ function getCustomStoppingStrings(powerUser) {
 
         return strings;
     } catch (error) {
-        console.warn(`[${MODULE_NAME}] Error parsing custom stopping strings:`, error);
+        logger.warn('Error parsing custom stopping strings:', error);
         return [];
     }
 }
@@ -311,14 +312,14 @@ export async function generateViaApi(messages) {
     }
 
     if (typeof context.generateQuietPrompt === 'function') {
-        console.warn(`[${MODULE_NAME}] generateRaw not found, falling back to generateQuietPrompt.`);
+        logger.warn('generateRaw not found, falling back to generateQuietPrompt.');
         // generateQuietPrompt doesn't support arrays natively in all versions,
         // so we pass the flattened string. ST will wrap it in 'user' role.
         const flattened = messages.map(m => m.content).join('\n\n');
         return await context.generateQuietPrompt({ quietPrompt: flattened });
     }
 
-    console.warn(`[${MODULE_NAME}] generateQuietPrompt not found, falling back to slash command.`);
+    logger.warn('generateQuietPrompt not found, falling back to slash command.');
     const flattened = messages.map(m => m.content).join('\n\n');
     const escaped = flattened.replace(/"/g, '\\"').replace(/\n/g, '\\n');
     const result = await context.executeSlashCommandsWithOptions(`/gen ${escaped}`, {
@@ -386,27 +387,27 @@ export async function ensureChatSaved(timeout = 5000) {
     const context = SillyTavern.getContext();
     
     if (typeof context.saveChat === 'function') {
-        console.log('[polyceph] ensureChatSaved: Synchronizing chat to disk...');
+        logger.debug('ensureChatSaved: Synchronizing chat to disk...');
         
         // If it's already saving, give it a moment to finish naturally
         if (window.isChatSaving) {
-            console.log('[polyceph] ensureChatSaved: Save already in progress, waiting...');
+            logger.debug('ensureChatSaved: Save already in progress, waiting...');
             await pollCondition(() => window.isChatSaving === false, 2000);
         }
 
         // Forcibly clear the flag if it's still stuck (SillyTavern sometimes leaks this flag)
         if (window.isChatSaving) {
-            console.warn('[polyceph] ensureChatSaved: isChatSaving flag stuck! Forcing reset.');
+            logger.warn('ensureChatSaved: isChatSaving flag stuck! Forcing reset.');
             window.isChatSaving = false;
         }
 
         try {
             // saveChat returns a promise that resolves when the server confirms the save
             await context.saveChat();
-            console.log('[polyceph] ensureChatSaved: Chat save confirmed on disk.');
+            logger.debug('ensureChatSaved: Chat save confirmed on disk.');
             return true;
         } catch (e) {
-            console.error('[polyceph] ensureChatSaved: Failed to save chat:', e);
+            logger.error('ensureChatSaved: Failed to save chat:', e);
             return false;
         }
     }
@@ -485,7 +486,7 @@ export async function getWorldInfoForChat(chat) {
     const ctx = SillyTavern.getContext();
 
     if (typeof ctx.getWorldInfoPrompt !== 'function') {
-        console.warn(`[${MODULE_NAME}] getWorldInfoPrompt not available.`);
+        logger.warn('getWorldInfoPrompt not available.');
         return '';
     }
 

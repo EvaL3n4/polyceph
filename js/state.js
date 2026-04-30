@@ -1,6 +1,7 @@
 import { MODULE_NAME, defaultSettings } from './constants.js';
 import { waitForApiReady } from './utils.js';
 import { capturePresetState, restorePresetState, clearPresetState, getAvailablePresets } from './compat-presets.js';
+import { setLogLevel, logger } from './logger.js';
 
 export let settings = { ...defaultSettings };
 export let availableProfiles = []; // Array of {id, name, api}
@@ -15,10 +16,10 @@ export async function switchProfile(profileId) {
     const cmSettings = context.extensionSettings?.['connectionManager'];
     const currentProfileId = cmSettings?.selectedProfile;
 
-    console.log(`[${MODULE_NAME}] switchProfile debug: target=${profileId}, current=${currentProfileId}`);
+    logger.debug(`switchProfile debug: target=${profileId}, current=${currentProfileId}`);
 
     if (currentProfileId && currentProfileId === profileId) {
-        console.log(`[${MODULE_NAME}] switchProfile: profile ${profileId} already active. Skipping switch.`);
+        logger.debug(`switchProfile: profile ${profileId} already active. Skipping switch.`);
         return true;
     }
 
@@ -26,14 +27,14 @@ export async function switchProfile(profileId) {
     const profileName = prof ? prof.name : profileId;
 
     if (profileName === 'Task' || profileName === 'none') {
-        console.log(`[${MODULE_NAME}] switchProfile: skipping for ${profileName}`);
+        logger.debug(`switchProfile: skipping for ${profileName}`);
         return true;
     }
 
     // Capture preset state before the connection switch resets it
     capturePresetState();
 
-    console.log(`[${MODULE_NAME}] switchProfile: switching to "${profileName}" (id: ${profileId})`);
+    logger.info(`switchProfile: switching to "${profileName}" (id: ${profileId})`);
     const quotedName = profileName.includes(' ') ? `"${profileName}"` : profileName;
     try {
         await context.executeSlashCommandsWithOptions(`/profile ${quotedName}`, {
@@ -51,7 +52,7 @@ export async function switchProfile(profileId) {
 
         return true;
     } catch (e) {
-        console.error(`[${MODULE_NAME}] Error switching profile to ${profileName}:`, e);
+        logger.error(`Error switching profile to ${profileName}:`, e);
         return false;
     }
 }
@@ -65,7 +66,7 @@ export function captureProfileState() {
     if (_capturedProfileId === null) {
         const context = SillyTavern.getContext();
         _capturedProfileId = context.extensionSettings?.['connectionManager']?.selectedProfile;
-        console.log(`[${MODULE_NAME}] Profile state captured: "${_capturedProfileId}".`);
+        logger.debug(`Profile state captured: "${_capturedProfileId}".`);
     }
 }
 
@@ -74,18 +75,18 @@ export function captureProfileState() {
  */
 export async function restoreProfileState() {
     if (!_capturedProfileId) {
-        console.log(`[${MODULE_NAME}] No captured profile state to restore.`);
+        logger.debug('No captured profile state to restore.');
         return true;
     }
 
     const context = SillyTavern.getContext();
     const current = context.extensionSettings?.['connectionManager']?.selectedProfile;
     if (current === _capturedProfileId) {
-        console.log(`[${MODULE_NAME}] Profile already at captured state "${_capturedProfileId}".`);
+        logger.debug(`Profile already at captured state "${_capturedProfileId}".`);
         return true;
     }
 
-    console.log(`[${MODULE_NAME}] Restoring profile to "${_capturedProfileId}".`);
+    logger.info(`Restoring profile to "${_capturedProfileId}".`);
     return await switchProfile(_capturedProfileId);
 }
 
@@ -148,12 +149,12 @@ export async function getAvailableProfiles() {
         }
 
         if (profilesData) {
-            console.log(`[${MODULE_NAME}] Found profiles in SillyTavern context:`, profilesData);
+            logger.debug('Found profiles in SillyTavern context:', profilesData);
             return processProfiles(profilesData);
         }
 
         // Fallback: Fetch from API
-        console.log(`[${MODULE_NAME}] Profiles not in context, fetching from API...`);
+        logger.debug('Profiles not in context, fetching from API...');
         const response = await fetch('/api/settings/get', { method: 'POST' });
         const data = await response.json();
         const possibleLocs = [
@@ -167,12 +168,12 @@ export async function getAvailableProfiles() {
 
         for (const loc of possibleLocs) {
             if (loc) {
-                console.log(`[${MODULE_NAME}] Found profiles at location:`, loc);
+                logger.debug('Found profiles at location:', loc);
                 return processProfiles(loc);
             }
         }
     } catch (e) {
-        console.error(`[${MODULE_NAME}] Error fetching profiles:`, e);
+        logger.error('Error fetching profiles:', e);
     }
     return [];
 }
@@ -186,7 +187,7 @@ function processProfiles(loc) {
             if (typeof p === 'string') return { id: p, name: p, api: '', model: '' };
             const api = p.api || p.mode || p.main_api || '';
             const model = p.model || p.openai_model || '';
-            if (!api) console.warn(`[${MODULE_NAME}] Profile object missing API:`, p);
+            if (!api) logger.warn('Profile object missing API:', p);
             return { id: p.id || p.name, name: p.name || p.id, api: api, model: model };
         });
     } else if (typeof loc === 'object') {
@@ -194,7 +195,7 @@ function processProfiles(loc) {
             const p = loc[key];
             const api = p.api || p.mode || p.main_api || '';
             const model = p.model || p.openai_model || '';
-            if (!api) console.warn(`[${MODULE_NAME}] Profile object missing API:`, p);
+            if (!api) logger.warn('Profile object missing API:', p);
             return {
                 id: key,
                 name: p.name || key,
@@ -203,7 +204,7 @@ function processProfiles(loc) {
             };
         });
     }
-    console.log(`[${MODULE_NAME}] Extracted profiles:`, availableProfiles);
+    logger.debug('Extracted profiles:', availableProfiles);
     return availableProfiles;
 }
 
@@ -218,14 +219,14 @@ export function refreshPresets() {
 
     // Always include main API
     if (mainApi) {
-        console.log(`[${MODULE_NAME}] Adding main API to refresh: ${mainApi}`);
+        logger.debug(`Adding main API to refresh: ${mainApi}`);
         apis.add(mainApi);
     }
 
     // Add APIs from profiles
     for (const profile of availableProfiles) {
         if (profile.api && !apis.has(profile.api)) {
-            console.log(`[${MODULE_NAME}] Adding profile API to refresh: ${profile.api} (from profile: ${profile.name})`);
+            logger.debug(`Adding profile API to refresh: ${profile.api} (from profile: ${profile.name})`);
             apis.add(profile.api);
         }
     }
@@ -237,7 +238,7 @@ export function refreshPresets() {
     }
 
     availablePresetsByApi = newPresets;
-    console.log(`[${MODULE_NAME}] Refreshed presets for APIs:`, Object.keys(availablePresetsByApi));
+    logger.debug('Refreshed presets for APIs:', Object.keys(availablePresetsByApi));
     return availablePresetsByApi;
 }
 
@@ -263,9 +264,10 @@ export function loadSettings() {
             delete saved.steps;
         }
 
-        // Migration: enabled -> activePipelineId = 'none'
-        if (saved.enabled === false) {
-            saved.activePipelineId = 'none';
+        // Migration: debugMode -> logLevel
+        if (saved.debugMode !== undefined && saved.logLevel === undefined) {
+            saved.logLevel = saved.debugMode ? 4 : 2;
+            delete saved.debugMode;
         }
         delete saved.enabled;
 
@@ -313,5 +315,8 @@ export function loadSettings() {
                 });
             });
         });
+
+        // Initialize logger state
+        setLogLevel(settings.logLevel);
     }
 }

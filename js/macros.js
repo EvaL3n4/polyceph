@@ -1,4 +1,5 @@
 import { countTokens, getMaxContextTokens, getMaxResponseTokens, getMaxPromptTokens } from './compat-shared.js';
+import { logger } from './logger.js';
 
 /**
  * Resolves Polyceph-specific chat history macros.
@@ -126,6 +127,7 @@ export function resolveChatHistory(text, cleanChat, stContext) {
             }
         }
 
+        logger.debug(`Resolved {{chat_history}} with ${history.length} messages (Params: ${params || 'none'})`);
         return history.join('\n\n');
     });
 }
@@ -148,7 +150,7 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt) {
         ChatCompletion = oaiModule.ChatCompletion;
         Message = oaiModule.Message;
     } catch (err) {
-        console.error('[polyceph] Failed to import native SillyTavern classes. Token-aware trimming will be disabled.', err);
+        logger.error('Failed to import native SillyTavern classes. Token-aware trimming will be disabled.', err);
         return text.replace(/\{\{cc_all_prompts(?:\(budget=(\d+)\))?\}\}/g, '(Error: Native ST classes missing)');
     }
 
@@ -278,7 +280,7 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt) {
             if (content.trim()) allPrompts.push(content.trim());
         }
 
-        console.log(`[polyceph] CC Macro Resolution - Budget: ${historyBudget}, Overhead: ${shadowTokens}, Context: ${maxContext}`);
+        logger.debug(`CC Macro Resolution - Budget: ${historyBudget}, Overhead: ${shadowTokens}, Context: ${maxContext}`);
         
         const combined = allPrompts.join('\n\n');
         result = result.replace(/\{\{cc_all_prompts\}\}/g, combined);
@@ -300,6 +302,11 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt) {
  */
 export async function expandPrompt(template, settings, contextVault, cleanChat, stContext, wiPrompt) {
     let result = template || '';
+
+    const macroMatch = result.match(/\{\{[^}]+\}\}/g);
+    if (macroMatch) {
+        logger.debug(`Expanding template with macros: ${macroMatch.join(', ')}`);
+    }
 
     // 1. Resolve recursive {{polyceph_prompt}}
     const globalPrompt = settings.polycephPrompt || '';
