@@ -351,7 +351,7 @@ export async function generateViaApi(messages) {
 function normalizeApiForIcon(api) {
     if (!api) return '';
     const normalized = api.toLowerCase();
-    
+
     // Standard mappings for multi-mode APIs and aliases
     if (normalized.startsWith('openrouter')) return 'openrouter';
     if (normalized.startsWith('openai')) return 'openai';
@@ -359,7 +359,7 @@ function normalizeApiForIcon(api) {
     if (normalized === 'google') return 'makersuite';
     if (normalized === 'makersuite') return 'makersuite';
     if (normalized === 'horde') return 'koboldhorde';
-    
+
     return normalized;
 }
 
@@ -385,10 +385,10 @@ import { pollCondition } from './utils.js';
  */
 export async function ensureChatSaved(timeout = 5000) {
     const context = SillyTavern.getContext();
-    
+
     if (typeof context.saveChat === 'function') {
         logger.debug('ensureChatSaved: Synchronizing chat to disk...');
-        
+
         // If it's already saving, give it a moment to finish naturally
         if (window.isChatSaving) {
             logger.debug('ensureChatSaved: Save already in progress, waiting...');
@@ -414,7 +414,7 @@ export async function ensureChatSaved(timeout = 5000) {
     return true;
 }
 
-export function postMessageToChat({ content, name = 'Assistant', isUser = false, forceAvatar = '', extra = {}, save = true, api = '', model = '', silent = false }) {
+export async function postMessageToChat({ content, name = 'Assistant', isUser = false, forceAvatar = '', extra = {}, save = true, api = '', model = '', silent = false }) {
     const ctx = SillyTavern.getContext();
     const isSilentEmulation = ctx.extensionSettings?.polyceph?.emulateCoreEvents;
 
@@ -427,7 +427,7 @@ export function postMessageToChat({ content, name = 'Assistant', isUser = false,
         polyceph_source: 'polyceph',
         is_silent: silent
     };
-    
+
     const msg = {
         name: name,
         is_user: isUser,

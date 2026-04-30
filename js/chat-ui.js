@@ -24,7 +24,7 @@ export function injectChatPipelineSelector(sendHandler) {
     label.id = 'polyceph-chat-pipeline-label';
     label.className = 'polyceph-chat-pipeline-label';
     label.title = 'Polyceph Pipeline';
-    
+
     const dropdown = document.createElement('div');
     dropdown.id = 'polyceph-chat-pipeline-dropdown';
     dropdown.className = 'polyceph-custom-dropdown';
@@ -32,11 +32,11 @@ export function injectChatPipelineSelector(sendHandler) {
     const icon = document.createElement('span');
     icon.className = 'polyceph-chat-pipeline-icon';
     icon.innerText = '☍';
-    
+
     const toggleMenu = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        
+
         // Populate dropdown
         let html = `<div class="polyceph-dropdown-item ${settings.activePipelineId === 'none' ? 'selected' : ''}" data-value="none">None</div>`;
         settings.pipelines.forEach(p => {
@@ -64,7 +64,7 @@ export function injectChatPipelineSelector(sendHandler) {
                 const val = e.target.getAttribute('data-value');
                 settings.activePipelineId = val;
                 saveSettings();
-                updateChatSelectorOptions(); 
+                updateChatSelectorOptions();
                 updateSendButtonVisibility();
                 dropdown.classList.remove('active');
 
@@ -98,7 +98,7 @@ export function injectChatPipelineSelector(sendHandler) {
     polySendBut.className = 'polyceph-send-button interactable';
     polySendBut.title = 'Send via Polyceph';
     polySendBut.style.display = 'none';
-    
+
     const polySendIcon = document.createElement('i');
     polySendIcon.className = 'fa-solid fa-paper-plane';
     polySendBut.appendChild(polySendIcon);
@@ -168,11 +168,11 @@ export function updateSendButtonVisibility() {
     if (container) {
         if (isActive && settings.showPipelineSelector !== false) {
             container.classList.remove('polyceph-hidden');
-            
+
             // Icon visibility
             const icon = container.querySelector('.polyceph-chat-pipeline-icon');
             if (icon) icon.style.display = (settings.showPipelineIcon !== false) ? 'flex' : 'none';
-            
+
             // Label visibility (Compact mode)
             const label = container.querySelector('#polyceph-chat-pipeline-label');
             if (label) {
@@ -189,19 +189,41 @@ export function updateSendButtonVisibility() {
 
     if (isActive) {
         if (isRunning) {
-            // Pipeline running: show Polyceph stop button, hide everything else
+            // Pipeline running
             polyStopBut.style.display = 'flex';
-            polySendBut.style.display = 'none';
-            stSendBut.style.display = 'none';
-            if (stStopBut) stStopBut.style.display = 'none'; // Hide ST stop button if we are using ours
+
+            if (isIntercept) {
+                // Legacy Mode: ST Send was clicked. Polyceph Send wasn't used.
+                polySendBut.style.display = 'flex';
+                polySendBut.style.opacity = '0.5';
+                polySendBut.style.pointerEvents = 'none';
+                polySendBut.classList.add('polyceph-disabled');
+            } else {
+                // Custom Button Mode: Polyceph Send was clicked.
+                polySendBut.style.display = 'none';
+                if (stSendBut) {
+                    stSendBut.style.display = 'flex';
+                    stSendBut.style.opacity = '0.5';
+                    stSendBut.style.pointerEvents = 'none';
+                    stSendBut.classList.add('polyceph-disabled');
+                }
+            }
         } else {
             // Pipeline not running
             polyStopBut.style.display = 'none';
-            
+            polySendBut.style.opacity = '1';
+            polySendBut.style.pointerEvents = 'auto';
+            polySendBut.classList.remove('polyceph-disabled');
+            if (stSendBut) {
+                stSendBut.style.opacity = '1';
+                stSendBut.style.pointerEvents = 'auto';
+                stSendBut.classList.remove('polyceph-disabled');
+            }
+
             if (isIntercept) {
                 // Legacy Mode: Use ST's button, hide ours
                 polySendBut.style.display = 'none';
-                stSendBut.style.display = ''; 
+                stSendBut.style.display = '';
             } else {
                 // Custom Button Mode: Show ours
                 polySendBut.style.display = 'flex';

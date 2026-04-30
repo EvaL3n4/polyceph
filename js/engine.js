@@ -39,14 +39,31 @@ export function stopPipeline() {
             context.abortGeneration();
         }
 
-        // Mark indicator as stopping for visual feedback
-        const typingMsg = context.chat.find(m => m && m.extra && m.extra.polyceph_typing);
-        if (typingMsg) {
-            typingMsg.extra.polyceph_stopping = true;
+        // Mark indicator
+        const typingIdx = context.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
+        if (typingIdx !== -1) {
+            const userMsg = context.chat[typingIdx];
+            userMsg.extra.polyceph_active_tasks = [];
             updateTypingIndicator();
         }
 
         toastr.warning('Stopping pipeline...', 'Polyceph');
+    }
+}
+
+/**
+ * Brute-force ensures the SillyTavern stop button is hidden and UI state is reset.
+ * Overwrites residual inline styles from third-party extensions.
+ */
+export function forceHideStopButton() {
+    const context = SillyTavern.getContext();
+    const stopBtn = document.getElementById('mes_stop');
+    if (stopBtn) stopBtn.style.display = 'none';
+
+    if (typeof context.activateSendButtons === 'function') {
+        context.activateSendButtons();
+    } else if (typeof window.is_send_press !== 'undefined') {
+        window.is_send_press = false;
     }
 }
 
@@ -226,12 +243,25 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
 }
 
 async function startTypingIndicator() {
-    // No-op: Indicator is now attached to the user message in index.js
+    const stContext = SillyTavern.getContext();
+    const typingIdx = stContext.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
+    if (typingIdx === -1) return;
+    const lastMsgIdx = stContext.chat.length - 1;
+    const lastMsg = stContext.chat[lastMsgIdx];
+    if (lastMsg) {
+        if (!lastMsg.extra) lastMsg.extra = {};
+        lastMsg.extra.polyceph_typing = true;
+        lastMsg.extra.polyceph_active_tasks = [];
+        if (typeof stContext.updateMessageBlock === 'function') {
+            stContext.updateMessageBlock(lastMsgIdx, lastMsg);
+        }
+    }
 }
 
 function updateTypingIndicator() {
     const stContext = SillyTavern.getContext();
     const typingIdx = stContext.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
+    logger.debug('updateTypingIndicator', { typingIdx, hasMsg: !!stContext.chat[typingIdx], activeTasks: stContext.chat[typingIdx]?.extra?.polyceph_active_tasks });
     if (typingIdx !== -1 && stContext.chat[typingIdx]) {
         if (typeof stContext.updateMessageBlock === 'function') {
             stContext.updateMessageBlock(typingIdx, stContext.chat[typingIdx]);
@@ -263,10 +293,10 @@ async function removeTypingIndicator() {
     if (typeof context.saveChat === 'function') context.saveChat();
 }
 
-export async function startPipeline(text) {
+export async function startPipeline(text, generateSwipesForBatchId, triggeringUserMesId = -1) {
     try {
         logger.info('Starting pipeline for text:', text.substring(0, 50) + '...');
-        await runPipeline(text);
+        await runPipeline(text, generateSwipesForBatchId, triggeringUserMesId);
     } catch (err) {
         logger.error('Error starting pipeline:', err);
     }
@@ -286,6 +316,22 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
 
     logger.info('runPipeline started', { userInput: userInput?.substring(0, 50), batchId: generateSwipesForBatchId });
 
+    // Start typing indicator immediately so users and extensions see it
+    if (generateSwipesForBatchId && triggeringUserMesId !== -1) {
+        const userMsg = stContext.chat[triggeringUserMesId];
+        if (userMsg) {
+            if (!userMsg.extra) userMsg.extra = {};
+            userMsg.extra.polyceph_typing = true;
+            userMsg.extra.polyceph_active_tasks = [];
+            if (typeof stContext.updateMessageBlock === 'function') {
+                stContext.updateMessageBlock(triggeringUserMesId, userMsg);
+            }
+        }
+    } else {
+        await startTypingIndicator();
+    }
+    logger.debug('Typing indicator started.');
+
     // Core Event Emulation (Start)
     // We do this FIRST so extensions like Tracker Enhanced use the USER'S stable profile
     if (settings.emulateCoreEvents && stContext.eventSource && stContext.eventTypes) {
@@ -302,12 +348,37 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
         // Give extensions a moment to process the "Started" event
         await new Promise(r => setTimeout(r, 100));
 
+        // Release the early mutex lock from index.js so pre-generation extensions can act
+        await stContext.eventSource.emit(generationMutexEvents.MUTEX_RELEASED, { extension_name: MODULE_NAME });
+
+        // Add custom typing status to the Polyceph typing indicator
+        const typingIdx = stContext.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
+        const typingMsg = typingIdx !== -1 ? stContext.chat[typingIdx] : null;
+        const isPolycephTyping = !!typingMsg;
+        logger.debug('Extension wait phase', { isPolycephTyping, typingIdx, hasExtra: !!typingMsg?.extra });
+        if (isPolycephTyping) {
+            if (!typingMsg.extra.polyceph_active_tasks) typingMsg.extra.polyceph_active_tasks = [];
+            typingMsg.extra.polyceph_active_tasks.push({
+                id: 'waiting',
+                step: 1,
+                totalSteps: 1,
+                label: 'Waiting for Extensions...',
+                profile: 'System'
+            });
+            updateTypingIndicator();
+        }
+
+        // Small delay to ensure extension-internal state is synchronized
+        await new Promise(r => setTimeout(r, 50));
+
+        // Keep 'Waiting for Extensions' visible until first task starts
+        // (Removing the filter block that previously cleared it immediately)
+
+
         await stContext.eventSource.emit(stContext.eventTypes.GENERATION_AFTER_COMMANDS, 'normal', emulateOptions, false);
 
-        // Capture mutex AFTER core events.
-        // This allows pre-generation extensions (like Tracker-Enhanced) to freely capture the mutex, 
-        // generate their prompts, and inject them before Polyceph locks the state for its pipeline.
-        stContext.eventSource.emit(generationMutexEvents.MUTEX_CAPTURED, { extension_name: MODULE_NAME });
+        // Recapture mutex AFTER core events for the actual pipeline execution.
+        await stContext.eventSource.emit(generationMutexEvents.MUTEX_CAPTURED, { extension_name: MODULE_NAME });
 
         logger.debug('Mutex captured and core events fired. Proceeding with pipeline.');
         logger.debug('Pipeline active with mutex lock.');
@@ -356,23 +427,17 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
 
     logger.debug('Pipeline context initialized. Clean chat size:', cleanChat.length);
 
-    // In swipe mode, attach typing indicator to the triggering user message instead of creating a new one
-    if (generateSwipesForBatchId && triggeringUserMesId !== -1) {
-        const userMsg = stContext.chat[triggeringUserMesId];
-        if (userMsg) {
-            if (!userMsg.extra) userMsg.extra = {};
-            userMsg.extra.polyceph_typing = true;
-            userMsg.extra.polyceph_active_tasks = [];
-            if (typeof stContext.updateMessageBlock === 'function') {
-                stContext.updateMessageBlock(triggeringUserMesId, userMsg);
+    try {
+        // Cleanup 'waiting' task if it exists from the emulation phase
+        const cleanTypingIdx = stContext.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
+        const typingMsg = cleanTypingIdx !== -1 ? stContext.chat[cleanTypingIdx] : null;
+        if (typingMsg && typingMsg.extra && typingMsg.extra.polyceph_active_tasks) {
+            const hasWaiting = typingMsg.extra.polyceph_active_tasks.some(t => t.id === 'waiting');
+            if (hasWaiting) {
+                typingMsg.extra.polyceph_active_tasks = typingMsg.extra.polyceph_active_tasks.filter(t => t.id !== 'waiting');
+                updateTypingIndicator();
             }
         }
-    } else {
-        await startTypingIndicator();
-    }
-    logger.debug('Typing indicator started.');
-
-    try {
         const activePipeline = getActivePipeline();
         const totalSteps = activePipeline.steps.length;
 
@@ -451,9 +516,9 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
 
                     // Update Progress Metadata
                     nodesStartedInStep++;
-                    const currentTypingIdx = stContext.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
-                    if (currentTypingIdx !== -1) {
-                        const typingMsg = stContext.chat[currentTypingIdx];
+                    const typingIdx = stContext.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
+                    if (typingIdx !== -1) {
+                        const typingMsg = stContext.chat[typingIdx];
                         if (!typingMsg.extra.polyceph_active_tasks) typingMsg.extra.polyceph_active_tasks = [];
 
                         const taskMetadata = {
@@ -686,9 +751,9 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
                         resultsByIndex[nodeIndex] = `Error: ${e.message}`;
                     } finally {
                         // Task completion cleanup
-                        const endTypingIdx = stContext.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
-                        if (endTypingIdx !== -1) {
-                            const typingMsg = stContext.chat[endTypingIdx];
+                        const typingIdx = stContext.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
+                        if (typingIdx !== -1) {
+                            const typingMsg = stContext.chat[typingIdx];
                             if (typingMsg.extra.polyceph_active_tasks) {
                                 typingMsg.extra.polyceph_active_tasks = typingMsg.extra.polyceph_active_tasks.filter(t => t.id !== node.id);
                                 updateTypingIndicator();
@@ -780,10 +845,10 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
 
         // Final Event Emulation & Mutex Release
         if (stContextEnd.eventSource) {
-            stContextEnd.eventSource.emit('polyceph-pipeline-ended');
+
 
             // 1. Mark ST as idle so it doesn't reject restoration requests
-            if (typeof window.is_send_press !== 'undefined') window.is_send_press = false;
+            forceHideStopButton();
 
             // 2. Ensure chat is saved to disk before releasing mutex
             await ensureChatSaved();
@@ -795,31 +860,59 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
             // 4. Core Event Emulation (End) - Move here to ensure state is restored and unlocked
             if (settings.emulateCoreEvents && stContextEnd.eventSource && stContextEnd.eventTypes) {
                 const lastMessageIdx = stContextEnd.chat.length - 1;
-                if (stContextEnd.chat[lastMessageIdx]?.extra?.polyceph_source === 'polyceph') {
+                const isPolycephMsg = stContextEnd.chat[lastMessageIdx]?.extra?.polyceph_source === 'polyceph';
+
+                if (isPolycephMsg) {
                     // Detach from current tick to allow UI to settle
                     setTimeout(async () => {
-                        // 1. Fire core events WHILE HOLDING MUTEX
-                        // This ensures background tasks (Summary, Vectors) finish before extensions capture the mutex
-                        logger.debug('Firing core events (Holding Mutex)...');
-                        stContextEnd.eventSource.emit(stContextEnd.eventTypes.MESSAGE_RECEIVED, lastMessageIdx);
-                        stContextEnd.eventSource.emit(stContextEnd.eventTypes.CHARACTER_MESSAGE_RENDERED, lastMessageIdx);
+                        // 1. Reset ST UI state before firing events to ensure extensions perceive the correct initial state
+                        forceHideStopButton();
 
-                        // 2. Settle period - Wait for background tasks to hit the backend
+                        logger.debug('Teardown: Firing core events while holding mutex.');
+                        await stContextEnd.eventSource.emit(stContextEnd.eventTypes.MESSAGE_RECEIVED, lastMessageIdx);
+                        await stContextEnd.eventSource.emit(stContextEnd.eventTypes.CHARACTER_MESSAGE_RENDERED, lastMessageIdx);
+
+                        // Settle period - Wait for background tasks to hit the backend
                         await new Promise(r => setTimeout(r, 200));
 
-                        // 3. FINALLY RELEASE MUTEX
-                        logger.debug('Releasing generation mutex (Teardown Complete).');
-                        stContextEnd.eventSource.emit(generationMutexEvents.MUTEX_RELEASED, { extension_name: MODULE_NAME });
+                        logger.debug('Teardown: Releasing mutex (Cooperative).');
+                        await stContextEnd.eventSource.emit(generationMutexEvents.MUTEX_RELEASED, { extension_name: MODULE_NAME });
+
+                        // Fire native ST stop events so the core UI hides #mes_stop
+                        await stContextEnd.eventSource.emit(stContextEnd.eventTypes.GENERATION_STOPPED, 'normal', { automatic_trigger: true }, false);
+                        await stContextEnd.eventSource.emit(stContextEnd.eventTypes.GENERATION_AFTER_DATA, 'normal', { automatic_trigger: true }, false);
+
+                        // 2. Final safety reset. Some extensions (like Tracker-Enhanced) might have re-shown the button during the events above.
+                        // We wait a moment for their async tasks to settle before enforcing the hidden state.
+                        setTimeout(() => {
+                            forceHideStopButton();
+                            stContextEnd.eventSource.emit('polyceph-pipeline-ended');
+                        }, 200);
                     }, 200);
                 } else {
-                    // Release if source doesn't match
+                    logger.debug('Teardown: Last message not from Polyceph. Releasing mutex immediately.');
+
+                    forceHideStopButton();
+
                     stContextEnd.eventSource.emit(generationMutexEvents.MUTEX_RELEASED, { extension_name: MODULE_NAME });
+
+                    // Fire native ST stop events so the core UI hides #mes_stop
+                    stContextEnd.eventSource.emit(stContextEnd.eventTypes.GENERATION_STOPPED, 'normal', { automatic_trigger: true }, false);
+
+                    stContextEnd.eventSource.emit('polyceph-pipeline-ended');
                 }
             } else {
                 // If core emulation is off, release after a small delay
                 setTimeout(() => {
-                    logger.debug('Releasing generation mutex (Simple).');
+                    forceHideStopButton();
+
+                    logger.debug('Teardown: Releasing mutex (Simple/No Emulation).');
                     stContextEnd.eventSource.emit(generationMutexEvents.MUTEX_RELEASED, { extension_name: MODULE_NAME });
+
+                    // Fire native ST stop events so the core UI hides #mes_stop
+                    stContextEnd.eventSource.emit(stContextEnd.eventTypes.GENERATION_STOPPED, 'normal', { automatic_trigger: true }, false);
+
+                    stContextEnd.eventSource.emit('polyceph-pipeline-ended');
                 }, 200);
             }
         }

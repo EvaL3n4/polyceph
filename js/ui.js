@@ -88,6 +88,7 @@ export function generateThoughtsHTML(thoughtsArray, pipelineName) {
 export function renderPolycephTyping(messageElement, chatMsg) {
     const activeTasks = chatMsg.extra?.polyceph_active_tasks || [];
     const isStopping = chatMsg.extra?.polyceph_stopping === true;
+    logger.debug('renderPolycephTyping', { activeTasksCount: activeTasks.length, isStopping, activeTasks });
 
     let stepInfo = 'Processing';
     if (activeTasks.length > 0) {
@@ -156,7 +157,7 @@ export function renderPolycephThoughts() {
         if (!chatMsg) return;
 
         // Handle Typing Indicator
-        const isTyping = (chatMsg.extra && chatMsg.extra.polyceph_typing) || (chatMsg.mes === '...' && !chatMsg.is_user && !chatMsg.is_system);
+        const isTyping = (chatMsg.extra && chatMsg.extra.polyceph_typing);
         if (isTyping) {
             renderPolycephTyping(messageElement, chatMsg);
             return;
@@ -207,7 +208,11 @@ export function renderPolycephThoughts() {
         // Track which swipe index was last rendered so we can re-render when swipe changes
         const lastRenderedSwipe = messageElement.getAttribute('polyceph_thoughts_swipe');
         const currentSwipeId = String(chatMsg.swipe_id ?? 0);
-        if (lastRenderedSwipe === currentSwipeId) return;
+        const existingThoughtsId = messageElement.getAttribute('polyceph_thoughts_id');
+        const thoughtsExistInDOM = existingThoughtsId && document.getElementById(existingThoughtsId);
+
+        // Return only if the swipe hasn't changed AND the element is still in the DOM
+        if (lastRenderedSwipe === currentSwipeId && thoughtsExistInDOM) return;
 
         let thoughts = null;
         let pipelineName = null;
@@ -221,7 +226,6 @@ export function renderPolycephThoughts() {
         }
 
         // Remove any existing thoughts block before re-rendering
-        const existingThoughtsId = messageElement.getAttribute('polyceph_thoughts_id');
         if (existingThoughtsId) {
             $(`#${existingThoughtsId}`).remove();
             messageElement.removeAttribute('polyceph_thoughts_id');
@@ -238,8 +242,12 @@ export function renderPolycephThoughts() {
         const $thoughtsContainer = $(thoughtsHtml);
         const thoughtsId = $thoughtsContainer.attr('id');
 
+        const $mesTracker = $(messageElement).find('.mes_tracker').first();
         const $mesText = $(messageElement).find('.mes_text').first();
-        if ($mesText.length > 0) {
+
+        if ($mesTracker.length > 0) {
+            $mesTracker.before($thoughtsContainer);
+        } else if ($mesText.length > 0) {
             $mesText.before($thoughtsContainer);
         } else {
             $(messageElement).append($thoughtsContainer);

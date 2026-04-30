@@ -68,12 +68,17 @@ async function processSendAction() {
     }
     lastSendTime = now;
 
+    const context = SillyTavern.getContext();
+
     // Mark ST as busy immediately, matching script.js:Generate()
-    if (typeof window.is_send_press !== 'undefined') window.is_send_press = true;
+    if (typeof context.deactivateSendButtons === 'function') {
+        context.deactivateSendButtons();
+    } else if (typeof window.is_send_press !== 'undefined') {
+        window.is_send_press = true;
+    }
 
     const textarea = document.getElementById('send_textarea');
     const text = textarea ? textarea.value.trim() : '';
-    const context = SillyTavern.getContext();
 
     // EMPTY INPUT: Re-trigger pipeline on last message if it's from the user
     if (!text) {
@@ -112,7 +117,7 @@ async function processSendAction() {
 
     // Capture mutex immediately to block redundant extension triggers
     if (settings.emulateCoreEvents && typeof SillyTavern !== 'undefined' && generationMutexEvents) {
-        context.eventSource.emit(generationMutexEvents.MUTEX_CAPTURED, { extension_name: MODULE_NAME });
+        await context.eventSource.emit(generationMutexEvents.MUTEX_CAPTURED, { extension_name: MODULE_NAME });
     }
 
     // Use standardized message posting from compat-shared
@@ -257,6 +262,12 @@ async function init() {
         context.eventSource.on(context.eventTypes.CHAT_CHANGED, renderPolycephThoughts);
         context.eventSource.on(context.eventTypes.MESSAGE_RECEIVED, renderPolycephThoughts);
         context.eventSource.on(context.eventTypes.CHAT_COMPLETED, renderPolycephThoughts);
+        
+        if (context.eventTypes.MESSAGE_UPDATED) {
+            context.eventSource.on(context.eventTypes.MESSAGE_UPDATED, renderPolycephThoughts);
+        } else {
+            context.eventSource.on('message_updated', renderPolycephThoughts);
+        }
 
         // Update chat dropdown when settings are saved/changed
         context.eventSource.on(context.eventTypes.SETTINGS_UPDATED, () => {
@@ -271,9 +282,11 @@ async function init() {
 
         // Listen for pipeline activity to swap Send/Stop buttons
         context.eventSource.on('polyceph-pipeline-started', () => {
+            document.body.classList.add('polyceph-pipeline-active');
             updateSendButtonVisibility();
         });
         context.eventSource.on('polyceph-pipeline-ended', () => {
+            document.body.classList.remove('polyceph-pipeline-active');
             updateSendButtonVisibility();
         });
     }

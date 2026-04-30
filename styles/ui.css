@@ -457,6 +457,12 @@
     color: #ff4d4d;
 }
 
+.polyceph-disabled {
+    opacity: 0.5 !important;
+    pointer-events: none !important;
+    cursor: not-allowed !important;
+}
+
 /* Robust hiding for background messages */
 .mes[ch_name="Background"],
 .mes[polyceph_hidden="true"] {
@@ -697,4 +703,8 @@ body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open
     100% {
         opacity: 0.7;
     }
+}
+
+body.polyceph-pipeline-active #mes_stop {
+    display: none !important;
 }
