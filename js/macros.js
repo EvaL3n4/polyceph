@@ -26,8 +26,8 @@ export function resolveChatHistory(text, cleanChat, stContext) {
         const includeInjections = options.no_extensions !== 'true';
 
         // 1. Select Source
-        let source = (options.live === 'true') ? 
-            stContext.chat.filter(m => m && !m.extra?.polyceph_typing && !m.is_system && !m.mes?.trim().startsWith('/')) : 
+        let source = (options.live === 'true') ?
+            stContext.chat.filter(m => m && !m.extra?.polyceph_typing && !m.is_system && !m.mes?.trim().startsWith('/')) :
             cleanChat;
 
         // 2. Filter Background Messages (preserve order)
@@ -35,7 +35,7 @@ export function resolveChatHistory(text, cleanChat, stContext) {
         if (options.bg_last !== undefined) {
             const bgLimit = parseInt(options.bg_last);
             const backgroundMsgs = source.filter(m => m && m.extra?.polyceph_hidden);
-            
+
             if (backgroundMsgs.length > bgLimit) {
                 const keepBgs = backgroundMsgs.slice(-bgLimit);
                 filteredMessages = source.filter(m => {
@@ -66,7 +66,7 @@ export function resolveChatHistory(text, cleanChat, stContext) {
         // 4. Map and Weave
         const isCC = stContext.mainApi === 'openai';
         const finalMessages = [];
-        
+
         // Loop backwards to match ST's depth logic
         for (let i = filteredMessages.length - 1; i >= 0; i--) {
             const depth = filteredMessages.length - 1 - i;
@@ -113,7 +113,7 @@ export function resolveChatHistory(text, cleanChat, stContext) {
             if (isCC) {
                 return `[[ROLE:${mRole}]]\n${m.mes}\n[[/ROLE]]`;
             }
-            
+
             // For text completion, we still use a readable format
             if (mRole === 'system') return `### System Instruction:\n${m.mes}`;
             return `${m.name || (m.is_user ? 'User' : 'Assistant')}: ${m.mes}`;
@@ -137,7 +137,7 @@ export function resolveChatHistory(text, cleanChat, stContext) {
  * Implements token-based history trimming to respect context limits by leveraging
  * SillyTavern's native ChatCompletion and Message classes.
  */
-export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt) {
+export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, contextVault) {
     if (!text) return text;
 
     const ccSettings = stContext.chatCompletionSettings;
@@ -146,27 +146,52 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt) {
     // Dynamically import ST's native classes for accurate token management
     let ChatCompletion, Message;
     try {
-        const oaiModule = await import('../../../openai.js');
+        let oaiModule = await import('../../../openai.js').catch(() => null);
+        if (!oaiModule) oaiModule = await import('../../../../openai.js').catch(() => null); // Third-party dir
+        if (!oaiModule) oaiModule = await import('../../../scripts/openai.js').catch(() => null);
+        if (!oaiModule) oaiModule = await import('../../../../scripts/openai.js').catch(() => null); // Third-party dir
+        if (!oaiModule) oaiModule = await import('/scripts/openai.js').catch(() => null);
+        
+        if (!oaiModule) throw new Error("Could not find openai.js in any known path.");
+
         ChatCompletion = oaiModule.ChatCompletion;
         Message = oaiModule.Message;
+
+        if (!ChatCompletion || !Message) {
+            const ccModule = await import('../../../chat-completion.js').catch(() => null) ||
+                             await import('../../../../chat-completion.js').catch(() => null) ||
+                             await import('../../../scripts/chat-completion.js').catch(() => null) ||
+                             await import('../../../../scripts/chat-completion.js').catch(() => null) ||
+                             await import('/scripts/chat-completion.js').catch(() => null);
+            ChatCompletion = ChatCompletion || ccModule?.ChatCompletion;
+
+            const msgModule = await import('../../../messages.js').catch(() => null) ||
+                              await import('../../../../messages.js').catch(() => null) ||
+                              await import('../../../scripts/messages.js').catch(() => null) ||
+                              await import('../../../../scripts/messages.js').catch(() => null) ||
+                              await import('/scripts/messages.js').catch(() => null);
+            Message = Message || msgModule?.Message;
+            
+            if (!ChatCompletion || !Message) throw new Error("Native ST classes missing from module exports.");
+        }
     } catch (err) {
         logger.error('Failed to import native SillyTavern classes. Token-aware trimming will be disabled.', err);
-        return text.replace(/\{\{cc_all_prompts(?:\(budget=(\d+)\))?\}\}/g, '(Error: Native ST classes missing)');
+        return text.replace(/\{\{cc_all_prompts(?:\(budget=(\d+)\))?\}\}/g, '(Error: Native ST classes missing. Please check extension installation path.)');
     }
 
     // Identify prompt order for the current context
     const charData = stContext.characters[stContext.characterId] || {};
     const charId = charData.id || 0;
     const allOrders = ccSettings.prompt_order || [];
-    const promptOrderEntry = allOrders.find(e => String(e.character_id) === String(charId)) || 
-                             allOrders.find(e => String(e.character_id) === '100001') || 
-                             allOrders.find(e => String(e.character_id) === '100000') || 
-                             allOrders.find(e => e.character_id === '') ||
-                             allOrders[0];
-    
+    const promptOrderEntry = allOrders.find(e => String(e.character_id) === String(charId)) ||
+        allOrders.find(e => String(e.character_id) === '100001') ||
+        allOrders.find(e => String(e.character_id) === '100000') ||
+        allOrders.find(e => e.character_id === '') ||
+        allOrders[0];
+
     const rawPromptOrder = promptOrderEntry?.order || [];
     const promptOrder = [...rawPromptOrder];
-    
+
     // Ensure all enabled prompts have an entry in promptOrder
     ccSettings.prompts.forEach(p => {
         if (!promptOrder.some(e => e.identifier === p.identifier)) {
@@ -180,13 +205,13 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt) {
     const resolveIdentifier = (id, chatSource) => {
         const prompt = ccSettings.prompts.find(p => p.identifier === id);
         if (!prompt) return '';
-        
+
         const role = prompt.role || 'system';
         const wrap = (content) => content && String(content).trim() ? `[[ROLE:${role}]]\n${String(content).trim()}\n[[/ROLE]]` : '';
 
         if (prompt.marker || [
-            'charDescription', 'charPersonality', 'scenario', 
-            'personaDescription', 'worldInfoBefore', 'worldInfoAfter', 
+            'charDescription', 'charPersonality', 'scenario',
+            'personaDescription', 'worldInfoBefore', 'worldInfoAfter',
             'dialogueExamples', 'chatHistory'
         ].includes(id)) {
             const char = stContext.characters[stContext.characterId];
@@ -212,7 +237,7 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt) {
                         return `[[ROLE:${mRole}]]\n${m.mes}\n[[/ROLE]]`;
                     }).join('\n\n');
                 }
-                default: return '';
+                default: return wrap(prompt.content || '');
             }
         }
         return wrap(prompt.content || '');
@@ -233,7 +258,9 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt) {
         // We resolve standard macros in the template first to get accurate overhead
         let shadowPrompt = result.replace(/\{\{cc_all_prompts\}\}/g, '');
         if (typeof stContext.substituteParams === 'function') {
-            shadowPrompt = stContext.substituteParams(shadowPrompt);
+            shadowPrompt = stContext.substituteParams(shadowPrompt, {
+                dynamicMacros: contextVault
+            });
         }
 
         const shadowTokens = await countTokens(shadowPrompt);
@@ -266,7 +293,7 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt) {
                 // Estimate with 8 token message overhead
                 const msg = await Message.createAsync(role, m.mes, `chatHistory-${i}`);
                 if (currentHistoryTokens + msg.getTokens() + 8 > historyBudget) break;
-                
+
                 trimmedChat.unshift(m);
                 currentHistoryTokens += msg.getTokens() + 8;
             }
@@ -281,7 +308,7 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt) {
         }
 
         logger.debug(`CC Macro Resolution - Budget: ${historyBudget}, Overhead: ${shadowTokens}, Context: ${maxContext}`);
-        
+
         const combined = allPrompts.join('\n\n');
         result = result.replace(/\{\{cc_all_prompts\}\}/g, combined);
     }
@@ -316,7 +343,7 @@ export async function expandPrompt(template, settings, contextVault, cleanChat, 
     result = resolveChatHistory(result, cleanChat, stContext);
 
     // 3. Resolve Chat Completion Prompts (Token-aware)
-    result = await resolveCCMacros(result, cleanChat, stContext, wiPrompt);
+    result = await resolveCCMacros(result, cleanChat, stContext, wiPrompt, contextVault);
 
     // 4. Resolve {{user_input}} with explicit user role
     const resolvedInput = contextVault?.['user_input'] || settings.userInput || '';

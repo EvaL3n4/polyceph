@@ -302,7 +302,7 @@ export function createSettingsHTML() {
                             </div>
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <input type="checkbox" id="polyceph_show_icon_checkbox" ${settings.showPipelineIcon !== false ? 'checked' : ''}>
-                                <label for="polyceph_show_icon_checkbox" style="cursor: pointer;">Show Selector Icon</label>
+                                <label for="polyceph_show_icon_checkbox" style="cursor: pointer;">Show Pipeline Selector Icon</label>
                             </div>
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <input type="checkbox" id="polyceph_compact_selector_checkbox" ${settings.compactSelectorMode ? 'checked' : ''}>
@@ -339,7 +339,7 @@ export function createSettingsHTML() {
                             </div>
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <input type="checkbox" id="polyceph_emulate_events_checkbox" ${settings.emulateCoreEvents ? 'checked' : ''}>
-                                <label for="polyceph_emulate_events_checkbox" style="cursor: pointer;" title="Allows third-party extensions (like Tracker Enhanced) to interact with Polyceph runs.">Emulate Core Generation Events</label>
+                                <label for="polyceph_emulate_events_checkbox" style="cursor: pointer;" title="Allows third-party extensions (like Tracker Enhanced) to interact with Polyceph runs.">Emulate Core Generation Events (Ext. Compat)</label>
                             </div>
                             <div style="display: flex; align-items: center; gap: 8px; margin-top: 5px;">
                                 <b style="min-width: 120px; font-size: 0.9em; opacity: 0.8;" title="Control the verbosity of console logs.">Log Level</b>
