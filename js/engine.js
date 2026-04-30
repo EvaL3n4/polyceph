@@ -297,9 +297,6 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
 
         logger.debug('Emitting core generation events (Cooperative mode)...');
 
-        // Capture mutex first to block other extensions from starting during emulation
-        stContext.eventSource.emit(generationMutexEvents.MUTEX_CAPTURED, { extension_name: MODULE_NAME });
-
         await stContext.eventSource.emit(stContext.eventTypes.GENERATION_STARTED, 'normal', emulateOptions, false);
 
         // Give extensions a moment to process the "Started" event
@@ -307,10 +304,12 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
 
         await stContext.eventSource.emit(stContext.eventTypes.GENERATION_AFTER_COMMANDS, 'normal', emulateOptions, false);
 
-        // We don't wait for release anymore; we are the holder.
-        logger.debug('Mutex captured and core events fired. Proceeding with pipeline.');
+        // Capture mutex AFTER core events.
+        // This allows pre-generation extensions (like Tracker-Enhanced) to freely capture the mutex, 
+        // generate their prompts, and inject them before Polyceph locks the state for its pipeline.
+        stContext.eventSource.emit(generationMutexEvents.MUTEX_CAPTURED, { extension_name: MODULE_NAME });
 
-        // Mutex is already held from the start of the core events
+        logger.debug('Mutex captured and core events fired. Proceeding with pipeline.');
         logger.debug('Pipeline active with mutex lock.');
         logger.debug('Core events finished. Active injections:', Object.keys(stContext.extension_prompts || {}));
     }
