@@ -376,15 +376,57 @@ function normalizeApiForIcon(api) {
  * @param {string} [options.model=''] - The LLM model name (for tooltips).
  * @returns {number} The index of the posted message in the chat array.
  */
-export function postMessageToChat({ content, name = 'Assistant', isUser = false, forceAvatar = '', extra = {}, save = true, api = '', model = '' }) {
+import { pollCondition } from './utils.js';
+
+/**
+ * Ensures the chat is saved to disk and waits for completion.
+ * Critical for preventing 500 errors in extensions that read the chat file.
+ */
+export async function ensureChatSaved(timeout = 5000) {
+    const context = SillyTavern.getContext();
+    
+    if (typeof context.saveChat === 'function') {
+        console.log('[polyceph] ensureChatSaved: Synchronizing chat to disk...');
+        
+        // If it's already saving, give it a moment to finish naturally
+        if (window.isChatSaving) {
+            console.log('[polyceph] ensureChatSaved: Save already in progress, waiting...');
+            await pollCondition(() => window.isChatSaving === false, 2000);
+        }
+
+        // Forcibly clear the flag if it's still stuck (SillyTavern sometimes leaks this flag)
+        if (window.isChatSaving) {
+            console.warn('[polyceph] ensureChatSaved: isChatSaving flag stuck! Forcing reset.');
+            window.isChatSaving = false;
+        }
+
+        try {
+            // saveChat returns a promise that resolves when the server confirms the save
+            await context.saveChat();
+            console.log('[polyceph] ensureChatSaved: Chat save confirmed on disk.');
+            return true;
+        } catch (e) {
+            console.error('[polyceph] ensureChatSaved: Failed to save chat:', e);
+            return false;
+        }
+    }
+    return true;
+}
+
+export function postMessageToChat({ content, name = 'Assistant', isUser = false, forceAvatar = '', extra = {}, save = true, api = '', model = '', silent = false }) {
     const ctx = SillyTavern.getContext();
+    const isSilentEmulation = ctx.extensionSettings?.polyceph?.emulateCoreEvents;
+
     const iconApi = normalizeApiForIcon(api || extra.api);
 
     const msgExtra = {
         ...extra,
         api: iconApi,
-        model: model || extra.model
+        model: model || extra.model,
+        polyceph_source: 'polyceph',
+        is_silent: silent
     };
+    
     const msg = {
         name: name,
         is_user: isUser,
@@ -393,7 +435,6 @@ export function postMessageToChat({ content, name = 'Assistant', isUser = false,
         mes: content,
         extra: msgExtra,
         // Initialize swipes from creation so ST renders swipe UI (counter/arrows) immediately
-        // Use a clone for swipe_info to avoid reference sharing with the main extra object
         swipes: [content],
         swipe_info: [{ extra: { ...msgExtra } }],
         swipe_id: 0,
@@ -410,11 +451,19 @@ export function postMessageToChat({ content, name = 'Assistant', isUser = false,
         ctx.addOneMessage(msg);
     }
 
-    if (ctx.eventSource && ctx.eventTypes && SillyTavern.getContext().extensionSettings?.polyceph?.emulateCoreEvents) {
-        ctx.eventSource.emit(ctx.eventTypes.MESSAGE_RECEIVED, messageIndex);
+    // Emulate core events if enabled and not silent
+    if (!silent && ctx.eventSource && ctx.eventTypes && isSilentEmulation) {
+        if (isUser) {
+            ctx.eventSource.emit(ctx.eventTypes.MESSAGE_RECEIVED, messageIndex);
+            ctx.eventSource.emit(ctx.eventTypes.USER_MESSAGE_RENDERED, messageIndex);
+        } else {
+            ctx.eventSource.emit(ctx.eventTypes.MESSAGE_RECEIVED, messageIndex);
+            ctx.eventSource.emit(ctx.eventTypes.CHARACTER_MESSAGE_RENDERED, messageIndex);
+        }
     }
 
-    if (save && typeof ctx.saveChat === 'function') {
+    // Standard save logic - we skip if silent because the pipeline will call ensureChatSaved at the end
+    if (save && !silent && typeof ctx.saveChat === 'function') {
         ctx.saveChat();
     }
 

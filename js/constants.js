@@ -1,5 +1,5 @@
 export const MODULE_NAME = 'polyceph';
-export const VERSION = '0.5.6';
+export const VERSION = '0.6.0';
 
 export const defaultSettings = {
     delayMs: 250,
@@ -42,4 +42,9 @@ export const defaultSettings = {
             ]
         }
     ]
+};
+
+export const generationMutexEvents = {
+    MUTEX_CAPTURED: 'GENERATION_MUTEX_CAPTURED',
+    MUTEX_RELEASED: 'GENERATION_MUTEX_RELEASED',
 };

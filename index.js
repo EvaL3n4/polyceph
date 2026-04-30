@@ -1,4 +1,4 @@
-import { MODULE_NAME, VERSION } from './js/constants.js';
+import { MODULE_NAME, VERSION, generationMutexEvents } from './js/constants.js';
 import { loadSettings, getAvailableProfiles, refreshPresets, settings } from './js/state.js';
 import { renderPolycephThoughts, syncHiddenMessageVisibility } from './js/ui.js';
 import { addSettingsUI } from './js/settings-ui.js';
@@ -67,6 +67,9 @@ async function processSendAction() {
     }
     lastSendTime = now;
 
+    // Mark ST as busy immediately, matching script.js:Generate()
+    if (typeof window.is_send_press !== 'undefined') window.is_send_press = true;
+
     const textarea = document.getElementById('send_textarea');
     const text = textarea ? textarea.value.trim() : '';
     const context = SillyTavern.getContext();
@@ -83,6 +86,10 @@ async function processSendAction() {
 
             if (typeof context.updateMessageBlock === 'function') {
                 context.updateMessageBlock(context.chat.length - 1, lastMsg);
+            }
+
+            if (context.eventSource && context.eventTypes && settings.emulateCoreEvents) {
+                context.eventSource.emit(context.eventTypes.USER_MESSAGE_RENDERED, context.chat.length - 1);
             }
 
             try {
@@ -102,6 +109,11 @@ async function processSendAction() {
     const avatarStr = typeof context.getThumbnailUrl === 'function' && context.userAvatar ?
         context.getThumbnailUrl('avatar', context.userAvatar) : '';
 
+    // Capture mutex immediately to block redundant extension triggers
+    if (settings.emulateCoreEvents && typeof SillyTavern !== 'undefined' && generationMutexEvents) {
+        context.eventSource.emit(generationMutexEvents.MUTEX_CAPTURED, { extension_name: MODULE_NAME });
+    }
+
     // Use standardized message posting from compat-shared
     postMessageToChat({
         content: text,
@@ -120,15 +132,13 @@ async function processSendAction() {
     console.log(`[${MODULE_NAME}] User message added. Chat length after:`, context.chat.length);
     if (typeof context.saveChat === 'function') context.saveChat();
 
-    // Stagger the pipeline start slightly to allow UI to catch up
-    setTimeout(async () => {
-        try {
-            await startPipeline(text);
-        } catch (err) {
-            console.error(`[${MODULE_NAME}] Pipeline execution failed:`, err);
-            toastr.error('Pipeline execution failed.', 'Polyceph');
-        }
-    }, 50);
+    // Start the pipeline and wait for it to complete or at least establish its lock
+    try {
+        await startPipeline(text);
+    } catch (err) {
+        console.error(`[${MODULE_NAME}] Pipeline execution failed:`, err);
+        toastr.error('Pipeline execution failed.', 'Polyceph');
+    }
 }
 
 function interceptSwipe(e) {

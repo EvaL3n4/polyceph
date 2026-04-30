@@ -1,11 +1,26 @@
-import { MODULE_NAME } from './constants.js';
+import { MODULE_NAME, generationMutexEvents } from './constants.js';
 import { settings, switchProfile, getActivePipeline, availableProfiles, saveSettings, captureProfileState, restoreProfileState, clearProfileState } from './state.js';
 import { generateId, waitForApiReady } from './utils.js';
 import { expandPrompt } from './macros.js';
-import { getMaxContextTokens, getMaxResponseTokens, countTokens, generateViaApi, postMessageToChat, getWorldInfoForChat, getActiveCharacterInfo, getMainSystemPrompt } from './compat-shared.js';
+import { getMaxContextTokens, getMaxResponseTokens, countTokens, generateViaApi, postMessageToChat, ensureChatSaved, getWorldInfoForChat, getActiveCharacterInfo, getMainSystemPrompt } from './compat-shared.js';
 import { capturePresetState, restorePresetState, clearPresetState, applyPreset, getCurrentPresetName } from './compat-presets.js';
 
 let currentPipelineAbortController = null;
+let currentMutexHolder = null;
+
+// Listen for mutex events globally to track state
+function initMutexTracker() {
+    const context = SillyTavern.getContext();
+    if (context.eventSource) {
+        context.eventSource.on(generationMutexEvents.MUTEX_CAPTURED, (data) => {
+            currentMutexHolder = data?.extension_name || 'unknown';
+        });
+        context.eventSource.on(generationMutexEvents.MUTEX_RELEASED, () => {
+            currentMutexHolder = null;
+        });
+    }
+}
+initMutexTracker();
 
 export function isPipelineActive() {
     return !!currentPipelineAbortController;
@@ -250,7 +265,7 @@ async function removeTypingIndicator() {
 export async function startPipeline(text) {
     try {
         console.log(`[${MODULE_NAME}] Starting pipeline for text:`, text.substring(0, 50) + '...');
-        runPipeline(text);
+        await runPipeline(text);
     } catch (err) {
         console.error(`[${MODULE_NAME}] Error starting pipeline:`, err);
     }
@@ -266,30 +281,46 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
         stContext.eventSource.emit('polyceph-pipeline-started');
     }
 
-    // Capture the current profile so it can be restored after the run
-    captureProfileState();
+    if (typeof window.is_send_press !== 'undefined') window.is_send_press = true;
 
     console.log(`[${MODULE_NAME}] runPipeline started`, { userInput: userInput?.substring(0, 50), batchId: generateSwipesForBatchId });
-    //toastr.info('Starting Polyceph Pipeline...', 'Polyceph');
-
-    // Capture the user's original preset before the pipeline modifies anything
-    capturePresetState();
-
-    const activePipeline = getActivePipeline();
-    const pipelineName = activePipeline?.name || 'Default';
 
     // Core Event Emulation (Start)
+    // We do this FIRST so extensions like Tracker Enhanced use the USER'S stable profile
     if (settings.emulateCoreEvents && stContext.eventSource && stContext.eventTypes) {
         const emulateOptions = {
             automatic_trigger: true,
             force_chid: stContext.characterId,
             signal: signal
         };
-        console.log(`[${MODULE_NAME}] Emitting core generation events...`);
+
+        console.log(`[${MODULE_NAME}] Emitting core generation events (Cooperative mode)...`);
+
+        // Capture mutex first to block other extensions from starting during emulation
+        stContext.eventSource.emit(generationMutexEvents.MUTEX_CAPTURED, { extension_name: MODULE_NAME });
+
         await stContext.eventSource.emit(stContext.eventTypes.GENERATION_STARTED, 'normal', emulateOptions, false);
+
+        // Give extensions a moment to process the "Started" event
+        await new Promise(r => setTimeout(r, 100));
+
         await stContext.eventSource.emit(stContext.eventTypes.GENERATION_AFTER_COMMANDS, 'normal', emulateOptions, false);
+
+        // We don't wait for release anymore; we are the holder.
+        console.log(`[${MODULE_NAME}] Mutex captured and core events fired. Proceeding with pipeline.`);
+
+        // Mutex is already held from the start of the core events
+        console.log(`[${MODULE_NAME}] Pipeline active with mutex lock.`);
         console.log(`[${MODULE_NAME}] Core events finished. Active injections:`, Object.keys(stContext.extension_prompts || {}));
     }
+
+    // Capture the current profile so it can be restored after the run
+    // We capture AFTER the wait so we are capturing the state after extensions have finished their work
+    captureProfileState();
+    capturePresetState();
+
+    const activePipeline = getActivePipeline();
+    const pipelineName = activePipeline?.name || 'Default';
 
     const contextVault = {
         'user_input': userInput,
@@ -641,6 +672,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
                                         extra: extraData,
                                         api: taskApi,
                                         model: taskModel,
+                                        silent: true, // Extensions wait until pipeline end
                                     });
                                 }
                             }
@@ -703,24 +735,33 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
             }
         }
 
-        // Core Event Emulation (End)
-        if (settings.emulateCoreEvents && stContext.eventSource && stContext.eventTypes) {
-            const lastMessageIdx = stContext.chat.length - 1;
-            // Only fire if the last message is from Polyceph
-            if (stContext.chat[lastMessageIdx]?.extra?.polyceph_source === 'polyceph') {
-                await stContext.eventSource.emit(stContext.eventTypes.MESSAGE_RECEIVED, lastMessageIdx);
-                console.log(`[${MODULE_NAME}] MESSAGE_RECEIVED event emitted for index: ${lastMessageIdx}`);
-            }
-        }
         //toastr.success('Pipeline finished.', 'Polyceph');
     } catch (e) {
         toastr.error('Pipeline execution encountered an error.', 'Polyceph');
         console.error(`[${MODULE_NAME}] Pipeline Error`, e);
     } finally {
+        // Give UI a moment to settle before restoration
+        await new Promise(r => setTimeout(r, 300));
+
         // Restore the user's original preset and clean up
         if (settings.restore_after_run) {
             console.log(`[${MODULE_NAME}] Pipeline finished. Restoring original profile and preset state.`);
+
+            // Create a listener for the restoration completion
+            const stContext = SillyTavern.getContext();
+            const restorationPromise = new Promise(resolve => {
+                const handler = () => {
+                    console.log(`[${MODULE_NAME}] Detected connection_profile_loaded event.`);
+                    resolve();
+                };
+                stContext.eventSource.once('connection_profile_loaded', handler);
+                // Fallback timeout in case event doesn't fire
+                setTimeout(resolve, 3000);
+            });
+
             await restoreProfileState();
+            await restorationPromise;
+
             restorePresetState();
             clearProfileState();
             clearPresetState();
@@ -732,8 +773,51 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
         await removeTypingIndicator();
         currentPipelineAbortController = null;
         const stContextEnd = SillyTavern.getContext();
+
+        // Final Event Emulation & Mutex Release
         if (stContextEnd.eventSource) {
             stContextEnd.eventSource.emit('polyceph-pipeline-ended');
+
+            // 1. Mark ST as idle so it doesn't reject restoration requests
+            if (typeof window.is_send_press !== 'undefined') window.is_send_press = false;
+
+            // 2. Ensure chat is saved to disk before releasing mutex
+            await ensureChatSaved();
+
+            // 3. Small pause to allow state restoration to fully register
+            await new Promise(resolve => setTimeout(resolve, 200));
+
+
+            // 4. Core Event Emulation (End) - Move here to ensure state is restored and unlocked
+            if (settings.emulateCoreEvents && stContextEnd.eventSource && stContextEnd.eventTypes) {
+                const lastMessageIdx = stContextEnd.chat.length - 1;
+                if (stContextEnd.chat[lastMessageIdx]?.extra?.polyceph_source === 'polyceph') {
+                    // Detach from current tick to allow UI to settle
+                    setTimeout(async () => {
+                        // 1. Fire core events WHILE HOLDING MUTEX
+                        // This ensures background tasks (Summary, Vectors) finish before extensions capture the mutex
+                        console.log(`[${MODULE_NAME}] Firing core events (Holding Mutex)...`);
+                        stContextEnd.eventSource.emit(stContextEnd.eventTypes.MESSAGE_RECEIVED, lastMessageIdx);
+                        stContextEnd.eventSource.emit(stContextEnd.eventTypes.CHARACTER_MESSAGE_RENDERED, lastMessageIdx);
+
+                        // 2. Settle period - Wait for background tasks to hit the backend
+                        await new Promise(r => setTimeout(r, 200));
+
+                        // 3. FINALLY RELEASE MUTEX
+                        console.log(`[${MODULE_NAME}] Releasing generation mutex (Teardown Complete).`);
+                        stContextEnd.eventSource.emit(generationMutexEvents.MUTEX_RELEASED, { extension_name: MODULE_NAME });
+                    }, 200);
+                } else {
+                    // Release if source doesn't match
+                    stContextEnd.eventSource.emit(generationMutexEvents.MUTEX_RELEASED, { extension_name: MODULE_NAME });
+                }
+            } else {
+                // If core emulation is off, release after a small delay
+                setTimeout(() => {
+                    console.log(`[${MODULE_NAME}] Releasing generation mutex (Simple).`);
+                    stContextEnd.eventSource.emit(generationMutexEvents.MUTEX_RELEASED, { extension_name: MODULE_NAME });
+                }, 200);
+            }
         }
     }
 }
