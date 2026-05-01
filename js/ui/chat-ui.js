@@ -1,6 +1,8 @@
-import { SELECTORS, getEl } from './ui/ui-shared.js';
-import { createPipelineSelector, updateChatSelectorOptions } from './ui/chat/pipeline-selector.js';
-import { createSendButton, createStopButton, updateSendButtonVisibility } from './ui/chat/action-buttons.js';
+import { settings } from '../state.js';
+import { getEl, SELECTORS } from './ui-shared.js';
+import { createPipelineSelector, updateChatSelectorOptions } from './chat/pipeline-selector.js';
+import { createSendButton, createStopButton, updateSendButtonVisibility } from './chat/action-buttons.js';
+import { logger } from '../logger.js';
 
 // Re-export for external use
 export { updateSendButtonVisibility, updateChatSelectorOptions };

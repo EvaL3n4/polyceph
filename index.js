@@ -1,9 +1,9 @@
 import { MODULE_NAME, VERSION, generationMutexEvents } from './js/constants.js';
 import { loadSettings, getAvailableProfiles, refreshPresets, settings } from './js/state.js';
-import { initUI, updateChatSelectorOptions, updateSendButtonVisibility } from './js/ui.js';
-import { addSettingsUI } from './js/settings-ui.js';
+import { initUI, updateChatSelectorOptions, updateSendButtonVisibility } from './js/ui/ui.js';
+import { addSettingsUI } from './js/ui/settings-ui.js';
 import { startPipeline, runPipeline, clearOrphanedIndicators } from './js/engine.js';
-import { injectChatPipelineSelector } from './js/chat-ui.js';
+import { injectChatPipelineSelector } from './js/ui/chat-ui.js';
 import { postMessageToChat, ensureChatSaved } from './js/compat-shared.js';
 import { logger } from './js/logger.js';
 
