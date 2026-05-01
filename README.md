@@ -76,7 +76,7 @@ Route data between tasks using these handlebars placeholders/macros:
 - `{{polyceph_prompt}}`: The global Polyceph Prompt defined in extension settings. Evaluated **recursively** (can contain other placeholders).
 - `{{cc_main_prompt}}`, `{{cc_aux_prompt}}`: Specific Chat Completion prompts.
 - `{{cc_post_history_instructions}}`, `{{cc_enhance_definitions}}`: Other individual CC prompts.
-- `{{cc_all_prompts}}`: **Comprehensive Context**. Rebuilds the *entire* SillyTavern prompt list exactly as configured in your settings. Resolves all enabled markers (Description, Personality, World Info, History, Examples) in their correct order.
+- `{{cc_all_prompts}}`: **Comprehensive Context**. Rebuilds the *entire* SillyTavern prompt list exactly as configured in your settings. Resolves all enabled markers (Description, Personality, World Info, History, Examples) and all extension injections in their correct order and depth.
 
 
 ## Postprocessing Tags

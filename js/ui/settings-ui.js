@@ -131,7 +131,7 @@ export function createSettingsHTML() {
                                 <li><code>{{char}}</code>, <code>{{user}}</code>, <code>{{persona}}</code>, <code>{{personality}}</code> - Standard character macros.</li>
                                 <li><code>{{wi}}</code> or <code>{{world_info}}</code> - **Reactive** Lorebook entries (scanned per-task).</li>
                                 <li><code>{{wi|before}}</code> / <code>{{wi|after}}</code> - Injects only the specific World Info section.</li>
-                                <li><code>{{cc_all_prompts}}</code> - Comprehensive ST prompt list (includes all enabled markers, history, examples).</li>
+                                <li><code>{{cc_all_prompts}}</code> - Comprehensive ST prompt list (includes all enabled markers, injections, history, examples).</li>
                                 <li><code>{{cc_main_prompt}}</code>, <code>{{cc_aux_prompt}}</code> - Specific CC Prompts.</li>
                                 <li><code>{{cc_post_history_instructions}}</code> - CC Post-History instructions.</li>
                                 <li><code>{{cc_enhance_definitions}}</code> - CC Enhance Definitions prompt.</li>

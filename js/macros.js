@@ -2,6 +2,56 @@ import { countTokens, getMaxContextTokens, getMaxResponseTokens, getMaxPromptTok
 import { logger } from './logger.js';
 
 /**
+ * Weaves extension-injected prompts into a message list based on depth and position.
+ * Mimics SillyTavern's populationInjectionPrompts logic.
+ */
+function weaveInjections(messages, extensionPrompts) {
+    if (!extensionPrompts) return messages.map(m => ({ ...m, is_injection: false }));
+
+    const injections = [];
+    Object.keys(extensionPrompts).forEach(key => {
+        const prompt = extensionPrompts[key];
+        if (prompt && prompt.value && prompt.value.trim()) {
+            injections.push({
+                id: key,
+                value: prompt.value.trim(),
+                depth: Number(prompt.depth || 0),
+                position: Number(prompt.position || 0), // 0: Before, 1: In-Chat
+                role: Number(prompt.role || 0)
+            });
+        }
+    });
+
+    const finalMessages = [];
+    // Loop backwards to match ST's depth logic (0 is last message)
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const depth = messages.length - 1 - i;
+        const msg = messages[i];
+
+        // In-Chat Injections (Position 1) go AFTER the message at that depth (closer to bottom)
+        injections.filter(inj => inj.depth === depth && inj.position === 1).forEach(inj => {
+            finalMessages.unshift({ mes: inj.value, role: inj.role, is_injection: true });
+        });
+
+        // The Message itself
+        finalMessages.unshift({ ...msg, is_injection: false });
+
+        // Before-Prompt Injections (Position 0) - technically ST handles position 0 at top-of-prompt,
+        // but resolveChatHistory previously supported it here too for granularity.
+        injections.filter(inj => inj.depth === depth && inj.position === 0).forEach(inj => {
+            finalMessages.unshift({ mes: inj.value, role: inj.role, is_injection: true });
+        });
+    }
+
+    // Handle depths beyond chat length
+    injections.filter(inj => inj.depth >= messages.length).forEach(inj => {
+        finalMessages.unshift({ mes: inj.value, role: inj.role, is_injection: true });
+    });
+
+    return finalMessages;
+}
+
+/**
  * Resolves Polyceph-specific chat history macros.
  * Handles: {{chat_history}}, {{chat_history:N}}, {{chat_history:live}}, {{chat_history:live:N}}
  * 
@@ -46,56 +96,8 @@ export function resolveChatHistory(text, cleanChat, stContext) {
             }
         }
 
-        // 3. Collect Injections if enabled
-        const injections = [];
-        if (includeInjections && stContext.extensionPrompts) {
-            Object.keys(stContext.extensionPrompts).forEach(key => {
-                const prompt = stContext.extensionPrompts[key];
-                if (prompt && prompt.value && prompt.value.trim()) {
-                    injections.push({
-                        id: key,
-                        value: prompt.value.trim(),
-                        depth: Number(prompt.depth || 0),
-                        position: Number(prompt.position || 0),
-                        role: Number(prompt.role || 0)
-                    });
-                }
-            });
-        }
-
-        // 4. Map and Weave
-        const isCC = stContext.mainApi === 'openai';
-        const finalMessages = [];
-
-        // Loop backwards to match ST's depth logic
-        for (let i = filteredMessages.length - 1; i >= 0; i--) {
-            const depth = filteredMessages.length - 1 - i;
-            const msg = filteredMessages[i];
-
-            // Injections at BOTTOM of this depth (Position 1)
-            if (includeInjections) {
-                injections.filter(inj => inj.depth === depth && inj.position === 1).forEach(inj => {
-                    finalMessages.unshift({ mes: inj.value, role: inj.role, is_injection: true });
-                });
-            }
-
-            // The Message itself
-            finalMessages.unshift({ ...msg, is_injection: false });
-
-            // Injections at TOP of this depth (Position 0)
-            if (includeInjections) {
-                injections.filter(inj => inj.depth === depth && inj.position === 0).forEach(inj => {
-                    finalMessages.unshift({ mes: inj.value, role: inj.role, is_injection: true });
-                });
-            }
-        }
-
-        // Handle depths beyond chat length (e.g., Depth 1000 for top of prompt)
-        if (includeInjections) {
-            injections.filter(inj => inj.depth >= filteredMessages.length).forEach(inj => {
-                finalMessages.unshift({ mes: inj.value, role: inj.role, is_injection: true });
-            });
-        }
+        // 3 & 4. Map and Weave
+        const finalMessages = weaveInjections(filteredMessages, includeInjections ? stContext.extensionPrompts : null);
 
         // 5. Format to strings
         let history = finalMessages.map(m => {
@@ -215,7 +217,28 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
      * Internal helper to resolve a single identifier's content.
      */
     const resolveIdentifier = async (id, chatSource) => {
-        const prompt = ccSettings.prompts.find(p => p.identifier === id);
+        const promptMapping = {
+            'summary': '1_memory',
+            'authorsNote': '2_floating_prompt',
+            'vectorsMemory': '3_vectors',
+            'vectorsDataBank': '4_vectors_data_bank',
+            'smartContext': 'chromadb'
+        };
+
+        let prompt = ccSettings.prompts.find(p => p.identifier === id);
+        const extKey = promptMapping[id] || id;
+        const extPrompt = stContext.extensionPrompts?.[extKey];
+
+        // If it's an extension prompt not defined in CC prompts, create a virtual one
+        if (!prompt && extPrompt) {
+            prompt = {
+                identifier: id,
+                role: extPrompt.role === 1 ? 'user' : (extPrompt.role === 2 ? 'assistant' : 'system'),
+                content: extPrompt.value,
+                marker: false
+            };
+        }
+
         if (!prompt) return '';
 
         const role = prompt.role || 'system';
@@ -247,18 +270,25 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
                 }
                 case 'dialogueExamples': return wrap(charFields.mesExamples || char?.mes_example || '');
                 case 'chatHistory': {
-                    return chatSource.map(m => {
+                    const finalMessages = weaveInjections(chatSource, stContext.extensionPrompts);
+                    return finalMessages.map(m => {
                         let mRole = 'assistant';
-                        if (m.extra?.polyceph_hidden) mRole = 'assistant';
-                        else if (m.is_user) mRole = 'user';
-                        else if (m.is_system) mRole = 'system';
+                        if (m.is_injection) {
+                            if (m.role === 1) mRole = 'user';
+                            else if (m.role === 2) mRole = 'assistant';
+                            else mRole = 'system';
+                        } else {
+                            if (m.extra?.polyceph_hidden) mRole = 'assistant';
+                            else if (m.is_user) mRole = 'user';
+                            else if (m.is_system) mRole = 'system';
+                        }
 
                         let encodedInvocations = '';
-                        if (m.extra?.tool_invocations && Array.isArray(m.extra.tool_invocations)) {
+                        if (!m.is_injection && m.extra?.tool_invocations && Array.isArray(m.extra.tool_invocations)) {
                             encodedInvocations = `\n[[INVOCATIONS:${JSON.stringify(m.extra.tool_invocations)}]]`;
                         }
 
-                        return `[[ROLE:${mRole}]]\n${m.mes}${encodedInvocations}\n[[/ROLE]]`;
+                        return `[[ROLE:${mRole}]]\n${m.mes || ''}${encodedInvocations}\n[[/ROLE]]`;
                     }).join('\n\n');
                 }
                 default: return wrap(prompt.content || '');
