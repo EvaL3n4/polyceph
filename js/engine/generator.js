@@ -4,6 +4,8 @@ import { waitForApiReady } from '../utils.js';
 import { getMaxContextTokens, getMaxResponseTokens, countTokens, generateViaApi } from '../compat-shared.js';
 import { parsePromptToMessages } from './parser.js';
 
+import { getToolCallingModule } from '../compat-st.js';
+
 /**
  * Executes a generation request through the SillyTavern API in "quiet" mode.
  * This avoids the main generation UI and allows background processing.
@@ -34,10 +36,13 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
         // --- Tool Calling Support ---
         let ToolManager;
         try {
-            const tmModule = await import('../../../tool-calling.js');
-            ToolManager = tmModule.ToolManager;
+            const tmModule = await getToolCallingModule();
+            ToolManager = tmModule?.ToolManager;
+            if (!ToolManager) {
+                logger.warn('[Polyceph] SillyTavern ToolManager not found. Tool calling features will be disabled for this generation.');
+            }
         } catch (e) {
-            // Fallback or ignore
+            logger.error('[Polyceph] Failed to load SillyTavern ToolManager:', e);
         }
 
         let depth = 0;

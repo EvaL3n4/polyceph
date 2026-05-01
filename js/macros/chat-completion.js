@@ -2,6 +2,8 @@ import { countTokens, getMaxContextTokens, getMaxResponseTokens, getWorldInfoFor
 import { logger, wrapRole } from './utils.js';
 import { weaveInjections } from './history.js';
 
+import { getOpenAIModule, getChatCompletionModule, getMessagesModule } from '../compat-st.js';
+
 /**
  * Resolves all active SillyTavern Chat Completion prompts into a single string.
  * Implements token-based history trimming to respect context limits by leveraging
@@ -16,37 +18,25 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
     // Dynamically import ST's native classes for accurate token management
     let ChatCompletion, Message;
     try {
-        let oaiModule = await import('../../../openai.js').catch(() => null);
-        if (!oaiModule) oaiModule = await import('../../../../openai.js').catch(() => null); // Third-party dir
-        if (!oaiModule) oaiModule = await import('../../../scripts/openai.js').catch(() => null);
-        if (!oaiModule) oaiModule = await import('../../../../scripts/openai.js').catch(() => null); // Third-party dir
-        if (!oaiModule) oaiModule = await import('/scripts/openai.js').catch(() => null);
-        
-        if (!oaiModule) throw new Error("Could not find openai.js in any known path.");
-
-        ChatCompletion = oaiModule.ChatCompletion;
-        Message = oaiModule.Message;
+        const oaiModule = await getOpenAIModule();
+        ChatCompletion = oaiModule?.ChatCompletion;
+        Message = oaiModule?.Message;
 
         if (!ChatCompletion || !Message) {
-            const ccModule = await import('../../../chat-completion.js').catch(() => null) ||
-                             await import('../../../../chat-completion.js').catch(() => null) ||
-                             await import('../../../scripts/chat-completion.js').catch(() => null) ||
-                             await import('../../../../scripts/chat-completion.js').catch(() => null) ||
-                             await import('/scripts/chat-completion.js').catch(() => null);
+            const ccModule = await getChatCompletionModule();
             ChatCompletion = ChatCompletion || ccModule?.ChatCompletion;
 
-            const msgModule = await import('../../../messages.js').catch(() => null) ||
-                              await import('../../../../messages.js').catch(() => null) ||
-                              await import('../../../scripts/messages.js').catch(() => null) ||
-                              await import('../../../../scripts/messages.js').catch(() => null) ||
-                              await import('/scripts/messages.js').catch(() => null);
+            const msgModule = await getMessagesModule();
             Message = Message || msgModule?.Message;
             
-            if (!ChatCompletion || !Message) throw new Error("Native ST classes missing from module exports.");
+            if (!ChatCompletion || !Message) {
+                throw new Error("SillyTavern native classes (ChatCompletion/Message) could not be resolved from core scripts. Detailed path attempts are available in the console (debug mode).");
+            }
         }
     } catch (err) {
-        logger.error('Failed to import native SillyTavern classes. Token-aware trimming will be disabled.', err);
-        return text.replace(/\{\{cc_all_prompts(?:\(budget=(\d+)\))?\}\}/g, '(Error: Native ST classes missing. Please check extension installation path.)');
+        const errorMsg = `[Polyceph] Critical Failure: Could not load native SillyTavern classes for token management. Pipeline aborted to prevent over-budget requests.`;
+        logger.error(errorMsg, err);
+        throw new Error(errorMsg);
     }
 
     // Identify prompt order for the current context
