@@ -10,11 +10,13 @@ import { logger } from './logger.js';
 import { forceHideStopButton, startTypingIndicator, removeTypingIndicator, updateTypingIndicator, clearOrphanedIndicators } from './engine/ui-utils.js';
 import { parseOutputTags, parsePromptToMessages } from './engine/parser.js';
 import { captureSessionState, restoreSessionState } from './engine/state-manager.js';
+import { finalizePipelineTeardown } from './engine/teardown.js';
 
 // Re-exports for backward compatibility with index.js and other files
 export { forceHideStopButton, startTypingIndicator, removeTypingIndicator, updateTypingIndicator, clearOrphanedIndicators };
 export { parseOutputTags, parsePromptToMessages };
 export { captureSessionState, restoreSessionState };
+export { finalizePipelineTeardown };
 
 let currentPipelineAbortController = null;
 let currentMutexHolder = null;
@@ -652,81 +654,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
         currentPipelineAbortController = null;
         const stContextEnd = SillyTavern.getContext();
 
-        // Final Event Emulation & Mutex Release
-        if (stContextEnd.eventSource) {
-
-
-            // 1. Mark ST as idle so it doesn't reject restoration requests
-            forceHideStopButton();
-
-            // 2. Ensure chat is saved to disk before releasing mutex
-            await ensureChatSaved();
-
-            // 3. Small pause to allow state restoration to fully register
-            await new Promise(resolve => setTimeout(resolve, 200));
-
-
-            // 4. Core Event Emulation (End) - Move here to ensure state is restored and unlocked
-            if (settings.emulateCoreEvents && stContextEnd.eventSource && stContextEnd.eventTypes) {
-                const lastMessageIdx = stContextEnd.chat.length - 1;
-                const isPolycephMsg = stContextEnd.chat[lastMessageIdx]?.extra?.polyceph_source === 'polyceph';
-
-                if (isPolycephMsg) {
-                    // Detach from current tick to allow UI to settle
-                    setTimeout(async () => {
-                        // 1. Reset ST UI state before firing events to ensure extensions perceive the correct initial state
-                        forceHideStopButton();
-
-                        logger.debug('Teardown: Releasing mutex so other extensions can process the message.');
-                        await stContextEnd.eventSource.emit(generationMutexEvents.MUTEX_RELEASED, { extension_name: MODULE_NAME });
-
-                        logger.debug('Teardown: Firing core events.');
-                        await stContextEnd.eventSource.emit(stContextEnd.eventTypes.MESSAGE_RECEIVED, lastMessageIdx);
-                        await stContextEnd.eventSource.emit(stContextEnd.eventTypes.CHARACTER_MESSAGE_RENDERED, lastMessageIdx);
-
-                        // Settle period - Wait for background tasks to hit the backend
-                        await new Promise(r => setTimeout(r, 200));
-
-                        // Fire native ST stop events so the core UI hides #mes_stop
-                        await stContextEnd.eventSource.emit(stContextEnd.eventTypes.GENERATION_STOPPED, 'normal', { automatic_trigger: true }, false);
-                        if (stContextEnd.eventTypes.CHARACTER_GENERATION_STOPPED) {
-                            await stContextEnd.eventSource.emit(stContextEnd.eventTypes.CHARACTER_GENERATION_STOPPED, lastMessageIdx);
-                        }
-                        await stContextEnd.eventSource.emit(stContextEnd.eventTypes.GENERATION_AFTER_DATA, 'normal', { automatic_trigger: true }, false);
-
-                        // 2. Final safety reset. Some extensions (like Tracker-Enhanced) might have re-shown the button during the events above.
-                        // We wait a moment for their async tasks to settle before enforcing the hidden state.
-                        setTimeout(() => {
-                            forceHideStopButton();
-                            stContextEnd.eventSource.emit('polyceph-pipeline-ended');
-                        }, 200);
-                    }, 200);
-                } else {
-                    logger.debug('Teardown: Last message not from Polyceph. Releasing mutex immediately.');
-
-                    forceHideStopButton();
-
-                    stContextEnd.eventSource.emit(generationMutexEvents.MUTEX_RELEASED, { extension_name: MODULE_NAME });
-
-                    // Fire native ST stop events so the core UI hides #mes_stop
-                    stContextEnd.eventSource.emit(stContextEnd.eventTypes.GENERATION_STOPPED, 'normal', { automatic_trigger: true }, false);
-
-                    stContextEnd.eventSource.emit('polyceph-pipeline-ended');
-                }
-            } else {
-                // If core emulation is off, release after a small delay
-                setTimeout(() => {
-                    forceHideStopButton();
-
-                    logger.debug('Teardown: Releasing mutex (Simple/No Emulation).');
-                    stContextEnd.eventSource.emit(generationMutexEvents.MUTEX_RELEASED, { extension_name: MODULE_NAME });
-
-                    // Fire native ST stop events so the core UI hides #mes_stop
-                    stContextEnd.eventSource.emit(stContextEnd.eventTypes.GENERATION_STOPPED, 'normal', { automatic_trigger: true }, false);
-
-                    stContextEnd.eventSource.emit('polyceph-pipeline-ended');
-                }, 200);
-            }
-        }
+        // 3. Final Event Emulation & Mutex Release
+        await finalizePipelineTeardown();
     }
 }
