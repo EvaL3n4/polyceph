@@ -1,17 +1,20 @@
 import { MODULE_NAME, generationMutexEvents } from './constants.js';
-import { settings, switchProfile, getActivePipeline, availableProfiles, saveSettings, captureProfileState, restoreProfileState, clearProfileState } from './state.js';
+import { settings, switchProfile, getActivePipeline, availableProfiles, saveSettings, clearProfileState } from './state.js';
 import { generateId, waitForApiReady } from './utils.js';
 import { expandPrompt } from './macros.js';
 import { getMaxContextTokens, getMaxResponseTokens, countTokens, generateViaApi, postMessageToChat, ensureChatSaved, getWorldInfoForChat, getActiveCharacterInfo, getMainSystemPrompt } from './compat-shared.js';
-import { capturePresetState, restorePresetState, clearPresetState, applyPreset, getCurrentPresetName } from './compat-presets.js';
+import { clearPresetState, applyPreset, getCurrentPresetName } from './compat-presets.js';
 import { logger } from './logger.js';
 
 // Sub-modules
 import { forceHideStopButton, startTypingIndicator, removeTypingIndicator, updateTypingIndicator, clearOrphanedIndicators } from './engine/ui-utils.js';
 import { parseOutputTags, parsePromptToMessages } from './engine/parser.js';
+import { captureSessionState, restoreSessionState } from './engine/state-manager.js';
 
+// Re-exports for backward compatibility with index.js and other files
 export { forceHideStopButton, startTypingIndicator, removeTypingIndicator, updateTypingIndicator, clearOrphanedIndicators };
 export { parseOutputTags, parsePromptToMessages };
+export { captureSessionState, restoreSessionState };
 
 let currentPipelineAbortController = null;
 let currentMutexHolder = null;
@@ -212,10 +215,8 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
         logger.debug('Core events finished. Active injections:', Object.keys(stContext.extension_prompts || {}));
     }
 
-    // Capture the current profile so it can be restored after the run
-    // We capture AFTER the wait so we are capturing the state after extensions have finished their work
-    captureProfileState();
-    capturePresetState();
+    // 1. Capture current state for restoration
+    captureSessionState();
 
     const activePipeline = getActivePipeline();
     const pipelineName = activePipeline?.name || 'Default';
@@ -645,33 +646,8 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
         // Give UI a moment to settle before restoration
         await new Promise(r => setTimeout(r, 100));
 
-        // Restore the user's original preset and clean up
-        if (settings.restore_after_run) {
-            logger.info('Pipeline finished. Restoring original profile and preset state.');
-
-            // Create a listener for the restoration completion
-            const stContext = SillyTavern.getContext();
-            const restorationPromise = new Promise(resolve => {
-                const handler = () => {
-                    logger.debug('Detected connection_profile_loaded event.');
-                    resolve();
-                };
-                stContext.eventSource.once('connection_profile_loaded', handler);
-                // Fallback timeout in case event doesn't fire
-                setTimeout(resolve, 3000);
-            });
-
-            await restoreProfileState();
-            await restorationPromise;
-
-            restorePresetState();
-            clearProfileState();
-            clearPresetState();
-        } else {
-            logger.info('Pipeline finished. Restoration disabled, staying on current preset.');
-            clearProfileState();
-            clearPresetState(); // Still clear the state so next run captures fresh
-        }
+        // Restore the user's original session state and clean up
+        await restoreSessionState();
         await removeTypingIndicator(); // Triple safety check after restoration reload
         currentPipelineAbortController = null;
         const stContextEnd = SillyTavern.getContext();
