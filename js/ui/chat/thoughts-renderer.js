@@ -1,5 +1,6 @@
 import { logger } from '../../logger.js';
 import { stopPipeline } from '../../engine.js';
+import { scrollToBottom } from '../ui-shared.js';
 
 /**
  * Generates HTML for a single reasoning thought block.
@@ -58,10 +59,15 @@ export function generateThoughtsHTML(thoughtsArray, pipelineName) {
 export function renderPolycephTyping(messageElement, chatMsg) {
     const activeTasks = chatMsg.extra?.polyceph_active_tasks || [];
     const isStopping = chatMsg.extra?.polyceph_stopping === true;
-    
+
     let stepInfo = 'Processing';
     if (activeTasks.length > 0) {
-        stepInfo = `Step ${activeTasks[0].step}/${activeTasks[0].totalSteps}`;
+        const firstTask = activeTasks[0];
+        if (firstTask.id === 'waiting') {
+            stepInfo = 'Preparing';
+        } else {
+            stepInfo = `Step ${firstTask.step}/${firstTask.totalSteps}`;
+        }
     } else if (chatMsg.mes && chatMsg.mes.includes('Step')) {
         const match = chatMsg.mes.match(/Step (\d+\/\d+)/);
         if (match) stepInfo = `Step ${match[1]}`;
@@ -91,6 +97,7 @@ export function renderPolycephTyping(messageElement, chatMsg) {
             stopPipeline();
         });
         $mesBlock.append($indicator);
+        scrollToBottom();
     }
 
     if (isStopping) {
@@ -108,6 +115,7 @@ export function renderPolycephTyping(messageElement, chatMsg) {
         `).join('');
         $indicator.find('.polyceph-active-tasks-list').html(tasksHtml || '<div class="polyceph-active-task-label">Preparing...</div>');
         $indicator.find('.polyceph-stop-button').show();
+        scrollToBottom();
     }
 }
 
@@ -206,4 +214,7 @@ export function renderPolycephThoughts() {
 
         messageElement.setAttribute('polyceph_thoughts_id', thoughtsId);
     });
+
+    // Defer a final scroll to ensure all injected elements are sized
+    setTimeout(() => scrollToBottom(), 50);
 }

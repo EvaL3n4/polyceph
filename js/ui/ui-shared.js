@@ -128,3 +128,31 @@ export function syncHiddenMessageVisibility(settings) {
         document.body.classList.remove('polyceph-show-reasoning');
     }
 }
+/**
+ * Scrolls the chat to the bottom.
+ * Attempts to use SillyTavern's native scroll helpers if available.
+ */
+export function scrollToBottom(smooth = true) {
+    // 1. Try SillyTavern's native global function
+    if (typeof window.scrollChatToBottom === 'function') {
+        window.scrollChatToBottom({ waitForFrame: true });
+        return;
+    }
+
+    // 2. Try SillyTavern's context-aware function
+    const context = (typeof SillyTavern !== 'undefined' && typeof SillyTavern.getContext === 'function') ? SillyTavern.getContext() : null;
+    if (context && typeof context.scrollChatToBottom === 'function') {
+        context.scrollChatToBottom({ waitForFrame: true });
+        return;
+    }
+
+    // 3. Fallback to direct DOM manipulation
+    const chat = document.getElementById('chat');
+    if (!chat) return;
+
+    if (smooth) {
+        $(chat).animate({ scrollTop: chat.scrollHeight }, 200);
+    } else {
+        chat.scrollTop = chat.scrollHeight;
+    }
+}
