@@ -6,6 +6,13 @@ import { getMaxContextTokens, getMaxResponseTokens, countTokens, generateViaApi,
 import { capturePresetState, restorePresetState, clearPresetState, applyPreset, getCurrentPresetName } from './compat-presets.js';
 import { logger } from './logger.js';
 
+// Sub-modules
+import { forceHideStopButton, startTypingIndicator, removeTypingIndicator, updateTypingIndicator, clearOrphanedIndicators } from './engine/ui-utils.js';
+import { parseOutputTags, parsePromptToMessages } from './engine/parser.js';
+
+export { forceHideStopButton, startTypingIndicator, removeTypingIndicator, updateTypingIndicator, clearOrphanedIndicators };
+export { parseOutputTags, parsePromptToMessages };
+
 let currentPipelineAbortController = null;
 let currentMutexHolder = null;
 
@@ -49,139 +56,6 @@ export function stopPipeline() {
 
         toastr.warning('Stopping pipeline...', 'Polyceph');
     }
-}
-
-/**
- * Brute-force ensures the SillyTavern stop button is hidden and UI state is reset.
- * Overwrites residual inline styles from third-party extensions.
- */
-export function forceHideStopButton() {
-    const context = SillyTavern.getContext();
-    const stopBtn = document.getElementById('mes_stop');
-    if (stopBtn) stopBtn.style.display = 'none';
-
-    if (typeof context.activateSendButtons === 'function') {
-        context.activateSendButtons();
-    } else if (typeof window.is_send_press !== 'undefined') {
-        window.is_send_press = false;
-    }
-}
-
-export function parseOutputTags(rawOutput, taskId, profileDisplayName, isThinkingTask) {
-    const thoughts = [];
-    const hiddenBackgrounds = [];
-
-    // Extract backgrounds first (always extracted)
-    const backgroundRegex = /<background>([\s\S]*?)<\/background>/gi;
-    let bgMatch;
-    while ((bgMatch = backgroundRegex.exec(rawOutput)) !== null) {
-        const content = bgMatch[1].trim();
-        if (content) hiddenBackgrounds.push(content);
-    }
-
-    // Interleaved parsing for think/ramble and text
-    const tokenRegex = /(<think>[\s\S]*?<\/think>|<ramble>[\s\S]*?<\/ramble>)/gi;
-    const segments = rawOutput.split(tokenRegex);
-
-    let cleanParts = [];
-    let persistentParts = [];
-
-    segments.forEach(segment => {
-        if (!segment) return;
-
-        if (segment.toLowerCase().startsWith('<think>')) {
-            const content = segment.replace(/<\/?think>/gi, '').trim();
-            if (content) {
-                thoughts.push({ title: `Thinking`, content, isSilent: true, profile: profileDisplayName });
-            }
-        } else if (segment.toLowerCase().startsWith('<ramble>')) {
-            const content = segment.replace(/<\/?ramble>/gi, '').trim();
-            if (content) {
-                thoughts.push({ title: `Rambling`, content, isSilent: true, profile: profileDisplayName });
-                cleanParts.push(content);
-            }
-        } else {
-            // Regular text (remove backgrounds from it)
-            const content = segment.replace(backgroundRegex, '').trim();
-            if (content) {
-                cleanParts.push(content);
-                persistentParts.push(content);
-
-                // If it's a "Thinking" task, everything goes into the thoughts list in order
-                if (isThinkingTask) {
-                    thoughts.push({ title: taskId || `Task Output`, content, isSilent: false, profile: profileDisplayName });
-                }
-            }
-        }
-    });
-
-    return {
-        cleanOutput: cleanParts.join('\n\n').trim(),
-        persistentOutput: persistentParts.join('\n\n').trim(),
-        thoughts,
-        hiddenBackgrounds
-    };
-}
-
-/**
- * Parses a prompt string with [[ROLE:name]] tags into a SillyTavern message array.
- * Validates tag structure and warns about content outside role tags.
- */
-function parsePromptToMessages(text, api = '') {
-    const messages = [];
-    const roleRegex = /\[\[ROLE:(system|user|assistant)\]\]([\s\S]*?)\[\[\/ROLE\]\]/gi;
-    let lastIndex = 0;
-    let match;
-    let hasRoleTags = false;
-    let hasOrphanedContent = false;
-
-    while ((match = roleRegex.exec(text)) !== null) {
-        hasRoleTags = true;
-        const precedingText = text.substring(lastIndex, match.index).trim();
-        if (precedingText) {
-            hasOrphanedContent = true;
-            messages.push({ role: 'system', content: precedingText });
-        }
-        messages.push({ role: match[1].toLowerCase(), content: match[2].trim() });
-        lastIndex = roleRegex.lastIndex;
-    }
-
-    const remainingText = text.substring(lastIndex).trim();
-    if (remainingText && hasRoleTags) {
-        hasOrphanedContent = true;
-        messages.push({ role: 'system', content: remainingText });
-    } else if (remainingText) {
-        messages.push({ role: 'system', content: remainingText });
-    }
-
-    if (messages.length === 0) {
-        return [{ role: 'system', content: text.trim() }];
-    }
-
-    // Validation: check for content outside role tags (only for Chat Completion)
-    if (hasOrphanedContent && remainingText.trim().length > 0 && api === 'openai') {
-        logger.debug("Prompt contains implicit 'system' content outside [[ROLE:...]] tags.");
-    }
-
-    // Validation: check for malformed tags that the regex didn't match
-    if (hasRoleTags) {
-        const openCount = (text.match(/\[\[ROLE:/gi) || []).length;
-        const closeCount = (text.match(/\[\[\/ROLE\]\]/gi) || []).length;
-        if (openCount !== closeCount) {
-            logger.warn(`Mismatched role tags: ${openCount} opening vs ${closeCount} closing. Some content may be incorrectly assigned.`);
-        }
-    }
-
-    const mergedMessages = [];
-    for (const msg of messages) {
-        const lastMsg = mergedMessages[mergedMessages.length - 1];
-        if (lastMsg && lastMsg.role === msg.role) {
-            lastMsg.content += '\n\n' + msg.content;
-        } else {
-            mergedMessages.push(msg);
-        }
-    }
-    return mergedMessages;
 }
 
 export async function generateQuietly(profileName, prompt, api = '', signal = null) {
@@ -240,73 +114,6 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
         logger.error('generation failed:', err);
         return "(Error during generation)";
     }
-}
-
-async function startTypingIndicator() {
-    const stContext = SillyTavern.getContext();
-    const typingIdx = stContext.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
-    if (typingIdx === -1) return;
-    const lastMsgIdx = stContext.chat.length - 1;
-    const lastMsg = stContext.chat[lastMsgIdx];
-    if (lastMsg) {
-        if (!lastMsg.extra) lastMsg.extra = {};
-        lastMsg.extra.polyceph_typing = true;
-        lastMsg.extra.polyceph_active_tasks = [];
-        if (typeof stContext.updateMessageBlock === 'function') {
-            stContext.updateMessageBlock(lastMsgIdx, lastMsg);
-        }
-    }
-}
-
-function updateTypingIndicator() {
-    const stContext = SillyTavern.getContext();
-    const typingIdx = stContext.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
-    logger.debug('updateTypingIndicator', { typingIdx, hasMsg: !!stContext.chat[typingIdx], activeTasks: stContext.chat[typingIdx]?.extra?.polyceph_active_tasks });
-    if (typingIdx !== -1 && stContext.chat[typingIdx]) {
-        if (typeof stContext.updateMessageBlock === 'function') {
-            stContext.updateMessageBlock(typingIdx, stContext.chat[typingIdx]);
-        } else if (typeof stContext.renderChat === 'function') {
-            stContext.renderChat();
-        }
-    }
-}
-
-async function ensureTypingIndicatorAtEnd() {
-    // No-op: Anchored to user message
-}
-
-/**
- * Exhaustively removes all typing indicator flags from the chat and updates the UI.
- */
-export async function removeTypingIndicator() {
-    const context = SillyTavern.getContext();
-    if (!context.chat) return;
-
-    let modified = false;
-    context.chat.forEach((msg, idx) => {
-        if (msg && msg.extra && (msg.extra.polyceph_typing || msg.extra.polyceph_active_tasks || msg.extra.polyceph_stopping)) {
-            delete msg.extra.polyceph_typing;
-            delete msg.extra.polyceph_active_tasks;
-            delete msg.extra.polyceph_stopping;
-            modified = true;
-            if (typeof context.updateMessageBlock === 'function') {
-                context.updateMessageBlock(idx, msg);
-            }
-        }
-    });
-
-    if (modified) {
-        logger.debug('Typing indicator(s) and metadata flags removed.');
-        await ensureChatSaved();
-    }
-}
-
-/**
- * Startup cleanup to remove any orphaned indicators from interrupted runs.
- */
-export async function clearOrphanedIndicators() {
-    logger.debug('Starting startup cleanup for orphaned indicators...');
-    await removeTypingIndicator();
 }
 
 export async function startPipeline(text, generateSwipesForBatchId, triggeringUserMesId = -1) {
