@@ -1,143 +1,6 @@
-import { countTokens, getMaxContextTokens, getMaxResponseTokens, getMaxPromptTokens, getWorldInfoForChat } from './compat-shared.js';
-import { logger } from './logger.js';
-
-/**
- * Weaves extension-injected prompts into a message list based on depth and position.
- * Mimics SillyTavern's populationInjectionPrompts logic.
- */
-function weaveInjections(messages, extensionPrompts) {
-    if (!extensionPrompts) return messages.map(m => ({ ...m, is_injection: false }));
-
-    const injections = [];
-    Object.keys(extensionPrompts).forEach(key => {
-        const prompt = extensionPrompts[key];
-        if (prompt && prompt.value && prompt.value.trim()) {
-            injections.push({
-                id: key,
-                value: prompt.value.trim(),
-                depth: Number(prompt.depth || 0),
-                position: Number(prompt.position || 0), // 0: Before, 1: In-Chat
-                role: Number(prompt.role || 0)
-            });
-        }
-    });
-
-    const finalMessages = [];
-    // Loop backwards to match ST's depth logic (0 is last message)
-    for (let i = messages.length - 1; i >= 0; i--) {
-        const depth = messages.length - 1 - i;
-        const msg = messages[i];
-
-        // In-Chat Injections (Position 1) go AFTER the message at that depth (closer to bottom)
-        injections.filter(inj => inj.depth === depth && inj.position === 1).forEach(inj => {
-            finalMessages.unshift({ mes: inj.value, role: inj.role, is_injection: true });
-        });
-
-        // The Message itself
-        finalMessages.unshift({ ...msg, is_injection: false });
-
-        // Before-Prompt Injections (Position 0) - technically ST handles position 0 at top-of-prompt,
-        // but resolveChatHistory previously supported it here too for granularity.
-        injections.filter(inj => inj.depth === depth && inj.position === 0).forEach(inj => {
-            finalMessages.unshift({ mes: inj.value, role: inj.role, is_injection: true });
-        });
-    }
-
-    // Handle depths beyond chat length
-    injections.filter(inj => inj.depth >= messages.length).forEach(inj => {
-        finalMessages.unshift({ mes: inj.value, role: inj.role, is_injection: true });
-    });
-
-    return finalMessages;
-}
-
-/**
- * Resolves Polyceph-specific chat history macros.
- * Handles: {{chat_history}}, {{chat_history:N}}, {{chat_history:live}}, {{chat_history:live:N}}
- * 
- * @param {string} text - The prompt text to process
- * @param {Array} cleanChat - Snapshot of the chat array without typing indicators
- * @param {object} stContext - SillyTavern context
- * @returns {string} - Processed text
- */
-export function resolveChatHistory(text, cleanChat, stContext) {
-    if (!text) return text;
-
-    // Regex for: {{chat_history|last:10|live:true|bg_last:2|injections:true}}
-    return text.replace(/\{\{chat_history(?:\|([^}]+))?\}\}/g, (match, params) => {
-        const options = {};
-        if (params) {
-            params.split('|').forEach(p => {
-                const [key, val] = p.split(':').map(s => s.trim().toLowerCase());
-                if (key) options[key] = val;
-            });
-        }
-
-        const includeInjections = options.no_extensions !== 'true';
-
-        // 1. Select Source
-        let source = (options.live === 'true') ?
-            stContext.chat.filter(m => m && !m.extra?.polyceph_typing && !m.is_system && !m.mes?.trim().startsWith('/')) :
-            cleanChat;
-
-        // 2. Filter Background Messages (preserve order)
-        let filteredMessages = source;
-        if (options.bg_last !== undefined) {
-            const bgLimit = parseInt(options.bg_last);
-            const backgroundMsgs = source.filter(m => m && m.extra?.polyceph_hidden);
-
-            if (backgroundMsgs.length > bgLimit) {
-                const keepBgs = backgroundMsgs.slice(-bgLimit);
-                filteredMessages = source.filter(m => {
-                    // Keep if not hidden OR if it's one of the last N hidden ones
-                    if (!m.extra?.polyceph_hidden) return true;
-                    return keepBgs.includes(m);
-                });
-            }
-        }
-
-        // 3 & 4. Map and Weave
-        const finalMessages = weaveInjections(filteredMessages, includeInjections ? stContext.extensionPrompts : null);
-
-        // 5. Format to strings
-        let history = finalMessages.map(m => {
-            let mRole = 'assistant';
-            if (m.is_injection) {
-                if (m.role === 1) mRole = 'user';
-                else if (m.role === 2) mRole = 'assistant';
-                else mRole = 'system';
-            } else {
-                if (m.extra?.polyceph_hidden) mRole = 'assistant';
-                else if (m.is_user) mRole = 'user';
-                else if (m.is_system) mRole = 'system';
-            }
-
-            let encodedInvocations = '';
-            if (m.extra?.tool_invocations && Array.isArray(m.extra.tool_invocations)) {
-                encodedInvocations = `\n[[INVOCATIONS:${JSON.stringify(m.extra.tool_invocations)}]]`;
-            }
-
-            if (isCC) {
-                return `[[ROLE:${mRole}]]\n${m.mes}${encodedInvocations}\n[[/ROLE]]`;
-            }
-
-            // For text completion, we still use a readable format
-            if (mRole === 'system') return `### System Instruction:\n${m.mes}${encodedInvocations}`;
-            return `${m.name || (m.is_user ? 'User' : 'Assistant')}: ${m.mes}${encodedInvocations}`;
-        });
-
-        // 6. Apply Final Limit
-        if (options.last !== undefined) {
-            const lastN = parseInt(options.last);
-            if (!isNaN(lastN)) {
-                history = history.slice(-lastN);
-            }
-        }
-
-        logger.debug(`Resolved {{chat_history}} with ${history.length} messages (Params: ${params || 'none'})`);
-        return history.join('\n\n');
-    });
-}
+import { countTokens, getMaxContextTokens, getMaxResponseTokens, getWorldInfoForChat } from '../compat-shared.js';
+import { logger, wrapRole } from './utils.js';
+import { weaveInjections } from './history.js';
 
 /**
  * Resolves all active SillyTavern Chat Completion prompts into a single string.
@@ -241,9 +104,6 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
 
         if (!prompt) return '';
 
-        const role = prompt.role || 'system';
-        const wrap = (content) => content && String(content).trim() ? `[[ROLE:${role}]]\n${String(content).trim()}\n[[/ROLE]]` : '';
-
         if (prompt.marker || [
             'charDescription', 'charPersonality', 'scenario',
             'personaDescription', 'worldInfoBefore', 'worldInfoAfter',
@@ -253,22 +113,22 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
             const charFields = typeof stContext.getCharacterCardFields === 'function' ? stContext.getCharacterCardFields() : {};
 
             switch (id) {
-                case 'charDescription': return wrap(charFields.description || char?.description || '');
-                case 'charPersonality': return wrap(charFields.personality || char?.personality || '');
-                case 'scenario': return wrap(charFields.scenario || char?.scenario || '');
+                case 'charDescription': return wrapRole(prompt.role || 'system', charFields.description || char?.description || '');
+                case 'charPersonality': return wrapRole(prompt.role || 'system', charFields.personality || char?.personality || '');
+                case 'scenario': return wrapRole(prompt.role || 'system', charFields.scenario || char?.scenario || '');
                 case 'personaDescription': {
                     const desc = charFields.persona || stContext.powerUserSettings?.persona_description || '';
-                    return wrap(desc);
+                    return wrapRole(prompt.role || 'system', desc);
                 }
                 case 'worldInfoBefore': {
                     const freshWI = await getCachedWI(chatSource);
-                    return wrap(freshWI.before || '');
+                    return wrapRole(prompt.role || 'system', freshWI.before || '');
                 }
                 case 'worldInfoAfter': {
                     const freshWI = await getCachedWI(chatSource);
-                    return wrap(freshWI.after || '');
+                    return wrapRole(prompt.role || 'system', freshWI.after || '');
                 }
-                case 'dialogueExamples': return wrap(charFields.mesExamples || char?.mes_example || '');
+                case 'dialogueExamples': return wrapRole(prompt.role || 'system', charFields.mesExamples || char?.mes_example || '');
                 case 'chatHistory': {
                     const finalMessages = weaveInjections(chatSource, stContext.extensionPrompts);
                     return finalMessages.map(m => {
@@ -291,10 +151,10 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
                         return `[[ROLE:${mRole}]]\n${m.mes || ''}${encodedInvocations}\n[[/ROLE]]`;
                     }).join('\n\n');
                 }
-                default: return wrap(prompt.content || '');
+                default: return wrapRole(prompt.role || 'system', prompt.content || '');
             }
         }
-        return wrap(prompt.content || '');
+        return wrapRole(prompt.role || 'system', prompt.content || '');
     };
 
     let result = text;
@@ -324,7 +184,7 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
         const staticCCParts = [];
         for (const entry of promptOrder) {
             if (!entry.enabled || entry.identifier === 'chatHistory') continue;
-            const content = resolveIdentifier(entry.identifier, []);
+            const content = await resolveIdentifier(entry.identifier, []);
             if (content.trim()) {
                 const msg = await Message.createAsync('system', content, entry.identifier);
                 if (chatCompletion.canAfford(msg)) {
@@ -404,41 +264,6 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
     if (result.includes('{{cc_enhance_definitions}}')) {
         const content = await resolveIdentifier('enhanceDefinitions', cleanChat);
         result = result.replace(/\{\{cc_enhance_definitions\}\}/g, content);
-    }
-
-    return result;
-}
-
-/**
- * Fully expands a prompt by resolving Polyceph-specific recursion and custom macros.
- */
-export async function expandPrompt(template, settings, contextVault, cleanChat, stContext) {
-    let result = template || '';
-
-    const macroMatch = result.match(/\{\{[^}]+\}\}/g);
-    if (macroMatch) {
-        logger.debug(`Expanding template with macros: ${macroMatch.join(', ')}`);
-    }
-
-    // 1. Resolve recursive {{polyceph_prompt}}
-    const globalPrompt = settings.polycephPrompt || '';
-    result = result.replace(/\{\{polyceph_prompt\}\}/g, globalPrompt);
-
-    // 2. Resolve Chat History (with params)
-    result = resolveChatHistory(result, cleanChat, stContext);
-
-    // 3. Resolve Chat Completion Prompts (Token-aware)
-    result = await resolveCCMacros(result, cleanChat, stContext, null, contextVault);
-
-    // 4. Resolve {{user_input}} with explicit user role
-    const resolvedInput = contextVault?.['user_input'] || settings.userInput || '';
-    result = result.replace(/\{\{user_input\}\}/g, `[[ROLE:user]]\n${resolvedInput}\n[[/ROLE]]`);
-
-    // 5. Resolve SillyTavern standard macros and remaining contextVault items
-    if (typeof stContext.substituteParams === 'function') {
-        result = stContext.substituteParams(result, {
-            dynamicMacros: contextVault
-        });
     }
 
     return result;
