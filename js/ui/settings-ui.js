@@ -1,4 +1,4 @@
-import { settings, saveSettings, availableProfiles, availableModels, availablePresetsByApi, clearProfileState, getAvailableProfiles, getActivePipeline, createPipeline, deletePipeline, refreshPresets } from '../state.js';
+import { settings, saveSettings, availableProfiles, availablePresetsByApi, clearProfileState, getAvailableProfiles, getActivePipeline, createPipeline, deletePipeline, refreshPresets } from '../state.js';
 import { MODULE_NAME, VERSION } from '../constants.js';
 import { generateId } from '../utils.js';
 import { setLogLevel } from '../logger.js';

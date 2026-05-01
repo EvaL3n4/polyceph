@@ -14,14 +14,16 @@ export const SELECTORS = {
     SETTINGS_SELECTOR: 'polyceph_pipeline_selector',
     SETTINGS_CONTAINER: 'polyceph_settings_container',
     STEPS_CONTAINER: 'polyceph_steps_container',
-    NAME_INPUT: 'polyceph_active_pipeline_name'
+    NAME_INPUT: 'polyceph_active_pipeline_name',
+    ST_EDITOR_TEXTAREA: 'curEditTextarea'
 };
 
 export const CLASSES = {
     HIDDEN: 'polyceph-hidden',
     DISABLED: 'polyceph-disabled',
     DROPDOWN_ITEM: 'polyceph-dropdown-item',
-    ACTIVE: 'active'
+    ACTIVE: 'active',
+    ST_EDITOR_DONE: 'mes_edit_done'
 };
 
 /**
@@ -155,4 +157,42 @@ export function scrollToBottom(smooth = true) {
     } else {
         chat.scrollTop = chat.scrollHeight;
     }
+}
+
+/**
+ * Checks if the SillyTavern message editor is currently open.
+ */
+export function isEditorOpen() {
+    const textarea = getEl(SELECTORS.ST_EDITOR_TEXTAREA);
+    return !!(textarea && (textarea.offsetWidth > 0 || textarea.offsetHeight > 0));
+}
+
+/**
+ * Triggers a save on the active SillyTavern message edit and waits for completion.
+ * @returns {Promise<boolean>} True if saved and closed, false if timed out.
+ */
+export async function saveActiveEdit() {
+    const textarea = getEl(SELECTORS.ST_EDITOR_TEXTAREA);
+    if (!textarea) return true; // Already closed
+
+    // Find the save button associated with the current editor
+    const mesBlock = textarea.closest('.mes');
+    const saveBtn = mesBlock ? mesBlock.querySelector(`.${CLASSES.ST_EDITOR_DONE}`) : document.querySelector(`.${CLASSES.ST_EDITOR_DONE}`);
+    
+    if (!saveBtn) return false;
+
+    // Using jQuery trigger if available to be as close to ST core behavior as possible
+    if (typeof $ !== 'undefined') {
+        $(saveBtn).trigger('click');
+    } else {
+        saveBtn.click();
+    }
+
+    // Poll for the editor to close (max 1 second)
+    for (let i = 0; i < 20; i++) {
+        if (!isEditorOpen()) return true;
+        await new Promise(r => setTimeout(r, 50));
+    }
+    
+    return !isEditorOpen();
 }

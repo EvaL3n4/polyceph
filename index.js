@@ -5,6 +5,7 @@ import { addSettingsUI } from './js/ui/settings-ui.js';
 import { startPipeline, runPipeline, clearOrphanedIndicators } from './js/engine.js';
 import { injectChatPipelineSelector } from './js/ui/chat-ui.js';
 import { postMessageToChat, ensureChatSaved } from './js/compat-shared.js';
+import { isEditorOpen, saveActiveEdit } from './js/ui/ui-shared.js';
 import { logger } from './js/logger.js';
 
 // -------------------------------------------------------------------------
@@ -60,6 +61,25 @@ async function processSendAction() {
         return;
     }
     lastSendTime = now;
+
+    // Handle active message edit if present
+    if (isEditorOpen()) {
+        logger.info('Active message edit detected. Saving before pipeline run.');
+        try {
+            const saved = await saveActiveEdit();
+            if (!saved) {
+                logger.error('Editor failed to close after save attempt.');
+                toastr.error('Message editor failed to close. Pipeline aborted to prevent data loss.', 'Polyceph');
+                return;
+            }
+            // Give ST a tiny bit more time to settle the chat array update
+            await new Promise(r => setTimeout(r, 100));
+        } catch (err) {
+            logger.error('Error during editor save:', err);
+            toastr.error('Error saving message edit. Pipeline aborted.', 'Polyceph');
+            return;
+        }
+    }
 
     const context = SillyTavern.getContext();
 
