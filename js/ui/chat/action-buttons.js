@@ -37,13 +37,8 @@ export function updateSendButtonVisibility() {
     if (isActive) {
         if (isRunning) {
             showEl(polyStopBut);
-            if (isIntercept) {
-                showEl(polySendBut);
-                disableEl(polySendBut);
-            } else {
-                hideEl(polySendBut);
-                if (stSendBut) disableEl(stSendBut);
-            }
+            hideEl(polySendBut);
+            if (!isIntercept && stSendBut) disableEl(stSendBut);
         } else {
             hideEl(polyStopBut);
             enableEl(polySendBut);

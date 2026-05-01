@@ -1,5 +1,6 @@
 import { logger } from '../logger.js';
 import { ensureChatSaved } from '../compat-shared.js';
+import { settings } from '../state.js';
 
 /**
  * Brute-force ensures the SillyTavern stop button is hidden and UI state is reset.
@@ -7,13 +8,39 @@ import { ensureChatSaved } from '../compat-shared.js';
  */
 export function forceHideStopButton() {
     const context = SillyTavern.getContext();
-    const stopBtn = document.getElementById('mes_stop');
-    if (stopBtn) stopBtn.style.display = 'none';
+    const stStopBtn = document.getElementById('mes_stop');
+    const polyStopBtn = document.getElementById('polyceph-stop-button');
+    const polySendBtn = document.getElementById('polyceph-send-button');
+
+    const stSendBut = document.getElementById('send_but');
+
+    if (stStopBtn) stStopBtn.style.display = 'none';
+    if (polyStopBtn) polyStopBtn.style.display = 'none';
+    
+    if (stSendBut) {
+        stSendBut.style.opacity = '1';
+        stSendBut.style.pointerEvents = 'auto';
+        stSendBut.classList.remove('polyceph-disabled');
+    }
 
     if (typeof context.activateSendButtons === 'function') {
         context.activateSendButtons();
     } else if (typeof window.is_send_press !== 'undefined') {
         window.is_send_press = false;
+    }
+
+    // Restoration logic for Polyceph Send
+    if (polySendBtn) {
+        const isActive = settings.activePipelineId !== 'none';
+        const isIntercept = settings.interceptSend !== false;
+
+        if (isActive && !isIntercept) {
+            polySendBtn.style.display = 'flex';
+            polySendBtn.style.opacity = '1';
+            polySendBtn.style.pointerEvents = 'auto';
+        } else {
+            polySendBtn.style.display = 'none';
+        }
     }
 }
 
