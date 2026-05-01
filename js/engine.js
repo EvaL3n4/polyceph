@@ -275,22 +275,38 @@ async function ensureTypingIndicatorAtEnd() {
     // No-op: Anchored to user message
 }
 
-async function removeTypingIndicator() {
+/**
+ * Exhaustively removes all typing indicator flags from the chat and updates the UI.
+ */
+export async function removeTypingIndicator() {
     const context = SillyTavern.getContext();
-    const idx = context.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
-    if (idx === -1) return;
+    if (!context.chat) return;
 
-    const msg = context.chat[idx];
-    if (msg.extra) {
-        delete msg.extra.polyceph_typing;
-        delete msg.extra.polyceph_active_tasks;
-        delete msg.extra.polyceph_stopping;
-    }
+    let modified = false;
+    context.chat.forEach((msg, idx) => {
+        if (msg && msg.extra && (msg.extra.polyceph_typing || msg.extra.polyceph_active_tasks || msg.extra.polyceph_stopping)) {
+            delete msg.extra.polyceph_typing;
+            delete msg.extra.polyceph_active_tasks;
+            delete msg.extra.polyceph_stopping;
+            modified = true;
+            if (typeof context.updateMessageBlock === 'function') {
+                context.updateMessageBlock(idx, msg);
+            }
+        }
+    });
 
-    if (typeof context.updateMessageBlock === 'function') {
-        context.updateMessageBlock(idx, msg);
+    if (modified) {
+        logger.debug('Typing indicator(s) and metadata flags removed.');
+        await ensureChatSaved();
     }
-    if (typeof context.saveChat === 'function') context.saveChat();
+}
+
+/**
+ * Startup cleanup to remove any orphaned indicators from interrupted runs.
+ */
+export async function clearOrphanedIndicators() {
+    logger.debug('Starting startup cleanup for orphaned indicators...');
+    await removeTypingIndicator();
 }
 
 export async function startPipeline(text, generateSwipesForBatchId, triggeringUserMesId = -1) {
@@ -813,8 +829,14 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
         toastr.error('Pipeline execution encountered an error.', 'Polyceph');
         logger.error('Pipeline Error', e);
     } finally {
+        // 1. Immediate UI Cleanup - Ensure the typing indicator is gone before anything else
+        // We do this immediately in the finally block to catch errors and aborts.
+        await removeTypingIndicator();
+        forceHideStopButton();
+        await removeTypingIndicator(); // Final safety sweep
+
         // Give UI a moment to settle before restoration
-        await new Promise(r => setTimeout(r, 300));
+        await new Promise(r => setTimeout(r, 100));
 
         // Restore the user's original preset and clean up
         if (settings.restore_after_run) {
@@ -843,7 +865,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
             clearProfileState();
             clearPresetState(); // Still clear the state so next run captures fresh
         }
-        await removeTypingIndicator();
+        await removeTypingIndicator(); // Triple safety check after restoration reload
         currentPipelineAbortController = null;
         const stContextEnd = SillyTavern.getContext();
 

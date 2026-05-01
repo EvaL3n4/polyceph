@@ -2,7 +2,7 @@ import { MODULE_NAME, VERSION, generationMutexEvents } from './js/constants.js';
 import { loadSettings, getAvailableProfiles, refreshPresets, settings } from './js/state.js';
 import { renderPolycephThoughts, syncHiddenMessageVisibility } from './js/ui.js';
 import { addSettingsUI } from './js/settings-ui.js';
-import { startPipeline, runPipeline } from './js/engine.js';
+import { startPipeline, runPipeline, clearOrphanedIndicators } from './js/engine.js';
 import { injectChatPipelineSelector, updateChatSelectorOptions, updateSendButtonVisibility } from './js/chat-ui.js';
 import { postMessageToChat, ensureChatSaved } from './js/compat-shared.js';
 import { logger } from './js/logger.js';
@@ -248,7 +248,8 @@ function setupIntercepts() {
 async function init() {
     logger.info(`Initializing Polyceph v${VERSION}...`);
 
-    loadSettings();
+    await loadSettings();
+    await clearOrphanedIndicators(); // Clean up any stuck state from a previous crash/reload
     syncHiddenMessageVisibility();
     await getAvailableProfiles();
     refreshPresets();
