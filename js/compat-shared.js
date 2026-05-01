@@ -300,15 +300,20 @@ export function isChatCompletionApi() {
  * Sends a message array to SillyTavern's generation API with version fallbacks.
  * Wraps the generateRaw → generateQuietPrompt → slash command fallback chain.
  *
- * @param {object[]} messages - Array of {role, content} message objects.
+ * @param {object[]} messages - Array of {role, content, invocations} message objects.
+ * @param {object[]} [tools] - Optional tool definitions.
+ * @param {object|string} [tool_choice] - Optional tool choice setting.
  * @returns {Promise<string>} The generated response text.
  * @throws {Error} If no generation function is available.
  */
-export async function generateViaApi(messages) {
+export async function generateViaApi(messages, tools = null, tool_choice = null) {
     const context = SillyTavern.getContext();
 
     if (typeof context.generateRaw === 'function') {
-        return await context.generateRaw({ prompt: messages, systemPrompt: '' });
+        const params = { prompt: messages, systemPrompt: '' };
+        if (tools) params.tools = tools;
+        if (tool_choice) params.tool_choice = tool_choice;
+        return await context.generateRaw(params);
     }
 
     if (typeof context.generateQuietPrompt === 'function') {

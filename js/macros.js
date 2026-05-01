@@ -110,13 +110,18 @@ export function resolveChatHistory(text, cleanChat, stContext) {
                 else if (m.is_system) mRole = 'system';
             }
 
+            let encodedInvocations = '';
+            if (m.extra?.tool_invocations && Array.isArray(m.extra.tool_invocations)) {
+                encodedInvocations = `\n[[INVOCATIONS:${JSON.stringify(m.extra.tool_invocations)}]]`;
+            }
+
             if (isCC) {
-                return `[[ROLE:${mRole}]]\n${m.mes}\n[[/ROLE]]`;
+                return `[[ROLE:${mRole}]]\n${m.mes}${encodedInvocations}\n[[/ROLE]]`;
             }
 
             // For text completion, we still use a readable format
-            if (mRole === 'system') return `### System Instruction:\n${m.mes}`;
-            return `${m.name || (m.is_user ? 'User' : 'Assistant')}: ${m.mes}`;
+            if (mRole === 'system') return `### System Instruction:\n${m.mes}${encodedInvocations}`;
+            return `${m.name || (m.is_user ? 'User' : 'Assistant')}: ${m.mes}${encodedInvocations}`;
         });
 
         // 6. Apply Final Limit
@@ -234,7 +239,13 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
                         if (m.extra?.polyceph_hidden) mRole = 'assistant';
                         else if (m.is_user) mRole = 'user';
                         else if (m.is_system) mRole = 'system';
-                        return `[[ROLE:${mRole}]]\n${m.mes}\n[[/ROLE]]`;
+
+                        let encodedInvocations = '';
+                        if (m.extra?.tool_invocations && Array.isArray(m.extra.tool_invocations)) {
+                            encodedInvocations = `\n[[INVOCATIONS:${JSON.stringify(m.extra.tool_invocations)}]]`;
+                        }
+
+                        return `[[ROLE:${mRole}]]\n${m.mes}${encodedInvocations}\n[[/ROLE]]`;
                     }).join('\n\n');
                 }
                 default: return wrap(prompt.content || '');

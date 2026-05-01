@@ -30,7 +30,47 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
 
         // Parse prompt into role-based messages
         const messages = parsePromptToMessages(prompt, api);
-        const apiPromise = generateViaApi(messages);
+
+        // --- Tool Calling Support ---
+        let tools = null;
+        let tool_choice = null;
+
+        try {
+            // Attempt to import ToolManager dynamically to avoid breaking if not present
+            let ToolManager;
+            try {
+                const tmModule = await import('../../../tool-calling.js');
+                ToolManager = tmModule.ToolManager;
+            } catch (e) {
+                // Fallback or ignore if SillyTavern version is too old for tools
+            }
+
+            if (ToolManager && typeof ToolManager.isToolCallingSupported === 'function' && ToolManager.isToolCallingSupported()) {
+                tools = ToolManager.getFunctionTools();
+                tool_choice = (tools && tools.length > 0) ? 'auto' : null;
+
+                if (tools && tools.length > 0) {
+                    // Emit CHAT_COMPLETION_SETTINGS_READY so extensions like TunnelVision 
+                    // can perform late-stage modifications (like Anthropic conversion).
+                    if (context.eventSource && context.eventTypes?.CHAT_COMPLETION_SETTINGS_READY) {
+                        const generateData = {
+                            model: api === 'openai' ? (context.chatCompletionSettings?.openai_model || '') : '',
+                            tools: tools,
+                            tool_choice: tool_choice
+                        };
+                        await context.eventSource.emit(context.eventTypes.CHAT_COMPLETION_SETTINGS_READY, generateData);
+                        
+                        // Use the modified tools/choice from extensions
+                        tools = generateData.tools;
+                        tool_choice = generateData.tool_choice;
+                    }
+                }
+            }
+        } catch (err) {
+            logger.warn('Failed to resolve tools for generation:', err);
+        }
+
+        const apiPromise = generateViaApi(messages, tools, tool_choice);
 
         const timeoutMs = settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 60000;
 

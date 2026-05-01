@@ -109,11 +109,29 @@ export function parsePromptToMessages(text, api = '') {
     }
 
     const mergedMessages = [];
+    const invocationRegex = /\[\[INVOCATIONS:([\s\S]*?)\]\]/gi;
+
     for (const msg of messages) {
+        // Extract invocations from content
+        let invocations = null;
+        msg.content = msg.content.replace(invocationRegex, (match, json) => {
+            try {
+                invocations = JSON.parse(json);
+            } catch (e) {
+                logger.warn("Failed to parse encoded invocations:", e);
+            }
+            return ""; // Remove tag from content
+        }).trim();
+
         const lastMsg = mergedMessages[mergedMessages.length - 1];
         if (lastMsg && lastMsg.role === msg.role) {
             lastMsg.content += '\n\n' + msg.content;
+            // Merge invocations if both exist
+            if (invocations) {
+                lastMsg.invocations = (lastMsg.invocations || []).concat(invocations);
+            }
         } else {
+            if (invocations) msg.invocations = invocations;
             mergedMessages.push(msg);
         }
     }
