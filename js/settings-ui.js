@@ -1,282 +1,20 @@
 import { availableProfiles, availablePresetsByApi, settings, saveSettings, getAvailableProfiles, getActivePipeline, createPipeline, deletePipeline, refreshPresets } from './state.js';
-import { autoResizeTextarea, generateId } from './utils.js';
-import { MODULE_NAME } from './constants.js';
+import { generateId } from './utils.js';
 import { syncHiddenMessageVisibility } from './ui.js';
-import { setLogLevel, logger } from './logger.js';
+import { setLogLevel } from './logger.js';
+import { SELECTORS, getEl, bindToggle, renderNeoSlider } from './ui/ui-shared.js';
+import { updatePipelineEditorUI, bindStepEvents } from './ui/settings/pipeline-editor.js';
 
-function getPresetOptionsHTML(profileId, currentPreset) {
-    const profile = availableProfiles.find(p => p.id === profileId);
-    let apiId = profile?.api;
-    let fallbackReason = '';
-
-    if (!apiId) {
-        apiId = SillyTavern.getContext().mainApi || '';
-        fallbackReason = profile ? `Profile "${profile.name}" has no API defined.` : `Profile ID "${profileId}" not found.`;
-        logger.warn(`Using fallback API "${apiId}" for preset dropdown. Reason: ${fallbackReason}`);
-    }
-
-    const presets = availablePresetsByApi[apiId] || [];
-    if (presets.length === 0 && apiId) {
-        logger.warn(`No presets found for API "${apiId}" in cache.`);
-    }
-
-    return `<option value="Current" ${(!currentPreset || currentPreset === 'Current') ? 'selected' : ''}>Current Preset</option>` +
-        presets.map(p => `<option value="${p}" ${p === currentPreset ? 'selected' : ''}>${p}</option>`).join('');
-}
-
-export function renderTask(stepId, task) {
-    const profileOptions = `<option value="none">(Template Only - No LLM)</option>` +
-        availableProfiles.map(p => `<option value="${p.id}" ${p.id === task.profile ? 'selected' : ''}>${p.name}</option>`).join('');
-
-    const presetOptions = getPresetOptionsHTML(task.profile, task.preset);
-
-    return `
-        <div class="polyceph-node-card" data-node-id="${task.id}">
-            <div class="polyceph-node-header" style="display: flex; flex-direction: column; gap: 8px;">
-                <div class="polyceph-node-header-label-row">
-                    <input type="text" class="polyceph-node-label-input text_pole" data-node-id="${task.id}" placeholder="Task Label..." value="${task.label || ''}" style="flex: 1; min-width: 100px; padding: 2px 5px;" />
-                    <i class="fa-solid fa-times polyceph-del-node" data-node-id="${task.id}" data-step-id="${stepId}"></i>
-                </div>
-                <div class="polyceph-node-header-controls">
-                    <select class="polyceph-profile-select text_pole" data-node-id="${task.id}" style="flex: 1; min-width: 150px;">
-                        ${profileOptions}
-                    </select>
-                    <select class="polyceph-preset-select text_pole" data-node-id="${task.id}" style="flex: 1; min-width: 150px;" title="Override the API preset for this task">
-                        ${presetOptions}
-                    </select>
-                </div>
-                <div style="display: flex; align-items: center; gap: 15px; padding-left: 2px; flex-wrap: wrap;">
-
-                    <div style="display: flex; align-items: center; gap: 4px;">
-                        <input type="checkbox" class="polyceph-node-persist-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.persist ? 'checked' : ''} title="Display this task result as Thinking">
-                        <label style="font-size: 0.8em; cursor: pointer;" title="Display this task result as Thinking">Thinking</label>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 4px;">
-                        <input type="checkbox" class="polyceph-node-character-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.isCharacter ? 'checked' : ''} title="If persisted, use character name/avatar">
-                        <label style="font-size: 0.8em; cursor: pointer;" title="If persisted, use character name/avatar">Character Message</label>
-                    </div>
-                </div>
-            </div>
-            <textarea class="polyceph-node-template text_pole" data-step="${stepId}" data-node="${task.id}" placeholder="Use {{user_input}} or {{chat_history:2}}...">${task.template || ''}</textarea>
-        </div>
-    `;
-}
-
-export function renderStep(step, index) {
-    const tasksHtml = step.tasks.map(n => renderTask(step.id, n)).join('');
-
-    return `
-        <div class="polyceph-step-card" data-step-id="${step.id}">
-            <div class="polyceph-step-header" style="display: flex; flex-direction: column; gap: 10px;">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <b>Step ${index + 1} </b>
-                    <input type="text" class="polyceph-step-label-input text_pole" data-step-id="${step.id}" placeholder="Custom Label..." value="${step.label || ''}" style="flex: 1; max-width: 200px; padding: 2px 5px;" />
-                    <i class="fa-solid fa-trash polyceph-del-step" data-step-id="${step.id}" style="margin-left: auto;"></i>
-                </div>
-            </div>
-            <div class="polyceph-nodes-list">
-                ${tasksHtml}
-            </div>
-            <button class="menu_button polyceph-add-node-btn" data-step="${step.id}">
-                <i class="fa-solid fa-plus"></i> Add Profile Task
-            </button>
-        </div>
-    `;
-}
-
+/**
+ * Updates the entire settings UI.
+ */
 export function updateUI() {
-    const activePipeline = getActivePipeline();
-    const stepsContainer = document.getElementById('polyceph_steps_container');
-    if (stepsContainer) {
-        stepsContainer.innerHTML = activePipeline.steps.map((s, i) => renderStep(s, i)).join('');
-
-        // Auto-resize all textareas after render
-        setTimeout(() => {
-            stepsContainer.querySelectorAll('textarea').forEach(textarea => {
-                autoResizeTextarea(textarea);
-            });
-        }, 150);
-
-        bindStepEvents();
-    }
-
-    // Update pipeline selector
-    const selector = document.getElementById('polyceph_pipeline_selector');
-    if (selector) {
-        const noneSelected = settings.activePipelineId === 'none' ? 'selected' : '';
-        selector.innerHTML = `<option value="none" ${noneSelected}>None (Disabled)</option>` +
-            settings.pipelines.map(p =>
-                `<option value="${p.id}" ${p.id === settings.activePipelineId ? 'selected' : ''}>${p.name}</option>`
-            ).join('');
-    }
-
-    // Update active pipeline name input
-    const nameInput = document.getElementById('polyceph_active_pipeline_name');
-    if (nameInput) {
-        nameInput.value = activePipeline.name;
-    }
+    updatePipelineEditorUI();
 }
 
-export function bindStepEvents() {
-    const container = document.getElementById('polyceph_settings_container');
-    if (!container) return;
-
-    const activePipeline = getActivePipeline();
-
-    // Node profile select
-    container.querySelectorAll('.polyceph-profile-select').forEach(select => {
-        select.addEventListener('change', (e) => {
-            const nodeId = e.target.getAttribute('data-node-id');
-            let updatedTask = null;
-            for (const step of activePipeline.steps) {
-                const task = step.tasks.find(n => n.id === nodeId);
-                if (task) {
-                    task.profile = e.target.value;
-                    updatedTask = task;
-                    break;
-                }
-            }
-            saveSettings();
-
-            // Dynamic preset list update
-            if (updatedTask) {
-                const card = e.target.closest('.polyceph-node-card');
-                const presetSelect = card?.querySelector('.polyceph-preset-select');
-                if (presetSelect) {
-                    presetSelect.innerHTML = getPresetOptionsHTML(updatedTask.profile, updatedTask.preset);
-                }
-            }
-        });
-    });
-
-    // Node preset select
-    container.querySelectorAll('.polyceph-preset-select').forEach(select => {
-        select.addEventListener('change', (e) => {
-            const nodeId = e.target.getAttribute('data-node-id');
-            for (const step of activePipeline.steps) {
-                const task = step.tasks.find(n => n.id === nodeId);
-                if (task) { task.preset = e.target.value; break; }
-            }
-            saveSettings();
-        });
-    });
-
-    // Node template textarea
-    container.querySelectorAll('.polyceph-node-template').forEach(textarea => {
-        textarea.addEventListener('input', (e) => {
-            autoResizeTextarea(e.target);
-            const stepId = e.target.getAttribute('data-step');
-            const nodeId = e.target.getAttribute('data-node');
-            const step = activePipeline.steps.find(s => s.id === stepId);
-            const task = step?.tasks.find(n => n.id === nodeId);
-            if (task) {
-                task.template = e.target.value;
-                saveSettings();
-            }
-        });
-    });
-
-    // Remove Node
-    container.querySelectorAll('.polyceph-del-node').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const stepId = e.currentTarget.getAttribute('data-step-id');
-            const nodeId = e.currentTarget.getAttribute('data-node-id');
-            const step = activePipeline.steps.find(s => s.id === stepId);
-            if (step) {
-                step.tasks = step.tasks.filter(n => n.id !== nodeId);
-                saveSettings();
-                updateUI();
-            }
-        });
-    });
-
-    // Add Node
-    container.querySelectorAll('.polyceph-add-node-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const stepId = e.currentTarget.getAttribute('data-step');
-            const step = activePipeline.steps.find(s => s.id === stepId);
-            if (step) {
-                step.tasks.push({ id: 'task_' + generateId(), profile: '', preset: 'Current', template: '{{user_input}}' });
-                saveSettings();
-                updateUI();
-            }
-        });
-    });
-
-    // Label inputs
-    document.querySelectorAll('.polyceph-node-label-input').forEach(input => {
-        input.addEventListener('input', (e) => {
-            const nodeId = e.target.getAttribute('data-node-id');
-            for (const step of activePipeline.steps) {
-                const task = step.tasks.find(n => n.id === nodeId);
-                if (task) { task.label = e.target.value; break; }
-            }
-            saveSettings();
-        });
-    });
-
-    document.querySelectorAll('.polyceph-step-label-input').forEach(input => {
-        input.addEventListener('input', (e) => {
-            const stepId = e.target.getAttribute('data-step-id');
-            const step = activePipeline.steps.find(s => s.id === stepId);
-            if (step) step.label = e.target.value;
-            saveSettings();
-        });
-    });
-
-    // Checkboxes
-
-
-
-
-    document.querySelectorAll('.polyceph-node-persist-checkbox').forEach(cb => {
-        cb.addEventListener('change', (e) => {
-            const nodeId = e.target.getAttribute('data-node-id');
-            for (const step of activePipeline.steps) {
-                const task = step.tasks.find(n => n.id === nodeId);
-                if (task) { task.persist = e.target.checked; break; }
-            }
-            saveSettings();
-        });
-    });
-
-    document.querySelectorAll('.polyceph-node-character-checkbox').forEach(cb => {
-        cb.addEventListener('change', (e) => {
-            const nodeId = e.target.getAttribute('data-node-id');
-            for (const step of activePipeline.steps) {
-                const task = step.tasks.find(n => n.id === nodeId);
-                if (task) { task.isCharacter = e.target.checked; break; }
-            }
-            saveSettings();
-        });
-    });
-
-    // Remove Step
-    container.querySelectorAll('.polyceph-del-step').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const stepId = e.currentTarget.getAttribute('data-step-id');
-            const idx = activePipeline.steps.findIndex(s => s.id === stepId);
-            if (idx !== -1) {
-                activePipeline.steps.splice(idx, 1);
-                saveSettings();
-                updateUI();
-            }
-        });
-    });
-}
-
-function renderNeoSlider(label, id, value, min, max, step) {
-    return `
-        <div class="alignitemscenter flex-container flexFlowColumn flexGrow flexShrink gap0 flexBasis48p">
-            <small>
-                <span style="font-weight: bold; margin-bottom: 2px; display: block;">${label}</span>
-            </small>
-            <input class="neo-range-slider" type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${value}">
-            <input class="neo-range-input" type="number" id="${id}_value" data-for="${id}" min="${min}" max="${max}" step="${step}" value="${value}">
-        </div>
-    `;
-}
-
+/**
+ * Generates the main settings HTML structure.
+ */
 export function createSettingsHTML() {
     return `
         <div class="polyceph-settings">
@@ -441,15 +179,18 @@ export function createSettingsHTML() {
     `;
 }
 
+/**
+ * Initializes the settings UI and binds all events.
+ */
 export function addSettingsUI() {
-    const container = document.getElementById('extensions_settings');
+    const container = getEl('extensions_settings');
     if (!container) return;
 
-    const existing = document.getElementById('polyceph_settings_container');
+    const existing = getEl(SELECTORS.SETTINGS_CONTAINER);
     if (existing) existing.remove();
 
     const wrapper = document.createElement('div');
-    wrapper.id = 'polyceph_settings_container';
+    wrapper.id = SELECTORS.SETTINGS_CONTAINER;
     wrapper.innerHTML = createSettingsHTML();
     container.appendChild(wrapper);
 
@@ -457,8 +198,8 @@ export function addSettingsUI() {
 
     // Bind Global Settings
     const bindSlider = (id, settingKey) => {
-        const slider = document.getElementById(id);
-        const input = document.getElementById(id + '_value');
+        const slider = getEl(id);
+        const input = getEl(id + '_value');
         if (!slider || !input) return;
 
         slider.addEventListener('input', (e) => {
@@ -481,87 +222,84 @@ export function addSettingsUI() {
     bindSlider('polyceph_max_retries', 'maxRetries');
     bindSlider('polyceph_retry_delay', 'retryDelayMs');
 
-
-
-    // Global settings
-    document.getElementById('polyceph_show_hidden_checkbox')?.addEventListener('change', (e) => {
+    // Global settings toggles
+    getEl('polyceph_show_hidden_checkbox')?.addEventListener('change', (e) => {
         settings.showHiddenMessages = e.target.checked;
         syncHiddenMessageVisibility();
         saveSettings();
     });
 
-    document.getElementById('polyceph_show_reasoning_checkbox')?.addEventListener('change', (e) => {
+    getEl('polyceph_show_reasoning_checkbox')?.addEventListener('change', (e) => {
         settings.showReasoning = e.target.checked;
         syncHiddenMessageVisibility();
         saveSettings();
     });
 
-    document.getElementById('polyceph_restore_after_run_checkbox')?.addEventListener('change', (e) => {
+    getEl('polyceph_restore_after_run_checkbox')?.addEventListener('change', (e) => {
         settings.restore_after_run = e.target.checked;
         saveSettings();
     });
 
-    document.getElementById('polyceph_intercept_send_checkbox')?.addEventListener('change', (e) => {
+    getEl('polyceph_intercept_send_checkbox')?.addEventListener('change', (e) => {
         settings.interceptSend = e.target.checked;
         saveSettings();
-        // Emit a custom event or call a global function to update UI
         if (SillyTavern.getContext().eventSource) {
             SillyTavern.getContext().eventSource.emit('polyceph-settings-changed');
         }
     });
 
-    document.getElementById('polyceph_intercept_enter_checkbox')?.addEventListener('change', (e) => {
+    getEl('polyceph_intercept_enter_checkbox')?.addEventListener('change', (e) => {
         settings.interceptEnter = e.target.checked;
         saveSettings();
     });
 
-    document.getElementById('polyceph_emulate_events_checkbox')?.addEventListener('change', (e) => {
+    getEl('polyceph_emulate_events_checkbox')?.addEventListener('change', (e) => {
         settings.emulateCoreEvents = e.target.checked;
         saveSettings();
     });
 
-    document.getElementById('polyceph_log_level_selector')?.addEventListener('change', (e) => {
+    getEl('polyceph_log_level_selector')?.addEventListener('change', (e) => {
         settings.logLevel = parseInt(e.target.value);
         setLogLevel(settings.logLevel);
         saveSettings();
     });
 
-    document.getElementById('polyceph_show_selector_checkbox')?.addEventListener('change', (e) => {
+    getEl('polyceph_show_selector_checkbox')?.addEventListener('change', (e) => {
         settings.showPipelineSelector = e.target.checked;
         saveSettings();
         if (SillyTavern.getContext().eventSource) SillyTavern.getContext().eventSource.emit('polyceph-settings-changed');
     });
 
-    document.getElementById('polyceph_show_icon_checkbox')?.addEventListener('change', (e) => {
+    getEl('polyceph_show_icon_checkbox')?.addEventListener('change', (e) => {
         settings.showPipelineIcon = e.target.checked;
         saveSettings();
         if (SillyTavern.getContext().eventSource) SillyTavern.getContext().eventSource.emit('polyceph-settings-changed');
     });
 
-    document.getElementById('polyceph_compact_selector_checkbox')?.addEventListener('change', (e) => {
+    getEl('polyceph_compact_selector_checkbox')?.addEventListener('change', (e) => {
         settings.compactSelectorMode = e.target.checked;
         saveSettings();
         if (SillyTavern.getContext().eventSource) SillyTavern.getContext().eventSource.emit('polyceph-settings-changed');
     });
 
-    document.getElementById('polyceph_prompt_input')?.addEventListener('input', (e) => {
+    getEl('polyceph_prompt_input')?.addEventListener('input', (e) => {
         settings.polycephPrompt = e.target.value;
         saveSettings();
     });
 
     // Pipeline Manager Events
-    document.getElementById('polyceph_pipeline_selector')?.addEventListener('change', (e) => {
+    getEl(SELECTORS.SETTINGS_SELECTOR)?.addEventListener('change', (e) => {
         settings.activePipelineId = e.target.value;
         saveSettings();
         updateUI();
     });
 
-    document.getElementById('polyceph_new_pipeline_btn')?.addEventListener('click', () => {
+    getEl('polyceph_new_pipeline_btn')?.addEventListener('click', () => {
         createPipeline();
         updateUI();
     });
 
-    document.getElementById('polyceph_del_pipeline_btn')?.addEventListener('click', () => {
+    getEl('polyceph_del_pipeline_btn')?.addEventListener('click', () => {
         if (deletePipeline(settings.activePipelineId)) {
             updateUI();
         } else {
@@ -569,43 +307,24 @@ export function addSettingsUI() {
         }
     });
 
-    document.getElementById('polyceph_active_pipeline_name')?.addEventListener('input', (e) => {
+    getEl(SELECTORS.NAME_INPUT)?.addEventListener('input', (e) => {
         const pipeline = getActivePipeline();
         if (pipeline) {
             pipeline.name = e.target.value;
             saveSettings();
-            // Update selector option text without full redraw if possible, 
-            // but updateUI is safer for now.
-            const selector = document.getElementById('polyceph_pipeline_selector');
+            const selector = getEl(SELECTORS.SETTINGS_SELECTOR);
             const opt = selector?.querySelector(`option[value="${pipeline.id}"]`);
             if (opt) opt.textContent = pipeline.name;
         }
     });
 
-    // Placeholder toggle
-    document.getElementById('polyceph_placeholders_toggle')?.addEventListener('click', () => {
-        const content = document.getElementById('polyceph_placeholders_content');
-        const icon = document.querySelector('#polyceph_placeholders_toggle i');
-        const isActive = content.classList.toggle('active');
-        icon.classList.toggle('fa-chevron-down', !isActive);
-        icon.classList.toggle('fa-chevron-up', isActive);
-    });
-
-    const bindToggle = (btnId, contentId) => {
-        document.getElementById(btnId)?.addEventListener('click', () => {
-            const content = document.getElementById(contentId);
-            const icon = document.querySelector(`#${btnId} i`);
-            const isActive = content.classList.toggle('active');
-            icon.classList.toggle('fa-chevron-down', !isActive);
-            icon.classList.toggle('fa-chevron-up', isActive);
-        });
-    };
-
+    // Drawer Toggles
+    bindToggle('polyceph_placeholders_toggle', 'polyceph_placeholders_content');
     bindToggle('polyceph_ui_settings_toggle', 'polyceph_ui_settings_content');
     bindToggle('polyceph_behavior_settings_toggle', 'polyceph_behavior_settings_content');
 
     // Pipeline Steps
-    document.getElementById('polyceph_add_step_btn')?.addEventListener('click', () => {
+    getEl('polyceph_add_step_btn')?.addEventListener('click', () => {
         const pipeline = getActivePipeline();
         pipeline.steps.push({
             id: 'step_' + generateId(),
@@ -615,7 +334,7 @@ export function addSettingsUI() {
         updateUI();
     });
 
-    document.getElementById('polyceph_refresh_profiles')?.addEventListener('click', async () => {
+    getEl('polyceph_refresh_profiles')?.addEventListener('click', async () => {
         await getAvailableProfiles();
         refreshPresets();
         const totalPresets = Object.values(availablePresetsByApi).flat().length;
