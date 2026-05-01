@@ -4,7 +4,7 @@ import { renderPolycephThoughts, syncHiddenMessageVisibility } from './js/ui.js'
 import { addSettingsUI } from './js/settings-ui.js';
 import { startPipeline, runPipeline } from './js/engine.js';
 import { injectChatPipelineSelector, updateChatSelectorOptions, updateSendButtonVisibility } from './js/chat-ui.js';
-import { postMessageToChat } from './js/compat-shared.js';
+import { postMessageToChat, ensureChatSaved } from './js/compat-shared.js';
 import { logger } from './js/logger.js';
 
 // -------------------------------------------------------------------------
@@ -136,7 +136,7 @@ async function processSendAction() {
     });
 
     logger.debug('User message added. Chat length after:', context.chat.length);
-    if (typeof context.saveChat === 'function') context.saveChat();
+    await ensureChatSaved();
 
     // Start the pipeline and wait for it to complete or at least establish its lock
     try {

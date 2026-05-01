@@ -377,6 +377,10 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
 
         await stContext.eventSource.emit(stContext.eventTypes.GENERATION_AFTER_COMMANDS, 'normal', emulateOptions, false);
 
+        // Ensure all extension metadata (like Tracker-Enhanced temp trackers) is synced to the server 
+        // before we start switching profiles or presets, which might reload the state and wipe un-saved changes.
+        await ensureChatSaved();
+
         // Recapture mutex AFTER core events for the actual pipeline execution.
         await stContext.eventSource.emit(generationMutexEvents.MUTEX_CAPTURED, { extension_name: MODULE_NAME });
 
@@ -868,18 +872,21 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
                         // 1. Reset ST UI state before firing events to ensure extensions perceive the correct initial state
                         forceHideStopButton();
 
-                        logger.debug('Teardown: Firing core events while holding mutex.');
+                        logger.debug('Teardown: Releasing mutex so other extensions can process the message.');
+                        await stContextEnd.eventSource.emit(generationMutexEvents.MUTEX_RELEASED, { extension_name: MODULE_NAME });
+
+                        logger.debug('Teardown: Firing core events.');
                         await stContextEnd.eventSource.emit(stContextEnd.eventTypes.MESSAGE_RECEIVED, lastMessageIdx);
                         await stContextEnd.eventSource.emit(stContextEnd.eventTypes.CHARACTER_MESSAGE_RENDERED, lastMessageIdx);
 
                         // Settle period - Wait for background tasks to hit the backend
                         await new Promise(r => setTimeout(r, 200));
 
-                        logger.debug('Teardown: Releasing mutex (Cooperative).');
-                        await stContextEnd.eventSource.emit(generationMutexEvents.MUTEX_RELEASED, { extension_name: MODULE_NAME });
-
                         // Fire native ST stop events so the core UI hides #mes_stop
                         await stContextEnd.eventSource.emit(stContextEnd.eventTypes.GENERATION_STOPPED, 'normal', { automatic_trigger: true }, false);
+                        if (stContextEnd.eventTypes.CHARACTER_GENERATION_STOPPED) {
+                            await stContextEnd.eventSource.emit(stContextEnd.eventTypes.CHARACTER_GENERATION_STOPPED, lastMessageIdx);
+                        }
                         await stContextEnd.eventSource.emit(stContextEnd.eventTypes.GENERATION_AFTER_DATA, 'normal', { automatic_trigger: true }, false);
 
                         // 2. Final safety reset. Some extensions (like Tracker-Enhanced) might have re-shown the button during the events above.
