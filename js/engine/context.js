@@ -22,11 +22,7 @@ export async function initializePipelineContext(userInput, generateSwipesForBatc
     // Filter out typing indicator from chat for macro resolution to avoid '...' in history
     const cleanChat = stContext.chat.filter(m => m && !m.extra?.polyceph_typing && !m.is_system && !m.mes?.trim().startsWith('/'));
 
-    // Fetch World Info prompt (Lorebook)
-    const wiPrompt = await getWorldInfoForChat(cleanChat);
-
-    contextVault['wi'] = wiPrompt;
-    contextVault['world_info'] = wiPrompt;
+    // Fetch system prompt
     contextVault['system_prompt'] = getMainSystemPrompt();
     contextVault['polyceph_prompt'] = settings.polycephPrompt || '';
 
@@ -61,7 +57,6 @@ export async function initializePipelineContext(userInput, generateSwipesForBatc
         contextVault,
         batchId,
         cleanChat,
-        wiPrompt,
         batchData: {
             batchId,
             batchCharMessages,

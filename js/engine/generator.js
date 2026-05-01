@@ -41,7 +41,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
         }
 
         let depth = 0;
-        const maxDepth = 5;
+        const maxDepth = settings.toolRecursionLimit !== undefined ? settings.toolRecursionLimit : 5;
         let finalResponse = "";
 
         while (depth < maxDepth) {

@@ -9,7 +9,7 @@ import { generateQuietly } from './generator.js';
 /**
  * Executes a single task, including prompt expansion, generation, and retry logic.
  */
-export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault, cleanChat, wiPrompt, signal) {
+export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault, cleanChat, signal) {
     const stContext = SillyTavern.getContext();
     const taskIdIndx = nodeIndex + 1;
     
@@ -70,7 +70,7 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
 
     try {
         // 4. Prompt Expansion
-        const prompt = await expandPrompt(node.template || '', settings, contextVault, cleanChat, stContext, wiPrompt);
+        const prompt = await expandPrompt(node.template || '', settings, contextVault, cleanChat, stContext);
         
         if (signal.aborted) return null;
 

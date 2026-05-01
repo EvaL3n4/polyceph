@@ -90,6 +90,9 @@ export function createSettingsHTML() {
                                     <option value="4" ${settings.logLevel === 4 ? 'selected' : ''}>Debug</option>
                                 </select>
                             </div>
+                            <div style="margin-top: 10px;">
+                                ${renderNeoSlider('Tool Recursion Limit', 'polyceph_tool_recursion_limit', settings.toolRecursionLimit || 5, 0, 20, 1)}
+                            </div>
                         </div>
                     </div>
 
@@ -126,7 +129,8 @@ export function createSettingsHTML() {
                                 <li><code>{{system_prompt}}</code> - The Main Prompt from SillyTavern Advanced Formatting.</li>
                                 <li><code>{{polyceph_prompt}}</code> - The global Polyceph Prompt defined above.</li>
                                 <li><code>{{char}}</code>, <code>{{user}}</code>, <code>{{persona}}</code>, <code>{{personality}}</code> - Standard character macros.</li>
-                                <li><code>{{wi}}</code> or <code>{{world_info}}</code> - Relevant Lorebook entries based on chat context.</li>
+                                <li><code>{{wi}}</code> or <code>{{world_info}}</code> - **Reactive** Lorebook entries (scanned per-task).</li>
+                                <li><code>{{wi|before}}</code> / <code>{{wi|after}}</code> - Injects only the specific World Info section.</li>
                                 <li><code>{{cc_all_prompts}}</code> - Comprehensive ST prompt list (includes all enabled markers, history, examples).</li>
                                 <li><code>{{cc_main_prompt}}</code>, <code>{{cc_aux_prompt}}</code> - Specific CC Prompts.</li>
                                 <li><code>{{cc_post_history_instructions}}</code> - CC Post-History instructions.</li>
@@ -222,6 +226,7 @@ export function addSettingsUI() {
     bindSlider('polyceph_generation_timeout', 'generationTimeoutMs');
     bindSlider('polyceph_max_retries', 'maxRetries');
     bindSlider('polyceph_retry_delay', 'retryDelayMs');
+    bindSlider('polyceph_tool_recursion_limit', 'toolRecursionLimit');
 
     // Global settings toggles
     getEl('polyceph_show_hidden_checkbox')?.addEventListener('change', (e) => {

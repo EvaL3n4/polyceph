@@ -498,7 +498,11 @@ export async function getWorldInfoForChat(chat) {
     // World Info expects a reversed array of strings (name: message)
     const chatForWI = chat.map(m => `${m.name}: ${m.mes}`).reverse();
     const wiResult = await ctx.getWorldInfoPrompt(chatForWI, ctx.maxContext, false);
-    return wiResult?.worldInfoString || '';
+    return {
+        before: wiResult?.worldInfoBefore || '',
+        after: wiResult?.worldInfoAfter || '',
+        worldInfoString: wiResult?.worldInfoString || ''
+    };
 }
 
 // ---------------------------------------------------------------------------

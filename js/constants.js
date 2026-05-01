@@ -6,6 +6,7 @@ export const defaultSettings = {
     generationTimeoutMs: 60000,
     maxRetries: 3,
     retryDelayMs: 2000,
+    toolRecursionLimit: 5,
     activePipelineId: 'default',
     interceptSend: true,
     interceptEnter: true,

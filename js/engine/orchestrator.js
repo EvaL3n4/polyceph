@@ -17,7 +17,6 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
         contextVault, 
         batchId, 
         cleanChat, 
-        wiPrompt, 
         batchData 
     } = await initializePipelineContext(userInput, generateSwipesForBatchId);
 
@@ -65,7 +64,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                 if (signal.aborted) return;
 
                 // 3. Run Task
-                const taskResult = await runTask(node, nodeIndex, stepIdx, totalSteps, contextVault, cleanChat, wiPrompt, signal);
+                const taskResult = await runTask(node, nodeIndex, stepIdx, totalSteps, contextVault, cleanChat, signal);
                 if (!taskResult || signal.aborted) return;
 
                 if (taskResult.error) {

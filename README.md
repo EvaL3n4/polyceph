@@ -21,6 +21,7 @@ Standard AI interaction is linear: you send a prompt, and a single model respond
 - **Custom Macros**: Use the output of any previous step or task in subsequent prompts using `{{handlebars}}` placeholders/macros.
 - **Silent Reasoning**: Optionally show pipeline tasks blocks in a dedicated, collapsible "Reasoning" UI element.
 - **Native Swipe Support**: Swiping a Polyceph message reruns the entire pipeline batch, keeping all multi-step results in sync.
+- **Agentic Tool Calling**: Supports multi-pass "thought" cycles. If a model generates tool calls, Polyceph will execute them and provide the results back to the model recursively.
 
 ## Installation
 
@@ -70,7 +71,8 @@ Route data between tasks using these handlebars placeholders/macros:
 - `{{TaskLabel}}`: The output of a specific task (uses the custom label you assigned to the task).
 - `{{system_prompt}}`: The **Main Prompt** text from SillyTavern's Advanced Formatting settings.
 - `{{char}}`, `{{user}}`, `{{persona}}`, `{{personality}}`, etc.: All standard SillyTavern macros.
-- `{{wi}}` or `{{world_info}}`: Automatically scans chat context and injects relevant Lorebook entries.
+- `{{wi}}` or `{{world_info}}`: **Reactive Context**. Automatically scans chat context and injects relevant Lorebook entries. This is performed **per-task**, so updates made to the lorebook during a pipeline are visible to subsequent steps.
+    - `{{wi|before}}` / `{{wi|after}}`: Injects only the entries assigned to that specific position in SillyTavern settings.
 - `{{polyceph_prompt}}`: The global Polyceph Prompt defined in extension settings. Evaluated **recursively** (can contain other placeholders).
 - `{{cc_main_prompt}}`, `{{cc_aux_prompt}}`: Specific Chat Completion prompts.
 - `{{cc_post_history_instructions}}`, `{{cc_enhance_definitions}}`: Other individual CC prompts.
@@ -102,6 +104,13 @@ Polyceph automatically parses and processes specific tags in LLM outputs to mana
 
 Polyceph is designed to be a transparent layer on top of SillyTavern's existing generation infrastructure. It does **not** maintain its own sampler settings, API keys, or model configurations. Instead, it delegates all generation to SillyTavern's native `generateRaw()` function, which guarantees that every Polyceph task respects your currently active preset exactly as if you had typed the message yourself.
 
+### Native Tool Calling & Recursion
+
+Polyceph provides a robust, recursive environment for LLM tools. 
+
+1. **Invocations Metadata**: Tool results are preserved in the chat history using custom `[[INVOCATIONS:json]]` tags. These tags ensure that structured tool data survives SillyTavern's prompt assembly process, allowing models to maintain a coherent "chain of thought" across multiple turns.
+2. **The Recursion Loop**: If an LLM response contains tool calls, Polyceph intercepts them, executes the corresponding SillyTavern tools, and feeds the results back into a new generation pass. This allows for complex behaviors like "Search -> Analyze -> Summarize" to happen within a single pipeline task.
+
 ### How Prompt Building Works
 
 When a pipeline task is executed, Polyceph performs the following steps:
@@ -132,6 +141,8 @@ When a pipeline task is executed, Polyceph performs the following steps:
 
 - **Request Delay**: Pause between API calls (in milliseconds) to avoid rate limits when running parallel tasks.
 - **Max Retries**: The number of times to automatically retry a failed or empty model response before giving up.
+- **Retry Delay (ms)**: Pause between retries.
+- **Tool Recursion Limit**: The maximum number of recursive tool-calling passes allowed for a single task (default: 5).
 - **Timeout**: The maximum time (in milliseconds) to wait for a single task's generation before timing out.
 - **Intercept Send Button**: If enabled, Polyceph will intercept clicks on SillyTavern's standard send button to trigger the pipeline. When disabled, a dedicated Polyceph send button appears next to the standard one. Recommended to disable if it does not play nice with other extensions.
 - **Intercept Enter Key**: If enabled, Polyceph will intercept the 'Enter' key in the chat area to trigger the pipeline.

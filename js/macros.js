@@ -1,4 +1,4 @@
-import { countTokens, getMaxContextTokens, getMaxResponseTokens, getMaxPromptTokens } from './compat-shared.js';
+import { countTokens, getMaxContextTokens, getMaxResponseTokens, getMaxPromptTokens, getWorldInfoForChat } from './compat-shared.js';
 import { logger } from './logger.js';
 
 /**
@@ -204,10 +204,17 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
         }
     });
 
+    // Cache World Info for the duration of this macro resolution
+    let cachedWI = null;
+    const getCachedWI = async (chatSource) => {
+        if (!cachedWI) cachedWI = await getWorldInfoForChat(chatSource);
+        return cachedWI;
+    };
+
     /**
      * Internal helper to resolve a single identifier's content.
      */
-    const resolveIdentifier = (id, chatSource) => {
+    const resolveIdentifier = async (id, chatSource) => {
         const prompt = ccSettings.prompts.find(p => p.identifier === id);
         if (!prompt) return '';
 
@@ -230,8 +237,14 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
                     const desc = charFields.persona || stContext.powerUserSettings?.persona_description || '';
                     return wrap(desc);
                 }
-                case 'worldInfoBefore': return wrap(wiPrompt || '');
-                case 'worldInfoAfter': return '';
+                case 'worldInfoBefore': {
+                    const freshWI = await getCachedWI(chatSource);
+                    return wrap(freshWI.before || '');
+                }
+                case 'worldInfoAfter': {
+                    const freshWI = await getCachedWI(chatSource);
+                    return wrap(freshWI.after || '');
+                }
                 case 'dialogueExamples': return wrap(charFields.mesExamples || char?.mes_example || '');
                 case 'chatHistory': {
                     return chatSource.map(m => {
@@ -314,7 +327,7 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
         const allPrompts = [];
         for (const entry of promptOrder) {
             if (!entry.enabled) continue;
-            const content = resolveIdentifier(entry.identifier, trimmedChat);
+            const content = await resolveIdentifier(entry.identifier, trimmedChat);
             if (content.trim()) allPrompts.push(content.trim());
         }
 
@@ -324,13 +337,44 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
         result = result.replace(/\{\{cc_all_prompts\}\}/g, combined);
     }
 
-    // 2. Resolve individual macros (no trimming for specific requests)
-    if (result.includes('{{cc_main_prompt}}')) result = result.replace(/\{\{cc_main_prompt\}\}/g, () => resolveIdentifier('main', cleanChat));
-    if (result.includes('{{cc_aux_prompt}}')) result = result.replace(/\{\{cc_aux_prompt\}\}/g, () => resolveIdentifier('nsfw', cleanChat));
-    if (result.includes('{{cc_nsfw_prompt}}')) result = result.replace(/\{\{cc_nsfw_prompt\}\}/g, () => resolveIdentifier('nsfw', cleanChat));
-    if (result.includes('{{cc_post_history_instructions}}')) result = result.replace(/\{\{cc_post_history_instructions\}\}/g, () => resolveIdentifier('jailbreak', cleanChat));
-    if (result.includes('{{cc_jailbreak_prompt}}')) result = result.replace(/\{\{cc_jailbreak_prompt\}\}/g, () => resolveIdentifier('jailbreak', cleanChat));
-    if (result.includes('{{cc_enhance_definitions}}')) result = result.replace(/\{\{cc_enhance_definitions\}\}/g, () => resolveIdentifier('enhanceDefinitions', cleanChat));
+    // 2. Resolve {{world_info}} and {{wi}} macros (dynamic, no trimming)
+    const wiRegex = /\{\{(world_info|wi)(?:\|(before|after))?\}\}/gi;
+    let wiMatch;
+    while ((wiMatch = wiRegex.exec(result)) !== null) {
+        const fullMatch = wiMatch[0];
+        const part = wiMatch[2];
+        const freshWI = await getCachedWI(cleanChat);
+        let replacement = '';
+        if (part === 'before') replacement = freshWI.before;
+        else if (part === 'after') replacement = freshWI.after;
+        else replacement = freshWI.worldInfoString;
+        
+        result = result.replace(fullMatch, replacement);
+        wiRegex.lastIndex = 0; // Reset because we modified result
+    }
+
+    // 3. Resolve individual macros (no trimming for specific requests)
+    if (result.includes('{{cc_main_prompt}}')) result = result.replace(/\{\{cc_main_prompt\}\}/g, await resolveIdentifier('main', cleanChat));
+    if (result.includes('{{cc_aux_prompt}}')) {
+        const content = await resolveIdentifier('nsfw', cleanChat);
+        result = result.replace(/\{\{cc_aux_prompt\}\}/g, content);
+    }
+    if (result.includes('{{cc_nsfw_prompt}}')) {
+        const content = await resolveIdentifier('nsfw', cleanChat);
+        result = result.replace(/\{\{cc_nsfw_prompt\}\}/g, content);
+    }
+    if (result.includes('{{cc_post_history_instructions}}')) {
+        const content = await resolveIdentifier('jailbreak', cleanChat);
+        result = result.replace(/\{\{cc_post_history_instructions\}\}/g, content);
+    }
+    if (result.includes('{{cc_jailbreak_prompt}}')) {
+        const content = await resolveIdentifier('jailbreak', cleanChat);
+        result = result.replace(/\{\{cc_jailbreak_prompt\}\}/g, content);
+    }
+    if (result.includes('{{cc_enhance_definitions}}')) {
+        const content = await resolveIdentifier('enhanceDefinitions', cleanChat);
+        result = result.replace(/\{\{cc_enhance_definitions\}\}/g, content);
+    }
 
     return result;
 }
@@ -338,7 +382,7 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
 /**
  * Fully expands a prompt by resolving Polyceph-specific recursion and custom macros.
  */
-export async function expandPrompt(template, settings, contextVault, cleanChat, stContext, wiPrompt) {
+export async function expandPrompt(template, settings, contextVault, cleanChat, stContext) {
     let result = template || '';
 
     const macroMatch = result.match(/\{\{[^}]+\}\}/g);
@@ -354,7 +398,7 @@ export async function expandPrompt(template, settings, contextVault, cleanChat, 
     result = resolveChatHistory(result, cleanChat, stContext);
 
     // 3. Resolve Chat Completion Prompts (Token-aware)
-    result = await resolveCCMacros(result, cleanChat, stContext, wiPrompt, contextVault);
+    result = await resolveCCMacros(result, cleanChat, stContext, null, contextVault);
 
     // 4. Resolve {{user_input}} with explicit user role
     const resolvedInput = contextVault?.['user_input'] || settings.userInput || '';
