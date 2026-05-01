@@ -29,70 +29,119 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
         let responseData = "";
 
         // Parse prompt into role-based messages
-        const messages = parsePromptToMessages(prompt, api);
+        const messages = [...parsePromptToMessages(prompt, api)];
 
         // --- Tool Calling Support ---
-        let tools = null;
-        let tool_choice = null;
-
+        let ToolManager;
         try {
-            // Attempt to import ToolManager dynamically to avoid breaking if not present
-            let ToolManager;
-            try {
-                const tmModule = await import('../../../tool-calling.js');
-                ToolManager = tmModule.ToolManager;
-            } catch (e) {
-                // Fallback or ignore if SillyTavern version is too old for tools
-            }
+            const tmModule = await import('../../../tool-calling.js');
+            ToolManager = tmModule.ToolManager;
+        } catch (e) {
+            // Fallback or ignore
+        }
+
+        let depth = 0;
+        const maxDepth = 5;
+        let finalResponse = "";
+
+        while (depth < maxDepth) {
+            if (signal && signal.aborted) throw new Error('Aborted');
+
+            let tools = null;
+            let tool_choice = null;
 
             if (ToolManager && typeof ToolManager.isToolCallingSupported === 'function' && ToolManager.isToolCallingSupported()) {
                 tools = ToolManager.getFunctionTools();
                 tool_choice = (tools && tools.length > 0) ? 'auto' : null;
 
-                if (tools && tools.length > 0) {
-                    // Emit CHAT_COMPLETION_SETTINGS_READY so extensions like TunnelVision 
-                    // can perform late-stage modifications (like Anthropic conversion).
-                    if (context.eventSource && context.eventTypes?.CHAT_COMPLETION_SETTINGS_READY) {
-                        const generateData = {
-                            model: api === 'openai' ? (context.chatCompletionSettings?.openai_model || '') : '',
-                            tools: tools,
-                            tool_choice: tool_choice
-                        };
-                        await context.eventSource.emit(context.eventTypes.CHAT_COMPLETION_SETTINGS_READY, generateData);
-                        
-                        // Use the modified tools/choice from extensions
-                        tools = generateData.tools;
-                        tool_choice = generateData.tool_choice;
-                    }
+                if (tools && tools.length > 0 && context.eventSource && context.eventTypes?.CHAT_COMPLETION_SETTINGS_READY) {
+                    const generateData = {
+                        model: api === 'openai' ? (context.chatCompletionSettings?.openai_model || '') : '',
+                        messages: messages,
+                        tools: tools,
+                        tool_choice: tool_choice,
+                        // Passing additional settings to satisfy potential listeners (e.g. loggers/converters)
+                        temperature: context.chatCompletionSettings?.temp_openai,
+                        max_tokens: context.chatCompletionSettings?.openai_max_tokens || context.chatCompletionSettings?.max_tokens_openai,
+                    };
+                    await context.eventSource.emit(context.eventTypes.CHAT_COMPLETION_SETTINGS_READY, generateData);
+                    tools = generateData.tools;
+                    tool_choice = generateData.tool_choice;
                 }
             }
-        } catch (err) {
-            logger.warn('Failed to resolve tools for generation:', err);
+
+            const apiPromise = generateViaApi(messages, tools, tool_choice);
+            const timeoutMs = settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 60000;
+
+            const abortPromise = signal ? new Promise((_, reject) => {
+                if (signal.aborted) reject(new Error('Aborted'));
+                signal.addEventListener('abort', () => reject(new Error('Aborted')), { once: true });
+            }) : null;
+
+            let responseData;
+            if (timeoutMs > 0) {
+                const raceArr = [
+                    apiPromise,
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Generation Timeout')), timeoutMs))
+                ];
+                if (abortPromise) raceArr.push(abortPromise);
+                responseData = await Promise.race(raceArr);
+            } else {
+                responseData = await (abortPromise ? Promise.race([apiPromise, abortPromise]) : apiPromise);
+            }
+
+            if (!responseData) {
+                finalResponse = "(Generation returned empty)";
+                break;
+            }
+
+            // Extract tool calls from response
+            // ST's generateRawData returns the raw API response
+            const toolCalls = responseData?.choices?.[0]?.message?.tool_calls || responseData?.tool_calls;
+
+            if (toolCalls && toolCalls.length > 0 && ToolManager) {
+                logger.debug(`[Polyceph] Tool calls detected (depth ${depth}):`, toolCalls);
+                
+                // 1. Add assistant message with tool calls to history
+                messages.push({
+                    role: 'assistant',
+                    content: responseData?.choices?.[0]?.message?.content || '',
+                    tool_calls: toolCalls
+                });
+
+                // 2. Execute tools
+                const results = await ToolManager.executeToolCalls(toolCalls);
+                
+                // 3. Add tool results to history
+                if (results && Array.isArray(results)) {
+                    messages.push(...results);
+                }
+
+                depth++;
+                continue; // Loop again with tool results
+            }
+
+            // No more tool calls, clean up and return
+            if (typeof context.extractMessageFromData === 'function' && typeof context.cleanUpMessage === 'function') {
+                const rawText = context.extractMessageFromData(responseData, api || context.main_api);
+                finalResponse = context.cleanUpMessage({
+                    getMessage: rawText,
+                    isImpersonate: false,
+                    isContinue: false,
+                    displayIncompleteSentences: true,
+                    includeUserPromptBias: false,
+                    trimNames: true,
+                    trimWrongNames: true,
+                });
+            } else {
+                finalResponse = responseData?.choices?.[0]?.message?.content || responseData?.choices?.[0]?.text || String(responseData);
+            }
+            break;
         }
 
-        const apiPromise = generateViaApi(messages, tools, tool_choice);
-
-        const timeoutMs = settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 60000;
-
-        const abortPromise = signal ? new Promise((_, reject) => {
-            if (signal.aborted) reject(new Error('Aborted'));
-            signal.addEventListener('abort', () => reject(new Error('Aborted')), { once: true });
-        }) : null;
-
-        if (timeoutMs > 0) {
-            const raceArr = [
-                apiPromise,
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Generation Timeout')), timeoutMs))
-            ];
-            if (abortPromise) raceArr.push(abortPromise);
-
-            responseData = await Promise.race(raceArr);
-        } else {
-            responseData = await (abortPromise ? Promise.race([apiPromise, abortPromise]) : apiPromise);
-        }
-
-        if (responseData) return responseData;
+        if (finalResponse) return finalResponse;
         return "(Generation returned empty)";
+
     } catch (err) {
         logger.error('generation failed:', err);
         return "(Error during generation)";

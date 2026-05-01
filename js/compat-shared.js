@@ -309,11 +309,11 @@ export function isChatCompletionApi() {
 export async function generateViaApi(messages, tools = null, tool_choice = null) {
     const context = SillyTavern.getContext();
 
-    if (typeof context.generateRaw === 'function') {
+    if (typeof context.generateRawData === 'function') {
         const params = { prompt: messages, systemPrompt: '' };
         if (tools) params.tools = tools;
         if (tool_choice) params.tool_choice = tool_choice;
-        return await context.generateRaw(params);
+        return await context.generateRawData(params);
     }
 
     if (typeof context.generateQuietPrompt === 'function') {
