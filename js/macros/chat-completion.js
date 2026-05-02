@@ -170,6 +170,14 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
         const shadowTokens = await countTokens(shadowPrompt);
         chatCompletion.reserveBudget(shadowTokens);
 
+        // Reserve budget for extension-injected prompts (Lorebook, Vector storage, etc.)
+        let injectionTokens = 0;
+        if (stContext.extensionPrompts) {
+            const injectionText = Object.values(stContext.extensionPrompts).map(p => p.value || '').join('\n');
+            injectionTokens = await countTokens(injectionText);
+            chatCompletion.reserveBudget(injectionTokens);
+        }
+
         // Reserve budget for other static CC prompts
         const staticCCParts = [];
         for (const entry of promptOrder) {

@@ -1,4 +1,5 @@
 import { logger } from './utils.js';
+import { countTokens, getMaxPromptTokens } from '../compat-shared.js';
 
 /**
  * Weaves extension-injected prompts into a message list based on depth and position.
@@ -51,20 +52,20 @@ export function weaveInjections(messages, extensionPrompts) {
 
 /**
  * Resolves Polyceph-specific chat history macros.
- * Handles: {{chat_history}}, {{chat_history:N}}, {{chat_history:live}}, {{chat_history:live:N}}
- * 
- * @param {string} text - The prompt text to process
- * @param {Array} cleanChat - Snapshot of the chat array without typing indicators
- * @param {object} stContext - SillyTavern context
- * @returns {string} - Processed text
+ * Handles: {{chat_history}}, {{chat_history|last:N}}, etc.
  */
-export function resolveChatHistory(text, cleanChat, stContext) {
+export async function resolveChatHistory(text, cleanChat, stContext) {
     if (!text) return text;
 
     const isCC = stContext.mainApi === 'openai';
 
-    // Regex for: {{chat_history|last:10|live:true|bg_last:2|no_extensions:true}}
-    return text.replace(/\{\{chat_history(?:\|([^}]+))?\}\}/g, (match, params) => {
+    // We use a regex replace with an async function
+    const matches = [...text.matchAll(/\{\{chat_history(?:\|([^}]+))?\}\}/g)];
+    let newText = text;
+
+    for (const match of matches) {
+        const fullMatch = match[0];
+        const params = match[1];
         const options = {};
         if (params) {
             params.split('|').forEach(p => {
@@ -80,7 +81,7 @@ export function resolveChatHistory(text, cleanChat, stContext) {
             stContext.chat.filter(m => m && !m.extra?.polyceph_typing && !m.is_system && !m.mes?.trim().startsWith('/')) :
             cleanChat;
 
-        // 2. Filter Background Messages (preserve order)
+        // 2. Filter Background Messages
         let filteredMessages = source;
         if (options.bg_last !== undefined) {
             const bgLimit = parseInt(options.bg_last);
@@ -89,15 +90,46 @@ export function resolveChatHistory(text, cleanChat, stContext) {
             if (backgroundMsgs.length > bgLimit) {
                 const keepBgs = backgroundMsgs.slice(-bgLimit);
                 filteredMessages = source.filter(m => {
-                    // Keep if not hidden OR if it's one of the last N hidden ones
                     if (!m.extra?.polyceph_hidden) return true;
                     return keepBgs.includes(m);
                 });
             }
         }
 
-        // 3 & 4. Map and Weave
-        const finalMessages = weaveInjections(filteredMessages, includeInjections ? stContext.extensionPrompts : null);
+        // 3. Token-Aware Trimming (if last:N is not specified or as a safety layer)
+        const budget = getMaxPromptTokens();
+        const injectionPrompts = includeInjections ? stContext.extensionPrompts : null;
+        
+        // Calculate Injection Overhead
+        let injectionTokens = 0;
+        if (injectionPrompts) {
+            const injectionText = Object.values(injectionPrompts).map(p => p.value || '').join('\n');
+            injectionTokens = await countTokens(injectionText);
+        }
+
+        const usableBudget = budget - injectionTokens - 200; // 200 token safety margin
+        
+        let trimmedMessages = filteredMessages;
+        if (options.last !== undefined) {
+            const lastN = parseInt(options.last);
+            if (!isNaN(lastN)) {
+                trimmedMessages = filteredMessages.slice(-lastN);
+            }
+        }
+
+        // Final token-aware trim for the history source itself
+        const finalSource = [];
+        let currentTokens = 0;
+        for (let i = trimmedMessages.length - 1; i >= 0; i--) {
+            const m = trimmedMessages[i];
+            const t = await countTokens(m.mes || '');
+            if (currentTokens + t + 20 > usableBudget) break; // 20 token per-msg overhead est
+            finalSource.unshift(m);
+            currentTokens += t + 20;
+        }
+
+        // 4. Map and Weave
+        const finalMessages = weaveInjections(finalSource, injectionPrompts);
 
         // 5. Format to strings
         let history = finalMessages.map(m => {
@@ -121,20 +153,14 @@ export function resolveChatHistory(text, cleanChat, stContext) {
                 return `[[ROLE:${mRole}]]\n${m.mes}${encodedInvocations}\n[[/ROLE]]`;
             }
 
-            // For text completion, we still use a readable format
             if (mRole === 'system') return `### System Instruction:\n${m.mes}${encodedInvocations}`;
             return `${m.name || (m.is_user ? 'User' : 'Assistant')}: ${m.mes}${encodedInvocations}`;
         });
 
-        // 6. Apply Final Limit
-        if (options.last !== undefined) {
-            const lastN = parseInt(options.last);
-            if (!isNaN(lastN)) {
-                history = history.slice(-lastN);
-            }
-        }
+        const resolvedHistory = history.join('\n\n');
+        newText = newText.replace(fullMatch, resolvedHistory);
+        logger.debug(`Resolved {{chat_history}} with ${finalSource.length} messages. Budget: ${usableBudget}, Injections: ${injectionTokens}`);
+    }
 
-        logger.debug(`Resolved {{chat_history}} with ${history.length} messages (Params: ${params || 'none'})`);
-        return history.join('\n\n');
-    });
+    return newText;
 }

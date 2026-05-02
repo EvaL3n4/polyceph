@@ -68,8 +68,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                 if (!taskResult || signal.aborted) return;
 
                 if (taskResult.error) {
-                    resultsByIndex[nodeIndex] = `Error: ${taskResult.error}`;
-                    return;
+                    throw new Error(`[Task: ${node.label || node.id}] ${taskResult.error}`);
                 }
 
                 const { parsedResult, taskApi, taskModel, profileDisplayName } = taskResult;

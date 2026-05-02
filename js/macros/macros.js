@@ -18,7 +18,7 @@ export async function expandPrompt(template, settings, contextVault, cleanChat, 
     result = result.replace(/\{\{polyceph_prompt\}\}/g, globalPrompt);
 
     // 2. Resolve Chat History (with params)
-    result = resolveChatHistory(result, cleanChat, stContext);
+    result = await resolveChatHistory(result, cleanChat, stContext);
 
     // 3. Resolve Chat Completion Prompts (Token-aware)
     result = await resolveCCMacros(result, cleanChat, stContext, null, contextVault);

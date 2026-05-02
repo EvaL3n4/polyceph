@@ -165,6 +165,9 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
             toastr.error('Pipeline execution encountered an error.', 'Polyceph');
             logger.error('Pipeline Error', e);
         }
+        if (currentPipelineAbortController) {
+            currentPipelineAbortController.abort();
+        }
     } finally {
         // 1. Immediate UI Cleanup
         await removeTypingIndicator();

@@ -94,12 +94,16 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
                 break; 
             }
 
-            if (attempt < maxAttempts) {
-                toastr.warning(`Task failed or returned empty. Retrying (${attempt + 1}/${maxAttempts})...`, 'Polyceph');
-                const delayWait = settings.retryDelayMs !== undefined ? settings.retryDelayMs : 2000;
-                await new Promise(r => setTimeout(r, delayWait));
+            if (attempt === maxAttempts) {
+                throw new Error(lastRawResponse || "Generation returned empty after all retries.");
             }
+
+            toastr.warning(`Task failed or returned empty. Retrying (${attempt + 1}/${maxAttempts})...`, 'Polyceph');
+            const delayWait = settings.retryDelayMs !== undefined ? settings.retryDelayMs : 2000;
+            await new Promise(r => setTimeout(r, delayWait));
         }
+
+        if (!parsedResult) throw new Error("Task failed to produce a valid response.");
 
         return {
             node,

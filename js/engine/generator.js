@@ -25,7 +25,9 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
         const maxPromptTokens = getMaxContextTokens() - getMaxResponseTokens();
         const promptTokens = await countTokens(prompt);
         if (promptTokens > maxPromptTokens) {
-            logger.warn(`Prompt (${promptTokens} tokens) exceeds max prompt budget (${maxPromptTokens} tokens). Generation may be truncated by the API.`);
+            const errorMsg = `Prompt (${promptTokens} tokens) exceeds context budget (${maxPromptTokens} tokens). Generation aborted for safety.`;
+            logger.error(errorMsg);
+            throw new Error(errorMsg);
         }
 
         let responseData = "";
@@ -148,7 +150,20 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
         return "(Generation returned empty)";
 
     } catch (err) {
-        logger.error('generation failed:', err);
-        return "(Error during generation)";
+        if (err.message === 'Aborted') throw err;
+        
+        // Parse deep SillyTavern/API error responses if available
+        let errorDetail = err.message;
+        if (err.response) {
+            try {
+                const parsed = JSON.parse(err.response);
+                errorDetail = parsed.error?.message || parsed.message || err.response;
+            } catch (e) {
+                errorDetail = err.response;
+            }
+        }
+        
+        logger.error('[Polyceph] Generation failed:', errorDetail);
+        throw new Error(errorDetail);
     }
 }
