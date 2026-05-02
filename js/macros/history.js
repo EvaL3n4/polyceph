@@ -17,7 +17,7 @@ export function weaveInjections(messages, extensionPrompts) {
                 value: prompt.value.trim(),
                 depth: Number(prompt.depth || 0),
                 // SillyTavern extension_prompt_types: 0=IN_PROMPT (After), 1=IN_CHAT (Depth), 2=BEFORE_PROMPT (Top)
-                position: Number(prompt.position === undefined ? 2 : prompt.position), 
+                position: Number(prompt.position === undefined ? 2 : prompt.position),
                 role: Number(prompt.role || 0)
             });
         }
@@ -120,7 +120,7 @@ export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = 
             try {
                 const { getWorldInfoForChat } = await import('../compat-shared.js');
                 const wi = await getWorldInfoForChat(filteredMessages, isDryRun, 'normal', userInput);
-                
+
                 if (wi) {
                     // 1. Add depth-based entries
                     if (Array.isArray(wi.depthEntries)) {
@@ -137,11 +137,11 @@ export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = 
 
                     // 2. Add top/bottom entries (legacy or non-depth)
                     if (wi.worldInfoString) {
-                        injectionPrompts['polyceph_wi'] = { 
-                            value: wi.worldInfoString, 
-                            depth: 0, 
+                        injectionPrompts['polyceph_wi'] = {
+                            value: wi.worldInfoString,
+                            depth: 0,
                             position: 2, // BEFORE_PROMPT (ST enum)
-                            role: 0 
+                            role: 0
                         };
                     }
                 }
@@ -149,7 +149,7 @@ export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = 
                 logger.warn('Failed to resolve Lorebook for prompt expansion:', e);
             }
         }
-        
+
         // Calculate Injection Overhead
         let injectionTokens = 0;
         if (injectionPrompts) {
@@ -160,10 +160,10 @@ export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = 
         // Usable budget = Total - Injections - Template Overhead - Safety Buffer
         // We use a progressive safety buffer (5% of total budget, min 2000) to account for 
         // tokenizer drift and hidden API-side overhead (System Prompts, Formatting).
-        const safetyBuffer = Math.max(2000, Math.ceil(budget * 0.05)); 
+        const safetyBuffer = Math.max(2000, Math.ceil(budget * 0.05));
         const usableBudget = budget - injectionTokens - overheadTokens - safetyBuffer;
-        
-        logger.debug(`[Polyceph] History Budget Breakdown:
+
+        logger.debug(`History Budget Breakdown:
             Total context budget: ${budget}
             Injection tokens: ${injectionTokens}
             Template overhead: ${overheadTokens}
@@ -171,7 +171,7 @@ export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = 
             Final usable for history: ${usableBudget}`);
 
         if (usableBudget <= 0) {
-            logger.warn('[Polyceph] Usable budget for chat history is zero or negative. Returning empty history.');
+            logger.warn('Usable budget for chat history is zero or negative. Returning empty history.');
             newText = newText.replace(fullMatch, '');
             continue;
         }
@@ -189,16 +189,16 @@ export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = 
         let currentTokens = 0;
         for (let i = trimmedMessages.length - 1; i >= 0; i--) {
             const m = trimmedMessages[i];
-            
+
             // Account for message formatting overhead + invocations
             let mContent = m.mes || '';
             if (m.extra?.tool_invocations && Array.isArray(m.extra.tool_invocations)) {
                 mContent += `\n[[INVOCATIONS:${JSON.stringify(m.extra.tool_invocations)}]]`;
             }
-            
+
             const t = await countTokens(mContent);
             const overhead = 30; // Estimated formatting overhead (Role markers, Names, separators)
-            
+
             if (currentTokens + t + overhead > usableBudget) break;
             finalSource.unshift(m);
             currentTokens += t + overhead;
@@ -234,7 +234,19 @@ export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = 
         });
 
         const resolvedHistory = history.join('\n\n');
-        newText = newText.replace(fullMatch, resolvedHistory);
+        
+        // 6. Prepend truncation notice if messages were removed
+        const removedCount = cleanChat.length - finalSource.length;
+        let finalResult = resolvedHistory;
+        if (removedCount > 0) {
+            const notice = `(... ${removedCount} Previous Messages.)`;
+            const formattedNotice = isCC ? 
+                `[[ROLE:system]]\n${notice}\n[[/ROLE]]` : 
+                `### Notice:\n${notice}`;
+            finalResult = `${formattedNotice}\n\n${resolvedHistory}`;
+        }
+
+        newText = newText.replace(fullMatch, finalResult);
         logger.debug(`Resolved {{chat_history}} with ${finalSource.length} messages. Budget: ${usableBudget}, Injections: ${injectionTokens}`);
     }
 

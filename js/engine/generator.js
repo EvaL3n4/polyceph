@@ -25,7 +25,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
         const maxContext = await getMaxContextTokens();
         const maxResponse = getMaxResponseTokens();
         const maxPromptTokens = maxContext - maxResponse;
-        
+
         const promptTokens = await countTokens(prompt);
         if (promptTokens > maxPromptTokens) {
             const errorMsg = `Prompt (${promptTokens} tokens) exceeds context budget (${maxPromptTokens} tokens). Generation aborted for safety.`;
@@ -44,10 +44,10 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
             const tmModule = await getToolCallingModule();
             ToolManager = tmModule?.ToolManager;
             if (!ToolManager) {
-                logger.warn('[Polyceph] SillyTavern ToolManager not found. Tool calling features will be disabled for this generation.');
+                logger.warn('SillyTavern ToolManager not found. Tool calling features will be disabled for this generation.');
             }
         } catch (e) {
-            logger.error('[Polyceph] Failed to load SillyTavern ToolManager:', e);
+            logger.error('Failed to load SillyTavern ToolManager:', e);
         }
 
         let depth = 0;
@@ -110,8 +110,8 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
             const toolCalls = responseData?.choices?.[0]?.message?.tool_calls || responseData?.tool_calls;
 
             if (toolCalls && toolCalls.length > 0 && ToolManager) {
-                logger.debug(`[Polyceph] Tool calls detected (depth ${depth}):`, toolCalls);
-                
+                logger.debug(`Tool calls detected (depth ${depth}):`, toolCalls);
+
                 // 1. Add assistant message with tool calls to history
                 messages.push({
                     role: 'assistant',
@@ -121,7 +121,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
 
                 // 2. Execute tools
                 const results = await ToolManager.executeToolCalls(toolCalls);
-                
+
                 // 3. Add tool results to history
                 if (results && Array.isArray(results)) {
                     messages.push(...results);
@@ -154,7 +154,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
 
     } catch (err) {
         if (err.message === 'Aborted') throw err;
-        
+
         // Parse deep SillyTavern/API error responses if available
         let errorDetail = err.message || 'Unknown error';
         if (err.response) {
@@ -165,8 +165,8 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                 errorDetail = err.response;
             }
         }
-        
-        logger.error('[Polyceph] Generation failed:', errorDetail, err);
+
+        logger.error('Generation failed:', errorDetail, err);
         throw new Error(errorDetail);
     }
 }

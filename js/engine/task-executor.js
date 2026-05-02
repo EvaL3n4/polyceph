@@ -12,7 +12,7 @@ import { generateQuietly } from './generator.js';
 export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault, cleanChat, signal) {
     const stContext = SillyTavern.getContext();
     const taskIdIndx = nodeIndex + 1;
-    
+
     // 1. Preset Management
     const taskPreset = node.preset || 'Current';
     if (taskPreset !== 'Current') {
@@ -71,7 +71,7 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
     try {
         // 4. Prompt Expansion
         const prompt = await expandPrompt(node.template || '', settings, contextVault, cleanChat, stContext);
-        
+
         if (signal.aborted) return null;
 
         let lastRawResponse = null;
@@ -81,32 +81,32 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
         // 5. Generation Loop (Retries)
         for (let attempt = 0; attempt <= maxAttempts; attempt++) {
             if (signal.aborted) return null;
-            
+
             try {
                 const rawRes = await generateQuietly(node.profile, prompt, taskApi, signal);
                 lastRawResponse = rawRes;
-                
+
                 if (signal.aborted) return null;
 
                 const isEmpty = !rawRes || rawRes.trim() === "" || rawRes === "(Generation returned empty)" || rawRes === "(Error during generation)";
 
                 if (!isEmpty) {
                     parsedResult = parseOutputTags(rawRes, node.label || `Task ${taskIdIndx}`, profileDisplayName, node.persist && !node.isCharacter);
-                    break; 
+                    break;
                 }
-                
+
                 if (attempt === maxAttempts) {
                     throw new Error(lastRawResponse || "Generation returned empty after all retries.");
                 }
             } catch (e) {
                 if (signal.aborted) throw e;
-                
+
                 lastRawResponse = e.message;
                 if (attempt === maxAttempts) {
                     throw e;
                 }
-                
-                logger.warn(`[Polyceph] Task ${node.id} attempt ${attempt + 1} failed: ${e.message}. Retrying...`);
+
+                logger.warn(`Task ${node.id} attempt ${attempt + 1} failed: ${e.message}. Retrying...`);
             }
 
             toastr.warning(`Task failed. Retrying (${attempt + 1}/${maxAttempts})...`, 'Polyceph');

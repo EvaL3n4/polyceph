@@ -31,7 +31,19 @@ export async function handlePolycephSend(e) {
  */
 export async function interceptSend(e) {
     if (settings.activePipelineId === 'none') return;
-    if (e.type === 'keydown' && (e.key !== 'Enter' || e.shiftKey)) return;
+    
+    // Check Enter key behavior settings
+    if (e.type === 'keydown') {
+        const behavior = settings.enterBehavior || 'all';
+        if (behavior === 'none') return;
+        
+        const isMobile = window.matchMedia("(pointer: coarse)").matches;
+        if (behavior === 'pc' && isMobile) return;
+        if (behavior === 'mobile' && !isMobile) return;
+
+        // Standard Enter checks
+        if (e.key !== 'Enter' || e.shiftKey) return;
+    }
 
     const textarea = document.getElementById('send_textarea');
     if (!textarea) return;
@@ -210,7 +222,7 @@ function setupIntercepts() {
     }
 
     if (textArea) textArea.addEventListener('keydown', (e) => {
-        if (settings.interceptEnter !== false) {
+        if (settings.enterBehavior !== 'none') {
             interceptSend(e);
         }
     }, true);

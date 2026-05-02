@@ -1,5 +1,5 @@
 export const MODULE_NAME = 'polyceph';
-export const VERSION = '0.7.1';
+export const VERSION = '0.7.2';
 
 export const defaultSettings = {
     delayMs: 250,
@@ -9,7 +9,7 @@ export const defaultSettings = {
     toolRecursionLimit: 5,
     activePipelineId: 'default',
     interceptSend: true,
-    interceptEnter: true,
+    enterBehavior: 'all',
     showPipelineSelector: true,
     showPipelineIcon: true,
     compactSelectorMode: false,

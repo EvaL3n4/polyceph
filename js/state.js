@@ -316,6 +316,14 @@ export function loadSettings() {
             });
         });
 
+        // Migration: interceptEnter -> enterBehavior
+        if (settings.interceptEnter === false) {
+            settings.enterBehavior = 'none';
+        } else if (settings.interceptEnter === true && settings.enterBehavior === undefined) {
+            settings.enterBehavior = 'all';
+        }
+        delete settings.interceptEnter;
+
         // Initialize logger state
         setLogLevel(settings.logLevel);
     }

@@ -33,8 +33,8 @@ async function tryImportST(fileName) {
             errors.push(`${path} -> ${e.message}`);
         }
     }
-    
-    logger.debug(`[Polyceph] Could not find SillyTavern core script "${fileName}". Attempts:`, errors);
+
+    logger.debug(`Could not find SillyTavern core script "${fileName}". Attempts:`, errors);
     return null;
 }
 

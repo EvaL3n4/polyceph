@@ -30,12 +30,12 @@ export async function expandPrompt(template, settings, contextVault, cleanChat, 
         try {
             const { getWorldInfoForChat } = await import('../compat-shared.js');
             const wi = await getWorldInfoForChat(cleanChat, isDryRun, 'normal', resolvedInput);
-            const wiText = wi ? (wi.before + wi.after) : ''; 
+            const wiText = wi ? (wi.before + wi.after) : '';
             result = result.replace(/\{\{world_info\}\}/g, wiText);
             shouldInjectWIIntoHistory = false;
-            logger.debug('[Polyceph] Resolved {{world_info}} macro.');
+            logger.debug('Resolved {{world_info}} macro.');
         } catch (e) {
-            logger.error('[Polyceph] Failed to resolve standalone {{world_info}} macro:', e);
+            logger.error('Failed to resolve standalone {{world_info}} macro:', e);
             result = result.replace(/\{\{world_info\}\}/g, '');
         }
     }
@@ -56,9 +56,9 @@ export async function expandPrompt(template, settings, contextVault, cleanChat, 
     try {
         const { countTokens } = await import('../compat-shared.js');
         overheadTokens = await countTokens(overheadText);
-        logger.debug(`[Polyceph] Accurate template overhead (including CC macros): ${overheadTokens} tokens`);
+        logger.debug(`Accurate template overhead (including CC macros): ${overheadTokens} tokens`);
     } catch (e) {
-        logger.warn('[Polyceph] Failed to calculate template overhead:', e);
+        logger.warn('Failed to calculate template overhead:', e);
     }
 
     // 7. Resolve Chat History (with current input, WI awareness, and accurate overhead)

@@ -28,13 +28,13 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
 
             const msgModule = await getMessagesModule();
             Message = Message || msgModule?.Message;
-            
+
             if (!ChatCompletion || !Message) {
                 throw new Error("SillyTavern native classes (ChatCompletion/Message) could not be resolved from core scripts. Detailed path attempts are available in the console (debug mode).");
             }
         }
     } catch (err) {
-        const errorMsg = `[Polyceph] Critical Failure: Could not load native SillyTavern classes for token management. Pipeline aborted to prevent over-budget requests.`;
+        const errorMsg = `Critical Failure: Could not load native SillyTavern classes for token management. Pipeline aborted to prevent over-budget requests.`;
         logger.error(errorMsg, err);
         throw new Error(errorMsg);
     }
@@ -202,7 +202,7 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
             for (let i = cleanChat.length - 1; i >= 0; i--) {
                 const m = cleanChat[i];
                 const role = m.is_user ? 'user' : 'assistant';
-                
+
                 // Account for tool invocations in token count
                 let mContent = m.mes || '';
                 if (m.extra?.tool_invocations && Array.isArray(m.extra.tool_invocations)) {
@@ -211,7 +211,7 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
 
                 const msg = await Message.createAsync(role, mContent, `chatHistory-${i}`);
                 const overhead = 8; // Estimated message overhead
-                
+
                 if (currentHistoryTokens + msg.getTokens() + overhead > historyBudget) break;
 
                 trimmedChat.unshift(m);
@@ -244,7 +244,7 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
         if (part === 'before') replacement = freshWI.before;
         else if (part === 'after') replacement = freshWI.after;
         else replacement = freshWI.worldInfoString;
-        
+
         result = result.replace(fullMatch, replacement);
         wiRegex.lastIndex = 0; // Reset because we modified result
     }

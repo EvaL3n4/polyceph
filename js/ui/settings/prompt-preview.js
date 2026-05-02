@@ -2,11 +2,13 @@ import { getActivePipeline, settings } from '../../state.js';
 import { expandPrompt } from '../../macros/macros.js';
 import { logger } from '../../logger.js';
 import { countTokens, getMaxContextTokens, getMaxResponseTokens } from '../../compat-shared.js';
+import { initSearchListeners } from './search-manager.js';
 
 /**
  * Generates and displays a modal with the assembled prompts for each task in the active pipeline.
  */
 export async function showPromptPreview() {
+    // ... (rest of the setup code remains the same)
     const pipeline = getActivePipeline();
     const stContext = SillyTavern.getContext();
 
@@ -114,10 +116,27 @@ export async function showPromptPreview() {
             <h3 style="margin-top: 0; display: flex; align-items: center; gap: 10px;">
                 <i class="fa-solid fa-eye"></i> Pipeline Prompt Preview
             </h3>
-            <p style="font-size: 0.9em; opacity: 0.8; margin-bottom: 20px;">
-                This view shows exactly how each prompt is assembled. 
-                <span style="color: var(--SmartThemeQuoteColor); font-weight: bold;">Highlights</span> represent outputs from previous tasks.
-            </p>
+            <div class="polyceph-preview-search-container">
+                <div class="polyceph-preview-search-input-wrapper">
+                    <input type="text" id="polyceph_preview_search_input" placeholder="Search prompt text..." class="text_pole">
+                    <div class="polyceph-preview-search-controls">
+                        <span id="polyceph_preview_search_count">0/0</span>
+                        <i id="polyceph_preview_search_prev" class="fa-solid fa-chevron-up" title="Previous"></i>
+                        <i id="polyceph_preview_search_next" class="fa-solid fa-chevron-down" title="Next"></i>
+                    </div>
+                </div>
+                <div class="polyceph-preview-search-options">
+                    <label title="Search Current Page Only">
+                        <input type="checkbox" id="polyceph_preview_search_scope" checked> Page
+                    </label>
+                    <label title="Case Sensitive">
+                        <input type="checkbox" id="polyceph_preview_search_case"> Aa
+                    </label>
+                    <label title="Use Regular Expression">
+                        <input type="checkbox" id="polyceph_preview_search_regex"> .*
+                    </label>
+                </div>
+            </div>
             <div class="polyceph-preview-list">
                 ${html}
             </div>
@@ -127,18 +146,20 @@ export async function showPromptPreview() {
 
     // Attach global listener if not already present
     if (!window.polyceph_preview_initialized) {
+        function switchPage(container, pageIdx) {
+            container.find('.polyceph-page-btn').removeClass('active');
+            container.find(`.polyceph-page-btn[data-page="${pageIdx}"]`).addClass('active');
+            container.find('.polyceph-preview-page').removeClass('active');
+            container.find(`.polyceph-preview-page[data-page="${pageIdx}"]`).addClass('active');
+        }
+
         $(document).on('click', '.polyceph-page-btn', function () {
             const pageIdx = $(this).data('page');
             const container = $(this).closest('.polyceph-preview-modal-content');
-
-            // Update buttons
-            container.find('.polyceph-page-btn').removeClass('active');
-            $(this).addClass('active');
-
-            // Update pages
-            container.find('.polyceph-preview-page').removeClass('active');
-            container.find(`.polyceph-preview-page[data-page="${pageIdx}"]`).addClass('active');
+            switchPage(container, pageIdx);
         });
+
+        initSearchListeners($('.polyceph-preview-modal-content'), switchPage);
         window.polyceph_preview_initialized = true;
     }
 

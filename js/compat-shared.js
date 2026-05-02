@@ -196,7 +196,7 @@ export async function getMaxContextTokens() {
     // 1. OpenAI / OpenRouter (via OpenAI API)
     if (api === 'openai') {
         requestedLimit = Number(oaiSettings?.openai_max_context) || 4096;
-        
+
         // If context is NOT unlocked, we should try to find the model's hard cap in ST's model list
         const isUnlocked = oaiSettings?.max_context_unlocked || powerUser?.max_context_unlocked;
         if (!isUnlocked) {
@@ -205,14 +205,14 @@ export async function getMaxContextTokens() {
                 const { model_list, getChatCompletionModel } = await import('../../openai.js');
                 const activeModelId = getChatCompletionModel(oaiSettings);
                 const model = model_list.find(m => m.id === activeModelId);
-                
+
                 if (model) {
                     modelHardCap = Number(model.context_length || model.max_context_length || modelHardCap);
                 } else {
                     throw new Error(`Model "${activeModelId}" not found in model_list.`);
                 }
             } catch (e) {
-                logger.error('[Polyceph] Failed to resolve model metadata from openai.js:', e);
+                logger.error('Failed to resolve model metadata from openai.js:', e);
                 throw new Error(`Unable to determine hard context limit for OpenAI model: ${e.message}`);
             }
         } else {
@@ -220,7 +220,7 @@ export async function getMaxContextTokens() {
             // We set the hard cap to Infinity to allow the user's requestedLimit (slider) to be the sole constraint.
             modelHardCap = Infinity;
         }
-    } 
+    }
     // 2. Text Completion (Kobold, Ooba, OpenRouter-Text, etc.)
     else if (api === 'kobold' || api === 'koboldhorde' || api === 'textgenerationwebui') {
         requestedLimit = Number(ctx.maxContext) || 2048;
@@ -234,14 +234,14 @@ export async function getMaxContextTokens() {
                 const { textgenerationwebui_settings } = await import('../../textgen-settings.js');
                 const activeModelId = textgenerationwebui_settings?.openrouter_model;
                 const model = openRouterModels.find(m => m.id === activeModelId);
-                
+
                 if (model) {
                     modelHardCap = Number(model.context_length || modelHardCap);
                 } else {
                     throw new Error(`OpenRouter model "${activeModelId}" not found.`);
                 }
             } catch (e) {
-                logger.error('[Polyceph] Failed to resolve model metadata from textgen-models.js:', e);
+                logger.error('Failed to resolve model metadata from textgen-models.js:', e);
                 throw new Error(`Unable to determine hard context limit for TextGen model: ${e.message}`);
             }
         } else if (isUnlocked) {
@@ -299,7 +299,7 @@ export function getMaxResponseTokens() {
             const val = Number(amountGenEl.value);
             if (!isNaN(val) && val > 0) return val;
         }
-        
+
         const val = Number(ctx.textCompletionSettings?.max_new_tokens);
         if (!isNaN(val) && val > 0) return val;
     }
@@ -320,7 +320,7 @@ export async function getMaxPromptTokens(overrideResponseLength = null) {
     const responseTokens = (typeof overrideResponseLength === 'number' && overrideResponseLength > 0)
         ? overrideResponseLength
         : getMaxResponseTokens();
-    
+
     const contextTokens = await getMaxContextTokens();
     return contextTokens - responseTokens;
 }
@@ -592,12 +592,12 @@ export async function getWorldInfoForChat(chat, isDryRun = false, triggerType = 
             includeNames = settings.world_info_include_names ?? true;
         }
     } catch (e) {
-        logger.debug('[Polyceph] Could not read world_info_include_names from settings, defaulting to true');
+        logger.debug('Could not read world_info_include_names from settings, defaulting to true');
     }
 
     // Prepare the list of messages for scanning
     const messagesToScan = [...chat];
-    
+
     // If we have current user input that isn't yet in the chat history, 
     // we inject it as the "latest" message to ensure keyword triggering works correctly.
     // NOTE: We check if it's already the last message to avoid double-injection 
@@ -607,7 +607,7 @@ export async function getWorldInfoForChat(chat, isDryRun = false, triggerType = 
         if (!lastMessage || lastMessage.mes !== userInput.trim()) {
             const userName = ctx.name || 'User';
             messagesToScan.push({ name: userName, mes: userInput.trim() });
-            logger.debug('[Polyceph] Injected user input into WI scan buffer:', userInput.trim());
+            logger.debug('Injected user input into WI scan buffer:', userInput.trim());
         }
     }
 
@@ -621,8 +621,8 @@ export async function getWorldInfoForChat(chat, isDryRun = false, triggerType = 
     // Log settings for debugging
     try {
         const { world_info_recursive, world_info_depth } = await import('../../world-info.js');
-        logger.debug(`[Polyceph] World Info Settings: Recursive=${world_info_recursive}, GlobalDepth=${world_info_depth}, Trigger=${triggerType}`);
-    } catch (e) {}
+        logger.debug(`World Info Settings: Recursive=${world_info_recursive}, GlobalDepth=${world_info_depth}, Trigger=${triggerType}`);
+    } catch (e) { }
 
     const globalScanData = {
         personaDescription: ctx.persona_description || '',

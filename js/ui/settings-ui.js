@@ -74,12 +74,17 @@ export function createSettingsHTML() {
                                 <label for="polyceph_intercept_send_checkbox" style="cursor: pointer;">Intercept Send Button (Single Send Button)</label>
                             </div>
                             <div style="display: flex; align-items: center; gap: 8px;">
-                                <input type="checkbox" id="polyceph_intercept_enter_checkbox" ${settings.interceptEnter !== false ? 'checked' : ''}>
-                                <label for="polyceph_intercept_enter_checkbox" style="cursor: pointer;">Intercept Enter Key</label>
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 8px;">
                                 <input type="checkbox" id="polyceph_emulate_events_checkbox" ${settings.emulateCoreEvents ? 'checked' : ''}>
                                 <label for="polyceph_emulate_events_checkbox" style="cursor: pointer;" title="Allows third-party extensions (like Tracker Enhanced) to interact with Polyceph runs.">Emulate Core Generation Events (Ext. Compat)</label>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px; margin-top: 5px;">
+                                <b style="min-width: 120px; font-size: 0.9em; opacity: 0.8;" title="Capture Enter key behavior. PC: Only on desktop. Mobile: Only on touch. All: Everywhere. None: Disable Enter capture.">Enter Key</b>
+                                <select id="polyceph_enter_behavior_selector" class="text_pole" style="flex: 1;">
+                                    <option value="pc" ${settings.enterBehavior === 'pc' ? 'selected' : ''}>PC Capture</option>
+                                    <option value="mobile" ${settings.enterBehavior === 'mobile' ? 'selected' : ''}>Mobile Capture</option>
+                                    <option value="all" ${settings.enterBehavior === 'all' || settings.enterBehavior === undefined ? 'selected' : ''}>All Capture</option>
+                                    <option value="none" ${settings.enterBehavior === 'none' ? 'selected' : ''}>No Capture</option>
+                                </select>
                             </div>
                             <div style="display: flex; align-items: center; gap: 8px; margin-top: 5px;">
                                 <b style="min-width: 120px; font-size: 0.9em; opacity: 0.8;" title="Control the verbosity of console logs.">Log Level</b>
@@ -259,8 +264,8 @@ export function addSettingsUI() {
         }
     });
 
-    getEl('polyceph_intercept_enter_checkbox')?.addEventListener('change', (e) => {
-        settings.interceptEnter = e.target.checked;
+    getEl('polyceph_enter_behavior_selector')?.addEventListener('change', (e) => {
+        settings.enterBehavior = e.target.value;
         saveSettings();
     });
 
