@@ -178,35 +178,110 @@ function getInstructStoppingSequences(ctx, powerUser) {
  *
  * @returns {number} Maximum context tokens.
  */
-export function getMaxContextTokens() {
+/**
+ * Retrieves the effective context limit from SillyTavern's active settings.
+ * Prioritizes backend-reported hard caps and dynamic model metadata over static UI values.
+ * 
+ * @returns {Promise<number>} Current context limit in tokens.
+ */
+export async function getMaxContextTokens() {
     const ctx = SillyTavern.getContext();
     const api = ctx.mainApi;
+    const oaiSettings = ctx.chatCompletionSettings;
+    const powerUser = ctx.powerUserSettings;
 
+    let requestedLimit = 0;
+    let modelHardCap = Infinity;
+
+    // 1. OpenAI / OpenRouter (via OpenAI API)
     if (api === 'openai') {
-        // oai_settings.openai_max_context is the active preset's value
-        // ST already enforces the unlocked context limit on this value via the UI
-        return Number(ctx.chatCompletionSettings?.openai_max_context) || 4096;
-    }
-
-    if (api === 'novel') {
-        let max = Number(ctx.maxContext) || 2048;
-        const model = ctx.novelAISettings?.model_novel || '';
-        // Mirroring ST's hard caps for NAI models in script.js:L5845
-        if (model.includes('clio') || model.includes('kayra') || model.includes('erato')) {
-            max = Math.min(max, 8192);
+        requestedLimit = Number(oaiSettings?.openai_max_context) || 4096;
+        
+        // If context is NOT unlocked, we should try to find the model's hard cap in ST's model list
+        const isUnlocked = oaiSettings?.max_context_unlocked || powerUser?.max_context_unlocked;
+        if (!isUnlocked) {
+            try {
+                // Dynamic import to access SillyTavern's internal model metadata
+                const { model_list, getChatCompletionModel } = await import('../../openai.js');
+                const activeModelId = getChatCompletionModel(oaiSettings);
+                const model = model_list.find(m => m.id === activeModelId);
+                
+                if (model) {
+                    modelHardCap = Number(model.context_length || model.max_context_length || modelHardCap);
+                } else {
+                    throw new Error(`Model "${activeModelId}" not found in model_list.`);
+                }
+            } catch (e) {
+                logger.error('[Polyceph] Failed to resolve model metadata from openai.js:', e);
+                throw new Error(`Unable to determine hard context limit for OpenAI model: ${e.message}`);
+            }
+        } else {
+            // Unlocked context (Global Power User or OpenAI specific)
+            // We set the hard cap to Infinity to allow the user's requestedLimit (slider) to be the sole constraint.
+            modelHardCap = Infinity;
         }
-        return max;
+    } 
+    // 2. Text Completion (Kobold, Ooba, OpenRouter-Text, etc.)
+    else if (api === 'kobold' || api === 'koboldhorde' || api === 'textgenerationwebui') {
+        requestedLimit = Number(ctx.maxContext) || 2048;
+
+        const isUnlocked = powerUser?.max_context_unlocked;
+
+        // For TextGen, check if it's OpenRouter which provides model-specific caps
+        if (api === 'textgenerationwebui' && !isUnlocked) {
+            try {
+                const { openRouterModels } = await import('../../textgen-models.js');
+                const { textgenerationwebui_settings } = await import('../../textgen-settings.js');
+                const activeModelId = textgenerationwebui_settings?.openrouter_model;
+                const model = openRouterModels.find(m => m.id === activeModelId);
+                
+                if (model) {
+                    modelHardCap = Number(model.context_length || modelHardCap);
+                } else {
+                    throw new Error(`OpenRouter model "${activeModelId}" not found.`);
+                }
+            } catch (e) {
+                logger.error('[Polyceph] Failed to resolve model metadata from textgen-models.js:', e);
+                throw new Error(`Unable to determine hard context limit for TextGen model: ${e.message}`);
+            }
+        } else if (isUnlocked) {
+            modelHardCap = Infinity;
+        }
+    }
+    // 3. NovelAI
+    else if (api === 'novel') {
+        requestedLimit = Number(ctx.maxContext) || 2048;
+        const model = ctx.novelAISettings?.model_novel || '';
+        // Mirroring ST core hard caps for NAI models
+        if (model.includes('clio') || model.includes('kayra') || model.includes('erato')) {
+            modelHardCap = 8192;
+        }
     }
 
-    // For text completion APIs, max_context is the global variable
-    // which is updated when a preset is loaded (setGenerationParamsFromPreset)
-    return Number(ctx.maxContext) || 2048;
+    // 4. Secondary Check: UI Element (as a fallback or override)
+    const counterId = api === 'openai' ? 'openai_max_context_counter' : 'max_context_counter';
+    const counterEl = document.getElementById(counterId);
+    if (counterEl) {
+        const uiValue = parseInt(counterEl.value || counterEl.innerText);
+        if (!isNaN(uiValue) && uiValue > 0) {
+            modelHardCap = Math.min(modelHardCap, uiValue);
+        }
+    }
+
+    // If we still have no hard cap and it's not unlocked, we are in an "unsure" state
+    if (modelHardCap === Infinity) {
+        const errorMsg = `Unable to determine reliable context limit for API: ${api}. Aborting for safety.`;
+        logger.error(errorMsg);
+        throw new Error(errorMsg);
+    }
+
+    return Math.min(requestedLimit, modelHardCap);
 }
 
 /**
- * Gets the maximum response token limit for the active API.
- * Mirrors script.js:L5877-5885.
- *
+ * Retrieves the maximum number of tokens reserved for the LLM's response.
+ * Follows SillyTavern's internal logic for different API types.
+ * 
  * @returns {number} Maximum response tokens.
  */
 export function getMaxResponseTokens() {
@@ -214,25 +289,24 @@ export function getMaxResponseTokens() {
     const api = ctx.mainApi;
 
     if (api === 'openai') {
-        return Number(ctx.chatCompletionSettings?.openai_max_tokens) || 300;
+        const val = Number(ctx.chatCompletionSettings?.openai_max_tokens);
+        if (!isNaN(val) && val > 0) return val;
     }
 
-    // For text completion, amount_gen is the global for response length.
-    // It's not directly on the context object, but textCompletionSettings
-    // has max_length (from the preset) and max_new_tokens (from getTextGenGenerationData).
-    // ctx.maxContext is the context size. We need amount_gen which isn't directly exposed,
-    // but we can read it from the text completion preset settings.
-    const textSettings = ctx.textCompletionSettings;
-    // textgenerationwebui_settings doesn't store max_length directly,
-    // but selectPreset() calls setGenerationParamsFromPreset() which sets amount_gen.
-    // The UI field #amount_gen_textarea has the value. We can read it from the DOM.
-    const amountGenEl = document.getElementById('amount_gen');
-    if (amountGenEl) {
-        const val = Number(amountGenEl.value);
-        if (val > 0) return val;
+    if (api === 'kobold' || api === 'koboldhorde' || api === 'textgenerationwebui' || api === 'novel') {
+        const amountGenEl = document.getElementById('amount_gen');
+        if (amountGenEl) {
+            const val = Number(amountGenEl.value);
+            if (!isNaN(val) && val > 0) return val;
+        }
+        
+        const val = Number(ctx.textCompletionSettings?.max_new_tokens);
+        if (!isNaN(val) && val > 0) return val;
     }
 
-    return 200; // Safe default
+    const errorMsg = `Unable to determine response token reservation for API: ${api}.`;
+    logger.error(errorMsg);
+    throw new Error(errorMsg);
 }
 
 /**
@@ -240,14 +314,17 @@ export function getMaxResponseTokens() {
  * Mirrors script.js:L5892-5898.
  *
  * @param {number} [overrideResponseLength] Optional override for response length.
- * @returns {number} Maximum prompt tokens.
+ * @returns {Promise<number>} Maximum prompt tokens.
  */
-export function getMaxPromptTokens(overrideResponseLength = null) {
+export async function getMaxPromptTokens(overrideResponseLength = null) {
     const responseTokens = (typeof overrideResponseLength === 'number' && overrideResponseLength > 0)
         ? overrideResponseLength
         : getMaxResponseTokens();
-    return getMaxContextTokens() - responseTokens;
+    
+    const contextTokens = await getMaxContextTokens();
+    return contextTokens - responseTokens;
 }
+
 
 /**
  * Counts the number of tokens in a given text or message array using ST's tokenizer.
@@ -267,9 +344,9 @@ export async function countTokens(content) {
         return await ctx.getTokenCountAsync(text);
     }
 
-    // Fallback: rough estimation (4 chars per token)
-    const text = typeof content === 'string' ? content : content.map(m => m.content || '').join('\n');
-    return Math.ceil(text.length / 4);
+    const errorMsg = 'SillyTavern tokenizer (getTokenCountAsync) is not available. Token counting failed.';
+    logger.error(errorMsg);
+    throw new Error(errorMsg);
 }
 
 // ---------------------------------------------------------------------------

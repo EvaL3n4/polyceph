@@ -27,7 +27,17 @@ export async function expandPrompt(template, settings, contextVault, cleanChat, 
     const resolvedInput = contextVault?.['user_input'] || settings.userInput || '';
     result = result.replace(/\{\{user_input\}\}/g, `[[ROLE:user]]\n${resolvedInput}\n[[/ROLE]]`);
 
-    // 5. Resolve SillyTavern standard macros and remaining contextVault items
+    // 5. Resolve remaining contextVault items (Task/Step placeholders)
+    if (contextVault) {
+        Object.keys(contextVault).forEach(key => {
+            // Escape key for regex
+            const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(`\\{\\{${escapedKey}\\}\\}`, 'g');
+            result = result.replace(regex, contextVault[key]);
+        });
+    }
+
+    // 6. Resolve SillyTavern standard macros
     if (typeof stContext.substituteParams === 'function') {
         result = stContext.substituteParams(result, {
             dynamicMacros: contextVault

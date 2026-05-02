@@ -97,8 +97,26 @@ export async function resolveChatHistory(text, cleanChat, stContext) {
         }
 
         // 3. Token-Aware Trimming (if last:N is not specified or as a safety layer)
-        const budget = getMaxPromptTokens();
-        const injectionPrompts = includeInjections ? stContext.extensionPrompts : null;
+        const budget = await getMaxPromptTokens();
+        let injectionPrompts = includeInjections ? { ...stContext.extensionPrompts } : null;
+
+        // Trigger Lorebook (World Info) if requested
+        if (includeInjections) {
+            try {
+                const { getWorldInfoForChat } = await import('../compat-shared.js');
+                const wi = await getWorldInfoForChat(filteredMessages);
+                if (wi && wi.worldInfoString) {
+                    injectionPrompts['polyceph_wi'] = { 
+                        value: wi.worldInfoString, 
+                        depth: 0, 
+                        position: 0, 
+                        role: 0 
+                    };
+                }
+            } catch (e) {
+                logger.warn('Failed to resolve Lorebook for prompt expansion:', e);
+            }
+        }
         
         // Calculate Injection Overhead
         let injectionTokens = 0;
@@ -122,10 +140,19 @@ export async function resolveChatHistory(text, cleanChat, stContext) {
         let currentTokens = 0;
         for (let i = trimmedMessages.length - 1; i >= 0; i--) {
             const m = trimmedMessages[i];
-            const t = await countTokens(m.mes || '');
-            if (currentTokens + t + 20 > usableBudget) break; // 20 token per-msg overhead est
+            
+            // Account for message formatting overhead + invocations
+            let mContent = m.mes || '';
+            if (m.extra?.tool_invocations && Array.isArray(m.extra.tool_invocations)) {
+                mContent += `\n[[INVOCATIONS:${JSON.stringify(m.extra.tool_invocations)}]]`;
+            }
+            
+            const t = await countTokens(mContent);
+            const overhead = 30; // Estimated formatting overhead (Role markers, Names, separators)
+            
+            if (currentTokens + t + overhead > usableBudget) break;
             finalSource.unshift(m);
-            currentTokens += t + 20;
+            currentTokens += t + overhead;
         }
 
         // 4. Map and Weave

@@ -22,7 +22,10 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
         const context = SillyTavern.getContext();
 
         // --- Compatibility: Token limit check ---
-        const maxPromptTokens = getMaxContextTokens() - getMaxResponseTokens();
+        const maxContext = await getMaxContextTokens();
+        const maxResponse = getMaxResponseTokens();
+        const maxPromptTokens = maxContext - maxResponse;
+        
         const promptTokens = await countTokens(prompt);
         if (promptTokens > maxPromptTokens) {
             const errorMsg = `Prompt (${promptTokens} tokens) exceeds context budget (${maxPromptTokens} tokens). Generation aborted for safety.`;

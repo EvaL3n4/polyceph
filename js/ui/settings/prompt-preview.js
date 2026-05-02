@@ -42,7 +42,7 @@ export async function showPromptPreview() {
     // 2. Expand prompts for all tasks
     const results = [];
     const placeholderRegex = /\(Output of Task: [^)]+\)|\(Combined Output of Step: [^)]+\)/g;
-    const maxContext = getMaxContextTokens();
+    const maxContext = await getMaxContextTokens();
     const maxResponse = getMaxResponseTokens();
     const availableBudget = maxContext - maxResponse;
 
@@ -87,8 +87,8 @@ export async function showPromptPreview() {
             <div class="polyceph-preview-task-header">
                 <span>${res.title}</span>
                 <div style="display: flex; gap: 15px; font-size: 0.8em; font-weight: normal;">
-                    <span title="Estimated tokens / Max allowed tokens (Context - Response Buffer)">
-                        <i class="fa-solid fa-microchip"></i> ${res.tokens} / <span style="color: var(--SmartThemeQuoteColor);">${res.limit}</span> tokens
+                    <span title="Estimated tokens / Max allowed tokens (Total Context Limit: ${maxContext})">
+                        <i class="fa-solid fa-microchip"></i> ${res.tokens} / <span style="color: var(--SmartThemeQuoteColor);">${res.limit}</span> <span style="opacity: 0.7; font-size: 0.9em;">(Total: ${maxContext})</span> tokens
                     </span>
                     ${res.placeholders > 0 ? `
                     <span class="polyceph-preview-placeholder-count" title="Number of unexpanded task placeholders in this prompt">

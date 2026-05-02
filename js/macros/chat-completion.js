@@ -154,7 +154,7 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
     if (allPromptsMatch) {
         // Initialize Native ST ChatCompletion to manage budget
         const chatCompletion = new ChatCompletion();
-        const maxContext = getMaxContextTokens();
+        const maxContext = await getMaxContextTokens();
         const maxResponse = getMaxResponseTokens();
         chatCompletion.setTokenBudget(maxContext, maxResponse);
 
@@ -202,12 +202,20 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
             for (let i = cleanChat.length - 1; i >= 0; i--) {
                 const m = cleanChat[i];
                 const role = m.is_user ? 'user' : 'assistant';
-                // Estimate with 8 token message overhead
-                const msg = await Message.createAsync(role, m.mes, `chatHistory-${i}`);
-                if (currentHistoryTokens + msg.getTokens() + 8 > historyBudget) break;
+                
+                // Account for tool invocations in token count
+                let mContent = m.mes || '';
+                if (m.extra?.tool_invocations && Array.isArray(m.extra.tool_invocations)) {
+                    mContent += `\n[[INVOCATIONS:${JSON.stringify(m.extra.tool_invocations)}]]`;
+                }
+
+                const msg = await Message.createAsync(role, mContent, `chatHistory-${i}`);
+                const overhead = 8; // Estimated message overhead
+                
+                if (currentHistoryTokens + msg.getTokens() + overhead > historyBudget) break;
 
                 trimmedChat.unshift(m);
-                currentHistoryTokens += msg.getTokens() + 8;
+                currentHistoryTokens += msg.getTokens() + overhead;
             }
         }
 
