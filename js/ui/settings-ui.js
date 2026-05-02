@@ -5,6 +5,7 @@ import { setLogLevel } from '../logger.js';
 import { updateChatSelectorOptions } from './chat-ui.js';
 import { getEl, bindToggle, renderNeoSlider, syncHiddenMessageVisibility, SELECTORS } from './ui-shared.js';
 import { updatePipelineEditorUI, bindStepEvents } from './settings/pipeline-editor.js';
+import { showPromptPreview } from './settings/prompt-preview.js';
 
 /**
  * Updates the entire settings UI.
@@ -178,6 +179,10 @@ export function createSettingsHTML() {
                     <button id="polyceph_add_step_btn" class="menu_button">
                         <i class="fa-solid fa-plus"></i> Add Pipeline Step
                     </button>
+
+                    <button id="polyceph_preview_prompts_btn" class="menu_button" style="background-color: var(--black70a);">
+                        <i class="fa-solid fa-eye"></i> Preview Assembled Prompts
+                    </button>
                 </div>
             </div>
         </div>
@@ -338,6 +343,10 @@ export function addSettingsUI() {
         });
         saveSettings();
         updateUI();
+    });
+
+    getEl('polyceph_preview_prompts_btn')?.addEventListener('click', async () => {
+        await showPromptPreview();
     });
 
     getEl('polyceph_refresh_profiles')?.addEventListener('click', async () => {
