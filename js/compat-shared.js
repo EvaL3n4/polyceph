@@ -585,9 +585,12 @@ export async function getWorldInfoForChat(chat, isDryRun = false, triggerType = 
     // SillyTavern often stores these as global variables in world-info.js
     let includeNames = true;
     try {
-        const { getWorldInfoSettings } = await import('../../world-info.js');
-        const settings = getWorldInfoSettings();
-        includeNames = settings.world_info_include_names ?? true;
+        const { getWorldInfoModule } = await import('./compat-st.js');
+        const worldInfo = await getWorldInfoModule();
+        if (worldInfo && typeof worldInfo.getWorldInfoSettings === 'function') {
+            const settings = worldInfo.getWorldInfoSettings();
+            includeNames = settings.world_info_include_names ?? true;
+        }
     } catch (e) {
         logger.debug('[Polyceph] Could not read world_info_include_names from settings, defaulting to true');
     }

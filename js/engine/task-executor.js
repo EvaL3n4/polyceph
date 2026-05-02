@@ -82,23 +82,34 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
         for (let attempt = 0; attempt <= maxAttempts; attempt++) {
             if (signal.aborted) return null;
             
-            const rawRes = await generateQuietly(node.profile, prompt, taskApi, signal);
-            lastRawResponse = rawRes;
-            
-            if (signal.aborted) return null;
+            try {
+                const rawRes = await generateQuietly(node.profile, prompt, taskApi, signal);
+                lastRawResponse = rawRes;
+                
+                if (signal.aborted) return null;
 
-            const isEmpty = !rawRes || rawRes.trim() === "" || rawRes === "(Generation returned empty)" || rawRes === "(Error during generation)";
+                const isEmpty = !rawRes || rawRes.trim() === "" || rawRes === "(Generation returned empty)" || rawRes === "(Error during generation)";
 
-            if (!isEmpty) {
-                parsedResult = parseOutputTags(rawRes, node.label || `Task ${taskIdIndx}`, profileDisplayName, node.persist && !node.isCharacter);
-                break; 
+                if (!isEmpty) {
+                    parsedResult = parseOutputTags(rawRes, node.label || `Task ${taskIdIndx}`, profileDisplayName, node.persist && !node.isCharacter);
+                    break; 
+                }
+                
+                if (attempt === maxAttempts) {
+                    throw new Error(lastRawResponse || "Generation returned empty after all retries.");
+                }
+            } catch (e) {
+                if (signal.aborted) throw e;
+                
+                lastRawResponse = e.message;
+                if (attempt === maxAttempts) {
+                    throw e;
+                }
+                
+                logger.warn(`[Polyceph] Task ${node.id} attempt ${attempt + 1} failed: ${e.message}. Retrying...`);
             }
 
-            if (attempt === maxAttempts) {
-                throw new Error(lastRawResponse || "Generation returned empty after all retries.");
-            }
-
-            toastr.warning(`Task failed or returned empty. Retrying (${attempt + 1}/${maxAttempts})...`, 'Polyceph');
+            toastr.warning(`Task failed. Retrying (${attempt + 1}/${maxAttempts})...`, 'Polyceph');
             const delayWait = settings.retryDelayMs !== undefined ? settings.retryDelayMs : 2000;
             await new Promise(r => setTimeout(r, delayWait));
         }

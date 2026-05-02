@@ -16,34 +16,41 @@ export function weaveInjections(messages, extensionPrompts) {
                 id: key,
                 value: prompt.value.trim(),
                 depth: Number(prompt.depth || 0),
-                position: Number(prompt.position || 0), // 0: Before, 1: In-Chat
+                // SillyTavern extension_prompt_types: 0=IN_PROMPT (After), 1=IN_CHAT (Depth), 2=BEFORE_PROMPT (Top)
+                position: Number(prompt.position === undefined ? 2 : prompt.position), 
                 role: Number(prompt.role || 0)
             });
         }
     });
 
     const finalMessages = [];
-    // Loop backwards to match ST's depth logic (0 is last message)
-    for (let i = messages.length - 1; i >= 0; i--) {
-        const depth = messages.length - 1 - i;
+
+    // 1. BEFORE_PROMPT (Position 2 in ST) - Top of everything
+    injections.filter(inj => inj.position === 2).forEach(inj => {
+        finalMessages.push({ mes: inj.value, role: inj.role, is_injection: true });
+    });
+
+    // 2. Chat History with IN_CHAT (Position 1 in ST) @ Depth
+    // In SillyTavern, depth 0 is the most recent message.
+    for (let i = 0; i < messages.length; i++) {
         const msg = messages[i];
+        const depthFromBottom = messages.length - 1 - i;
 
-        // In-Chat Injections (Position 1) go AFTER the message at that depth (closer to bottom)
-        injections.filter(inj => inj.depth === depth && inj.position === 1).forEach(inj => {
-            finalMessages.unshift({ mes: inj.value, role: inj.role, is_injection: true });
+        // In-Chat Injections go BEFORE the message at that depth (closer to top)
+        injections.filter(inj => inj.position === 1 && inj.depth === depthFromBottom).forEach(inj => {
+            finalMessages.push({ mes: inj.value, role: inj.role, is_injection: true });
         });
 
-        // The Message itself
-        finalMessages.unshift({ ...msg, is_injection: false });
-
-        // Before-Prompt Injections (Position 0)
-        injections.filter(inj => inj.depth === depth && inj.position === 0).forEach(inj => {
-            finalMessages.unshift({ mes: inj.value, role: inj.role, is_injection: true });
-        });
+        finalMessages.push({ ...msg, is_injection: false });
     }
 
-    // Handle depths beyond chat length
-    injections.filter(inj => inj.depth >= messages.length).forEach(inj => {
+    // 3. IN_PROMPT (Position 0 in ST) - Bottom of everything
+    injections.filter(inj => inj.position === 0).forEach(inj => {
+        finalMessages.push({ mes: inj.value, role: inj.role, is_injection: true });
+    });
+
+    // 4. Handle depths beyond chat length
+    injections.filter(inj => inj.position === 1 && inj.depth >= messages.length).forEach(inj => {
         finalMessages.unshift({ mes: inj.value, role: inj.role, is_injection: true });
     });
 
@@ -53,8 +60,16 @@ export function weaveInjections(messages, extensionPrompts) {
 /**
  * Resolves Polyceph-specific chat history macros.
  * Handles: {{chat_history}}, {{chat_history|last:N}}, etc.
+ * 
+ * @param {string} text - The template text containing macros.
+ * @param {object[]} cleanChat - The sanitized chat history.
+ * @param {object} stContext - SillyTavern context.
+ * @param {boolean} isDryRun - Whether this is a preview.
+ * @param {string} userInput - The pending user input.
+ * @param {boolean} shouldInjectWI - If false, World Info will NOT be injected into this history block.
+ * @param {number} overheadTokens - Tokens already consumed by other parts of the prompt template.
  */
-export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = false, userInput = null) {
+export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = false, userInput = null, shouldInjectWI = true, overheadTokens = 0) {
     if (!text) return text;
 
     const isCC = stContext.mainApi === 'openai';
@@ -100,18 +115,35 @@ export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = 
         const budget = await getMaxPromptTokens();
         let injectionPrompts = includeInjections ? { ...stContext.extensionPrompts } : null;
 
-        // Trigger Lorebook (World Info) if requested
-        if (includeInjections) {
+        // Trigger Lorebook (World Info) if requested and NOT already present as a standalone macro
+        if (includeInjections && shouldInjectWI) {
             try {
                 const { getWorldInfoForChat } = await import('../compat-shared.js');
                 const wi = await getWorldInfoForChat(filteredMessages, isDryRun, 'normal', userInput);
-                if (wi && wi.worldInfoString) {
-                    injectionPrompts['polyceph_wi'] = { 
-                        value: wi.worldInfoString, 
-                        depth: 0, 
-                        position: 0, 
-                        role: 0 
-                    };
+                
+                if (wi) {
+                    // 1. Add depth-based entries
+                    if (Array.isArray(wi.depthEntries)) {
+                        wi.depthEntries.forEach((entry, idx) => {
+                            const joined = entry.entries.join('\n');
+                            injectionPrompts[`wi_depth_${entry.depth}_${idx}`] = {
+                                value: joined,
+                                depth: entry.depth,
+                                position: 1, // IN_CHAT (ST enum)
+                                role: entry.role
+                            };
+                        });
+                    }
+
+                    // 2. Add top/bottom entries (legacy or non-depth)
+                    if (wi.worldInfoString) {
+                        injectionPrompts['polyceph_wi'] = { 
+                            value: wi.worldInfoString, 
+                            depth: 0, 
+                            position: 2, // BEFORE_PROMPT (ST enum)
+                            role: 0 
+                        };
+                    }
                 }
             } catch (e) {
                 logger.warn('Failed to resolve Lorebook for prompt expansion:', e);
@@ -125,8 +157,25 @@ export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = 
             injectionTokens = await countTokens(injectionText);
         }
 
-        const usableBudget = budget - injectionTokens - 200; // 200 token safety margin
+        // Usable budget = Total - Injections - Template Overhead - Safety Buffer
+        // We use a progressive safety buffer (5% of total budget, min 2000) to account for 
+        // tokenizer drift and hidden API-side overhead (System Prompts, Formatting).
+        const safetyBuffer = Math.max(2000, Math.ceil(budget * 0.05)); 
+        const usableBudget = budget - injectionTokens - overheadTokens - safetyBuffer;
         
+        logger.debug(`[Polyceph] History Budget Breakdown:
+            Total context budget: ${budget}
+            Injection tokens: ${injectionTokens}
+            Template overhead: ${overheadTokens}
+            Safety buffer (5%): ${safetyBuffer}
+            Final usable for history: ${usableBudget}`);
+
+        if (usableBudget <= 0) {
+            logger.warn('[Polyceph] Usable budget for chat history is zero or negative. Returning empty history.');
+            newText = newText.replace(fullMatch, '');
+            continue;
+        }
+
         let trimmedMessages = filteredMessages;
         if (options.last !== undefined) {
             const lastN = parseInt(options.last);

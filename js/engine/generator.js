@@ -81,7 +81,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
             }
 
             const apiPromise = generateViaApi(messages, tools, tool_choice);
-            const timeoutMs = settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 60000;
+            const timeoutMs = settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 120000;
 
             const abortPromise = signal ? new Promise((_, reject) => {
                 if (signal.aborted) reject(new Error('Aborted'));
@@ -156,17 +156,17 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
         if (err.message === 'Aborted') throw err;
         
         // Parse deep SillyTavern/API error responses if available
-        let errorDetail = err.message;
+        let errorDetail = err.message || 'Unknown error';
         if (err.response) {
             try {
-                const parsed = JSON.parse(err.response);
-                errorDetail = parsed.error?.message || parsed.message || err.response;
+                const parsed = typeof err.response === 'string' ? JSON.parse(err.response) : err.response;
+                errorDetail = parsed.error?.message || parsed.message || JSON.stringify(parsed);
             } catch (e) {
                 errorDetail = err.response;
             }
         }
         
-        logger.error('[Polyceph] Generation failed:', errorDetail);
+        logger.error('[Polyceph] Generation failed:', errorDetail, err);
         throw new Error(errorDetail);
     }
 }

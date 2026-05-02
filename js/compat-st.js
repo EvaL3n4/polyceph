@@ -60,6 +60,13 @@ export async function getMessagesModule() {
 }
 
 /**
+ * Imports SillyTavern's world-info.js for settings and engine access.
+ */
+export async function getWorldInfoModule() {
+    return await tryImportST('world-info.js');
+}
+
+/**
  * Imports SillyTavern's tool-calling.js which contains the ToolManager.
  */
 export async function getToolCallingModule() {
