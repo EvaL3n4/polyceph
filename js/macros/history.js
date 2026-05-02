@@ -54,7 +54,7 @@ export function weaveInjections(messages, extensionPrompts) {
  * Resolves Polyceph-specific chat history macros.
  * Handles: {{chat_history}}, {{chat_history|last:N}}, etc.
  */
-export async function resolveChatHistory(text, cleanChat, stContext) {
+export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = false, userInput = null) {
     if (!text) return text;
 
     const isCC = stContext.mainApi === 'openai';
@@ -104,7 +104,7 @@ export async function resolveChatHistory(text, cleanChat, stContext) {
         if (includeInjections) {
             try {
                 const { getWorldInfoForChat } = await import('../compat-shared.js');
-                const wi = await getWorldInfoForChat(filteredMessages);
+                const wi = await getWorldInfoForChat(filteredMessages, isDryRun, 'normal', userInput);
                 if (wi && wi.worldInfoString) {
                     injectionPrompts['polyceph_wi'] = { 
                         value: wi.worldInfoString, 

@@ -51,7 +51,7 @@ export async function showPromptPreview() {
         for (let tIdx = 0; tIdx < step.tasks.length; tIdx++) {
             const task = step.tasks[tIdx];
             try {
-                const assembled = await expandPrompt(task.template || '', settings, contextVault, cleanChat, stContext);
+                const assembled = await expandPrompt(task.template || '', settings, contextVault, cleanChat, stContext, true);
                 const tokens = await countTokens(assembled);
                 const placeholders = (assembled.match(placeholderRegex) || []).length;
 

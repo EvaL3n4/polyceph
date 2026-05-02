@@ -564,17 +564,76 @@ export async function postMessageToChat({ content, name = 'Assistant', isUser = 
  * @param {object[]} chat - The SillyTavern chat array (filtered, no typing indicators).
  * @returns {Promise<string>} The resolved World Info prompt string.
  */
-export async function getWorldInfoForChat(chat) {
+/**
+ * Fetches the World Info (Lorebook) prompt for the given chat history.
+ * Wraps stContext.getWorldInfoPrompt() with the expected formatting and global scan context.
+ *
+ * @param {object[]} chat - The SillyTavern chat array.
+ * @param {boolean} [isDryRun=false] - If true, events like WORLD_INFO_ACTIVATED will not be emitted.
+ * @param {string} [triggerType='normal'] - The generation trigger type (normal, quiet, etc.)
+ * @returns {Promise<object>} The resolved World Info result containing before/after strings.
+ */
+export async function getWorldInfoForChat(chat, isDryRun = false, triggerType = 'normal', userInput = null) {
     const ctx = SillyTavern.getContext();
 
     if (typeof ctx.getWorldInfoPrompt !== 'function') {
         logger.warn('getWorldInfoPrompt not available.');
-        return '';
+        return { before: '', after: '', worldInfoString: '' };
     }
 
-    // World Info expects a reversed array of strings (name: message)
-    const chatForWI = chat.map(m => `${m.name}: ${m.mes}`).reverse();
-    const wiResult = await ctx.getWorldInfoPrompt(chatForWI, ctx.maxContext, false);
+    // Dynamic import to get the latest world info settings
+    // SillyTavern often stores these as global variables in world-info.js
+    let includeNames = true;
+    try {
+        const { getWorldInfoSettings } = await import('../../world-info.js');
+        const settings = getWorldInfoSettings();
+        includeNames = settings.world_info_include_names ?? true;
+    } catch (e) {
+        logger.debug('[Polyceph] Could not read world_info_include_names from settings, defaulting to true');
+    }
+
+    // Prepare the list of messages for scanning
+    const messagesToScan = [...chat];
+    
+    // If we have current user input that isn't yet in the chat history, 
+    // we inject it as the "latest" message to ensure keyword triggering works correctly.
+    // NOTE: We check if it's already the last message to avoid double-injection 
+    // if the caller already added it.
+    if (userInput && userInput.trim()) {
+        const lastMessage = messagesToScan[messagesToScan.length - 1];
+        if (!lastMessage || lastMessage.mes !== userInput.trim()) {
+            const userName = ctx.name || 'User';
+            messagesToScan.push({ name: userName, mes: userInput.trim() });
+            logger.debug('[Polyceph] Injected user input into WI scan buffer:', userInput.trim());
+        }
+    }
+
+    // World Info expects a reversed array of strings (ascending depth = most recent first)
+    // We slice to a reasonable scan horizon to match ST native limits.
+    const chatForWI = messagesToScan
+        .slice(-1000)
+        .map(m => includeNames ? `${m.name}: ${m.mes}` : m.mes)
+        .reverse();
+
+    // Log settings for debugging
+    try {
+        const { world_info_recursive, world_info_depth } = await import('../../world-info.js');
+        logger.debug(`[Polyceph] World Info Settings: Recursive=${world_info_recursive}, GlobalDepth=${world_info_depth}, Trigger=${triggerType}`);
+    } catch (e) {}
+
+    const globalScanData = {
+        personaDescription: ctx.persona_description || '',
+        characterDescription: ctx.description || '',
+        characterPersonality: ctx.personality || '',
+        characterDepthPrompt: ctx.charDepthPrompt || '',
+        scenario: ctx.scenario || '',
+        creatorNotes: ctx.creatorNotes || '',
+        trigger: triggerType,
+    };
+
+    const maxContext = await getMaxContextTokens();
+    const wiResult = await ctx.getWorldInfoPrompt(chatForWI, maxContext, isDryRun, globalScanData);
+
     return {
         before: wiResult?.worldInfoBefore || '',
         after: wiResult?.worldInfoAfter || '',
