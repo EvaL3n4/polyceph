@@ -1,19 +1,27 @@
 /* Polyceph Dropdown and Menu Styles */
 
 .polyceph-custom-dropdown {
-    position: fixed !important;
-    z-index: 200000;
-    background: var(--SmartThemeChatTintColor);
+    position: absolute !important;
+    z-index: 2147483647 !important;
+    background: var(--SmartThemeChatTintColor, #222) !important;
     backdrop-filter: blur(20px) !important;
-    border: 1px solid var(--SmartThemeBorderColor) !important;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.1)) !important;
     border-radius: 8px !important;
     min-width: 180px !important;
+    max-height: 50vh !important;
+    overflow-y: auto !important;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.9) !important;
     display: none !important;
     flex-direction: column !important;
     padding: 8px 0 !important;
     pointer-events: all !important;
+    font-family: var(--mainFontFamily, "Noto Sans", sans-serif) !important;
+    transition: opacity 0.2s ease;
+    opacity: 1;
 }
+
+
+
 
 .polyceph-custom-dropdown.active {
     display: flex !important;
@@ -23,7 +31,7 @@
     padding: 10px 16px !important;
     cursor: pointer !important;
     font-size: 0.95rem !important;
-    color: var(--white) !important;
+    color: var(--SmartThemeBodyColor, #fff) !important;
     transition: background 0.1s ease-in-out !important;
     line-height: 1.2 !important;
     user-select: none !important;
@@ -33,19 +41,17 @@
 }
 
 .polyceph-dropdown-item:hover {
-    background-color: var(--black30a);
-    color: var(--white) !important;
+    background-color: color-mix(in srgb, var(--SmartThemeBodyColor, #fff), transparent 85%) !important;
+    color: var(--SmartThemeBodyColor, #fff) !important;
 }
 
 .polyceph-dropdown-item.selected {
-    color: var(--SmartThemeKeyColor) !important;
+    color: var(--SmartThemeQuoteColor, #00ff00) !important;
     font-weight: bold !important;
-}
-
-.polyceph-dropdown-item.selected:hover::before {
-    color: var(--white);
+    background-color: color-mix(in srgb, var(--SmartThemeQuoteColor, #00ff00), transparent 90%) !important;
 }
 
 .polyceph-dropdown-item.selected:hover {
-    color: var(--white) !important;
+    background-color: color-mix(in srgb, var(--SmartThemeQuoteColor, #00ff00), transparent 80%) !important;
+    color: var(--SmartThemeQuoteColor, #00ff00) !important;
 }

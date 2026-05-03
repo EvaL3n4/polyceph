@@ -8,7 +8,7 @@
     font-size: 0.8em;
     padding: 2px 8px;
     border-radius: 4px;
-    background: var(--smartThemeKeyColor);
+    background: var(--SmartThemeQuoteColor);
     color: var(--white);
     margin-left: 10px;
     display: none;
@@ -67,13 +67,39 @@
 
 .polyceph-chat-pipeline-icon {
     font-size: 1.5rem;
-    color: var(--SmartThemeKeyColor);
     cursor: pointer;
     user-select: none;
     line-height: 1;
-    display: flex;
+    display: inline-flex;
     align-items: center;
+    justify-content: center;
+    padding: 2px 5px;
+    touch-action: manipulation;
+    transition: transform 0.1s, opacity 0.2s;
+    pointer-events: auto !important;
 }
+
+
+.polyceph-chat-pipeline-icon:active {
+    transform: scale(0.9);
+    opacity: 0.7;
+}
+
+/* Increase hit area specifically for touch devices */
+@media (pointer: coarse) {
+    .polyceph-chat-pipeline-icon {
+        padding: 8px 12px;
+        margin: -4px -6px;
+        /* Offset padding to keep visual alignment same */
+    }
+
+    .polyceph-chat-pipeline-label {
+        padding: 0 1rem !important;
+        line-height: 2rem !important;
+        /* Larger label for touch */
+    }
+}
+
 
 .polyceph-chat-pipeline-selector:hover {
     background-color: var(--SmartThemeBotMesBlurTintColor, rgba(0, 0, 0, 0.4));

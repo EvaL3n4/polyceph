@@ -76,7 +76,7 @@ body.polyceph-show-hidden .mes[polyceph_hidden="true"] .mes_block {
     padding: 0 10px;
     font-size: 0.7em;
     font-weight: bold;
-    color: var(--SmartThemeKeyColor);
+    color: var(--SmartThemeQuoteColor);
     text-transform: uppercase;
     letter-spacing: 2px;
 }

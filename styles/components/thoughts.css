@@ -1,7 +1,8 @@
 /* Polyceph Collapsible Thoughts (Reasoning Blocks) */
 
 .polyceph-thoughts {
-    display: none !important; /* Controlled by body class */
+    display: none !important;
+    /* Controlled by body class */
     align-items: flex-start;
     padding: 10px;
     margin-top: 5px;
@@ -101,7 +102,7 @@ body.polyceph-show-reasoning .polyceph-thoughts {
     background-color: rgba(255, 255, 255, 0.05);
     border-radius: 5px;
     padding: 8px;
-    border-left: 4px solid var(--SmartThemeKeyColor, #888);
+    border-left: 4px solid var(--SmartThemeQuoteColor, #888);
 }
 
 .polyceph-silent-thought .polyceph-generated-thought-content {
@@ -114,7 +115,7 @@ body.polyceph-show-reasoning .polyceph-thoughts {
     border-left: none;
     margin-top: 0;
     padding-top: 0;
-    color: var(--SmartThemeKeyColor, #888);
+    color: var(--SmartThemeQuoteColor, #888);
 }
 
 .polyceph-thought-separator {
