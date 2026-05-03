@@ -1,5 +1,6 @@
 export const MODULE_NAME = 'polyceph';
-export const VERSION = '0.8.2';
+export const VERSION = '0.8.3';
+export const PIPELINE_DATA_VERSION = '1.0.0';
 
 export const defaultSettings = {
     delayMs: 250,

@@ -104,6 +104,14 @@ export async function getSSEModule() {
 }
 
 /**
+ * Imports SillyTavern's popup.js for confirmation and input dialogs.
+ */
+export async function getPopupModule() {
+    return await tryImportST('popup.js');
+}
+
+
+/**
  * Imports SillyTavern's main script.js for createRawPrompt and other utilities.
  */
 export async function getScriptModule() {

@@ -130,3 +130,9 @@
     width: 100%;
     margin-top: 10px;
 }
+
+.polyceph-coming-soon {
+    opacity: 0.4;
+    cursor: not-allowed !important;
+}
+

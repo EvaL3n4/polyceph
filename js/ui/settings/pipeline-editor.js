@@ -36,49 +36,50 @@ function getPresetOptionsHTML(profileId, currentPreset) {
 /**
  * Renders the HTML for a single task node.
  */
-export function renderTask(stepId, task) {
+export function renderTask(stepId, task, isLocked = false) {
     const profileFound = task.profile === 'none' || availableProfiles.some(p => p.id === task.profile);
     let profileOptions = `<option value="none" ${task.profile === 'none' ? 'selected' : ''}>(Template Only - No LLM)</option>`;
-    
+
     if (!profileFound && task.profile) {
         profileOptions += `<option value="${task.profile}" selected style="color: var(--red); font-weight: bold;">⚠️ ${task.profile} (Missing Profile)</option>`;
     }
-    
+
     profileOptions += availableProfiles.map(p => `<option value="${p.id}" ${p.id === task.profile ? 'selected' : ''}>${p.name}</option>`).join('');
 
     const presetOptions = getPresetOptionsHTML(task.profile, task.preset);
+    const disabled = isLocked ? 'disabled' : '';
 
     return `
-        <div class="polyceph-node-card" data-node-id="${task.id}">
+        <div class="polyceph-node-card ${isLocked ? 'polyceph-locked' : ''}" data-node-id="${task.id}">
             <div class="polyceph-node-header" style="display: flex; flex-direction: column; gap: 8px;">
                 <div class="polyceph-node-header-label-row">
-                    <input type="text" class="polyceph-node-label-input text_pole" data-node-id="${task.id}" placeholder="Task Label..." value="${task.label || ''}" style="flex: 1; min-width: 100px; padding: 2px 5px;" />
-                    <i class="fa-solid fa-times polyceph-del-node" data-node-id="${task.id}" data-step-id="${stepId}"></i>
+                    <input type="text" class="polyceph-node-label-input text_pole" data-node-id="${task.id}" placeholder="Task Label..." value="${task.label || ''}" style="flex: 1; min-width: 100px; padding: 2px 5px;" ${disabled} />
+                    ${isLocked ? '' : `<i class="fa-solid fa-times polyceph-del-node" data-node-id="${task.id}" data-step-id="${stepId}"></i>`}
                 </div>
                 <div class="polyceph-node-header-controls">
-                    <select class="polyceph-profile-select text_pole" data-node-id="${task.id}" style="flex: 1; min-width: 150px;">
+                    <select class="polyceph-profile-select text_pole" data-node-id="${task.id}" style="flex: 1; min-width: 150px;" ${disabled}>
                         ${profileOptions}
                     </select>
-                    <select class="polyceph-preset-select text_pole" data-node-id="${task.id}" style="flex: 1; min-width: 150px;" title="Override the API preset for this task">
+                    <select class="polyceph-preset-select text_pole" data-node-id="${task.id}" style="flex: 1; min-width: 150px;" title="Override the API preset for this task" ${disabled}>
                         ${presetOptions}
                     </select>
                 </div>
                 <div style="display: flex; align-items: center; gap: 15px; padding-left: 2px; flex-wrap: wrap;">
                     <div style="display: flex; align-items: center; gap: 4px;">
-                        <input type="checkbox" class="polyceph-node-persist-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.persist ? 'checked' : ''} title="Display this task result as Thinking">
+                        <input type="checkbox" class="polyceph-node-persist-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.persist ? 'checked' : ''} title="Display this task result as Thinking" ${disabled}>
                         <label style="font-size: 0.8em; cursor: pointer;" title="Display this task result as Thinking">Thinking</label>
                     </div>
                     <div style="display: flex; align-items: center; gap: 4px;">
-                        <input type="checkbox" class="polyceph-node-character-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.isCharacter ? 'checked' : ''} title="If persisted, use character name/avatar">
+                        <input type="checkbox" class="polyceph-node-character-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.isCharacter ? 'checked' : ''} title="If persisted, use character name/avatar" ${disabled}>
                         <label style="font-size: 0.8em; cursor: pointer;" title="If persisted, use character name/avatar">Character Message</label>
                     </div>
                     <div style="display: flex; align-items: center; gap: 4px;">
-                        <input type="checkbox" class="polyceph-node-antiloop-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.antiLoop !== false ? 'checked' : ''} title="Abort generation if the model starts looping">
+                        <input type="checkbox" class="polyceph-node-antiloop-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.antiLoop !== false ? 'checked' : ''} title="Abort generation if the model starts looping" ${disabled}>
                         <label style="font-size: 0.8em; cursor: pointer;" title="Abort generation if the model starts looping">Anti-Loop</label>
                     </div>
                 </div>
             </div>
-            <textarea class="polyceph-node-template text_pole" data-step="${stepId}" data-node="${task.id}" placeholder="Use {{user_input}} or {{chat_history:2}}...">${task.template || ''}</textarea>
+            <textarea class="polyceph-node-template text_pole" data-step="${stepId}" data-node="${task.id}" placeholder="Use {{user_input}} or {{chat_history:2}}..." ${disabled}>${task.template || ''}</textarea>
         </div>
     `;
 }
@@ -86,24 +87,26 @@ export function renderTask(stepId, task) {
 /**
  * Renders the HTML for a single pipeline step.
  */
-export function renderStep(step, index) {
-    const tasksHtml = step.tasks.map(n => renderTask(step.id, n)).join('');
+export function renderStep(step, index, isLocked = false) {
+    const tasksHtml = step.tasks.map(n => renderTask(step.id, n, isLocked)).join('');
 
     return `
-        <div class="polyceph-step-card" data-step-id="${step.id}">
+        <div class="polyceph-step-card ${isLocked ? 'polyceph-locked' : ''}" data-step-id="${step.id}">
             <div class="polyceph-step-header" style="display: flex; flex-direction: column; gap: 10px;">
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <b>Step ${index + 1} </b>
-                    <input type="text" class="polyceph-step-label-input text_pole" data-step-id="${step.id}" placeholder="Custom Label..." value="${step.label || ''}" style="flex: 1; max-width: 200px; padding: 2px 5px;" />
-                    <i class="fa-solid fa-trash polyceph-del-step" data-step-id="${step.id}" style="margin-left: auto;"></i>
+                    <input type="text" class="polyceph-step-label-input text_pole" data-step-id="${step.id}" placeholder="Custom Label..." value="${step.label || ''}" style="flex: 1; max-width: 200px; padding: 2px 5px;" ${isLocked ? 'disabled' : ''} />
+                    ${isLocked ? '' : `<i class="fa-solid fa-trash polyceph-del-step" data-step-id="${step.id}" style="margin-left: auto;"></i>`}
                 </div>
             </div>
             <div class="polyceph-nodes-list">
                 ${tasksHtml}
             </div>
+            ${isLocked ? '' : `
             <button class="menu_button polyceph-add-node-btn" data-step="${step.id}">
                 <i class="fa-solid fa-plus"></i> Add Profile Task
             </button>
+            `}
         </div>
     `;
 }
@@ -113,9 +116,11 @@ export function renderStep(step, index) {
  */
 export function updatePipelineEditorUI() {
     const activePipeline = getActivePipeline();
+    const isLocked = !!activePipeline.isLocked;
     const stepsContainer = getEl(SELECTORS.STEPS_CONTAINER);
+
     if (stepsContainer) {
-        stepsContainer.innerHTML = activePipeline.steps.map((s, i) => renderStep(s, i)).join('');
+        stepsContainer.innerHTML = activePipeline.steps.map((s, i) => renderStep(s, i, isLocked)).join('');
 
         // Auto-resize all textareas after render
         setTimeout(() => {
@@ -133,16 +138,76 @@ export function updatePipelineEditorUI() {
         const noneSelected = settings.activePipelineId === 'none' ? 'selected' : '';
         selector.innerHTML = `<option value="none" ${noneSelected}>None (Disabled)</option>` +
             settings.pipelines.map(p =>
-                `<option value="${p.id}" ${p.id === settings.activePipelineId ? 'selected' : ''}>${p.name}</option>`
+                `<option value="${p.id}" ${p.id === settings.activePipelineId ? 'selected' : ''}>${p.name}${p.isLocked ? ' 🔒' : ''}</option>`
             ).join('');
     }
 
-    // Update active pipeline name input
+    // Update active pipeline name input and lock state
     const nameInput = getEl(SELECTORS.NAME_INPUT);
     if (nameInput) {
         nameInput.value = activePipeline.name;
+        nameInput.disabled = isLocked;
     }
+
+    // Update main action buttons
+    const addStepBtn = getEl('polyceph_add_step_btn');
+    if (addStepBtn) {
+        addStepBtn.style.display = isLocked ? 'none' : 'block';
+    }
+
+    // Update lock button icon and pipeline action states
+    const lockBtn = getEl('polyceph_lock_pipeline_btn');
+    const delBtn = getEl('polyceph_del_pipeline_btn');
+    const newBtn = getEl('polyceph_new_pipeline_btn');
+    const duplicateBtn = getEl('polyceph_duplicate_pipeline_btn');
+
+    if (lockBtn) {
+        lockBtn.className = isLocked ? 'fa-solid fa-lock' : 'fa-solid fa-lock-open';
+        lockBtn.title = isLocked ? 'Unlock Pipeline Editing' : 'Lock Pipeline Editing';
+    }
+
+    if (delBtn) {
+        delBtn.style.opacity = isLocked ? '0.3' : '1';
+        delBtn.style.cursor = isLocked ? 'not-allowed' : 'pointer';
+        delBtn.title = isLocked ? 'Pipeline is locked' : 'Delete Current Pipeline';
+    }
+
+    if (newBtn) {
+        newBtn.style.opacity = '1';
+        newBtn.style.cursor = 'pointer';
+    }
+
+    if (duplicateBtn) {
+        duplicateBtn.style.opacity = '1';
+        duplicateBtn.style.cursor = 'pointer';
+    }
+
+    // Reordering buttons
+
+    const upBtn = getEl('polyceph_move_up_pipeline_btn');
+    const downBtn = getEl('polyceph_move_down_pipeline_btn');
+    const pipelineIndex = settings.pipelines.findIndex(p => p.id === settings.activePipelineId);
+
+    if (upBtn) {
+        const canMoveUp = !isLocked && pipelineIndex > 0;
+        upBtn.style.opacity = canMoveUp ? '1' : '0.3';
+        upBtn.style.cursor = canMoveUp ? 'pointer' : 'not-allowed';
+        upBtn.title = isLocked ? 'Pipeline is locked' : (canMoveUp ? 'Move Up in List' : 'Already at the top');
+    }
+
+    if (downBtn) {
+        const canMoveDown = !isLocked && pipelineIndex !== -1 && pipelineIndex < settings.pipelines.length - 1;
+        downBtn.style.opacity = canMoveDown ? '1' : '0.3';
+        downBtn.style.cursor = canMoveDown ? 'pointer' : 'not-allowed';
+        downBtn.title = isLocked ? 'Pipeline is locked' : (canMoveDown ? 'Move Down in List' : 'Already at the bottom');
+    }
+
+    // Coming soon icons
+    getEl(SELECTORS.SETTINGS_CONTAINER)?.querySelectorAll('.polyceph-coming-soon').forEach(icon => {
+        icon.style.opacity = '0.4';
+    });
 }
+
 
 /**
  * Binds event listeners to the step and task elements.

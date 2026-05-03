@@ -156,19 +156,40 @@
             </div>
 
             <div class="polyceph-step-card polyceph-pipeline-manager" style="margin-top: 20px;">
-                <div class="polyceph-step-header" style="display: flex; flex-direction: column; gap: 10px;">
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <b style="min-width: 120px;">Active Pipeline</b>
-                        <select id="polyceph_pipeline_selector" class="text_pole" style="flex: 1;"></select>
-                        <i id="polyceph_new_pipeline_btn" class="fa-solid fa-plus" style="cursor: pointer; margin-left: 5px;" title="Create New Pipeline"></i>
-                        <i id="polyceph_del_pipeline_btn" class="fa-solid fa-trash" style="cursor: pointer; margin-left: 5px; color: #ff4d4d;" title="Delete Current Pipeline"></i>
+                <div class="polyceph-step-header" style="display: flex; flex-direction: column; gap: 12px; border-bottom: none;">
+                    <!-- Row 1: Management Actions -->
+                    <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <i id="polyceph_new_pipeline_btn" class="fa-solid fa-plus" style="cursor: pointer;" title="Create New Pipeline"></i>
+                            <i id="polyceph_duplicate_pipeline_btn" class="fa-solid fa-copy" style="cursor: pointer;" title="Duplicate Current Pipeline"></i>
+                            <i id="polyceph_import_pipeline_btn" class="fa-solid fa-file-import" style="cursor: pointer;" title="Import Pipeline (JSON)"></i>
+                            <i id="polyceph_export_pipeline_btn" class="fa-solid fa-file-export" style="cursor: pointer;" title="Export Pipeline (JSON)"></i>
+
+                        </div>
+                        <i id="polyceph_lock_pipeline_btn" class="fa-solid fa-lock-open" style="cursor: pointer;" title="Lock/Unlock Pipeline Editing"></i>
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <i id="polyceph_move_up_pipeline_btn" class="fa-solid fa-chevron-up" style="cursor: pointer;" title="Move Up in List"></i>
+                            <i id="polyceph_move_down_pipeline_btn" class="fa-solid fa-chevron-down" style="cursor: pointer;" title="Move Down in List"></i>
+                        </div>
+
+                        <i id="polyceph_del_pipeline_btn" class="fa-solid fa-trash" style="cursor: pointer; color: #ff4d4d;" title="Delete Current Pipeline"></i>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <b style="min-width: 120px;">Pipeline Name</b>
+
+                    <!-- Row 2: Pipeline Selection -->
+                    <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
+                        <b style="white-space: nowrap; min-width: 120px;">Active Pipeline</b>
+                        <select id="polyceph_pipeline_selector" class="text_pole" style="flex: 1;"></select>
+                    </div>
+
+
+                    <!-- Row 3: Pipeline Identity -->
+                    <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
+                        <b style="white-space: nowrap; min-width: 120px;">Pipeline Name</b>
                         <input type="text" id="polyceph_active_pipeline_name" class="text_pole" style="flex: 1; padding: 2px 5px;" placeholder="Pipeline Name..." />
                     </div>
                 </div>
             </div>
+
 
             <div id="polyceph_steps_container" class="polyceph-step-list"></div>
 

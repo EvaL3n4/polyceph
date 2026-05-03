@@ -1,12 +1,15 @@
-import { settings, saveSettings, availableProfiles, availablePresetsByApi, clearProfileState, getAvailableProfiles, getActivePipeline, createPipeline, deletePipeline, refreshPresets } from '../state.js';
+import { settings, saveSettings, availableProfiles, availablePresetsByApi, clearProfileState, getAvailableProfiles, getActivePipeline, createPipeline, duplicatePipeline, togglePipelineLock, movePipelineUp, movePipelineDown, addImportedPipeline, deletePipeline, refreshPresets } from '../state.js';
 import { MODULE_NAME, VERSION } from '../constants.js';
 import { generateId } from '../utils.js';
 import { setLogLevel } from '../logger.js';
 import { updateChatSelectorOptions } from './chat-ui.js';
 import { getEl, bindToggle, renderNeoSlider, syncHiddenMessageVisibility, SELECTORS } from './ui-shared.js';
 import { updatePipelineEditorUI, bindStepEvents } from './settings/pipeline-editor.js';
-import { getExtensionPath } from '../compat-st.js';
+import { getExtensionPath, getPopupModule } from '../compat-st.js';
 import { showPromptPreview } from './settings/prompt-preview.js';
+import { exportPipeline, importPipeline } from './settings/import-export.js';
+
+let Popup = null;
 
 
 /**
@@ -74,6 +77,10 @@ export async function addSettingsUI() {
     const wrapper = document.createElement('div');
     wrapper.id = SELECTORS.SETTINGS_CONTAINER;
     wrapper.classList.add('extension_container');
+
+    // Initialize ST modules
+    const popupModule = await getPopupModule();
+    if (popupModule) Popup = popupModule.Popup;
 
     try {
         const basePath = getExtensionPath();
@@ -210,13 +217,62 @@ export async function addSettingsUI() {
         updateUI();
     });
 
-    getEl('polyceph_del_pipeline_btn')?.addEventListener('click', () => {
+    getEl('polyceph_duplicate_pipeline_btn')?.addEventListener('click', () => {
+        duplicatePipeline(settings.activePipelineId);
+        updateUI();
+    });
+
+    getEl('polyceph_import_pipeline_btn')?.addEventListener('click', async () => {
+        const imported = await importPipeline();
+        if (imported) {
+            addImportedPipeline(imported);
+            updateUI();
+        }
+    });
+
+    getEl('polyceph_export_pipeline_btn')?.addEventListener('click', () => {
+        const pipeline = getActivePipeline();
+        if (pipeline) {
+            exportPipeline(pipeline);
+        }
+    });
+
+    getEl('polyceph_lock_pipeline_btn')?.addEventListener('click', () => {
+        togglePipelineLock(settings.activePipelineId);
+        updateUI();
+    });
+
+    getEl('polyceph_move_up_pipeline_btn')?.addEventListener('click', () => {
+        const pipeline = getActivePipeline();
+        if (pipeline.isLocked) return;
+        movePipelineUp(settings.activePipelineId);
+        updateUI();
+    });
+
+    getEl('polyceph_move_down_pipeline_btn')?.addEventListener('click', () => {
+        const pipeline = getActivePipeline();
+        if (pipeline.isLocked) return;
+        movePipelineDown(settings.activePipelineId);
+        updateUI();
+    });
+
+    getEl('polyceph_del_pipeline_btn')?.addEventListener('click', async () => {
+        const pipeline = getActivePipeline();
+        if (pipeline.isLocked) return;
+
+        const confirmed = await Popup.show.confirm(
+            'Delete Pipeline',
+            `Are you sure you want to delete the pipeline "${pipeline.name}"?<br>This cannot be undone.`
+        );
+        if (!confirmed) return;
+
         if (deletePipeline(settings.activePipelineId)) {
             updateUI();
         } else {
             toastr.error('Cannot delete the last pipeline.', 'Polyceph');
         }
     });
+
 
     getEl(SELECTORS.NAME_INPUT)?.addEventListener('input', (e) => {
         const pipeline = getActivePipeline();

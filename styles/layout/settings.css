@@ -32,3 +32,21 @@
 .polyceph-settings-section-content.active {
     display: flex;
 }
+
+.polyceph-locked {
+    opacity: 0.8;
+    position: relative;
+}
+
+.polyceph-locked label {
+    opacity: 0.6;
+    cursor: default !important;
+}
+
+.polyceph-locked input, 
+.polyceph-locked select, 
+.polyceph-locked textarea {
+    cursor: not-allowed;
+    background-color: var(--black30a) !important;
+}
+

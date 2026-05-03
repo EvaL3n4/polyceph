@@ -1,5 +1,5 @@
 import { MODULE_NAME, defaultSettings } from './constants.js';
-import { waitForApiReady } from './utils.js';
+import { waitForApiReady, generateId } from './utils.js';
 import { capturePresetState, restorePresetState, clearPresetState, getAvailablePresets } from './compat-presets.js';
 import { setLogLevel, logger } from './logger.js';
 
@@ -119,6 +119,57 @@ export function createPipeline(name = 'New Pipeline') {
     return newPipeline;
 }
 
+export function duplicatePipeline(id) {
+    const original = settings.pipelines.find(p => p.id === id);
+    if (!original) return null;
+
+    const newId = 'pipeline_' + Math.random().toString(36).substring(2, 9);
+    const newPipeline = JSON.parse(JSON.stringify(original));
+    newPipeline.id = newId;
+    newPipeline.name = `${original.name} (Copy)`;
+    newPipeline.isLocked = false;
+
+    settings.pipelines.push(newPipeline);
+    settings.activePipelineId = newId;
+    saveSettings();
+    return newPipeline;
+}
+
+export function togglePipelineLock(id) {
+    const pipeline = settings.pipelines.find(p => p.id === id);
+    if (pipeline) {
+        pipeline.isLocked = !pipeline.isLocked;
+        saveSettings();
+        return pipeline.isLocked;
+    }
+    return false;
+}
+
+export function movePipelineUp(id) {
+    const index = settings.pipelines.findIndex(p => p.id === id);
+    if (index > 0) {
+        const [pipeline] = settings.pipelines.splice(index, 1);
+        settings.pipelines.splice(index - 1, 0, pipeline);
+        saveSettings();
+        return true;
+    }
+    return false;
+}
+
+export function movePipelineDown(id) {
+    const index = settings.pipelines.findIndex(p => p.id === id);
+    if (index !== -1 && index < settings.pipelines.length - 1) {
+        const [pipeline] = settings.pipelines.splice(index, 1);
+        settings.pipelines.splice(index + 1, 0, pipeline);
+        saveSettings();
+        return true;
+    }
+    return false;
+}
+
+
+
+
 export function deletePipeline(id) {
     if (settings.pipelines.length <= 1) return false;
     const index = settings.pipelines.findIndex(p => p.id === id);
@@ -132,6 +183,20 @@ export function deletePipeline(id) {
     }
     return false;
 }
+
+export function addImportedPipeline(pipelineData) {
+    const newId = generateId();
+    const newPipeline = {
+        ...pipelineData,
+        id: newId,
+        isLocked: false
+    };
+    settings.pipelines.push(newPipeline);
+    settings.activePipelineId = newId;
+    saveSettings();
+    return newPipeline;
+}
+
 
 /**
  * Fetch available connection profiles from ST.
