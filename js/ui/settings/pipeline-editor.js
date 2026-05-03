@@ -9,26 +9,42 @@ import { SELECTORS, getEl } from '../ui-shared.js';
 function getPresetOptionsHTML(profileId, currentPreset) {
     const profile = availableProfiles.find(p => p.id === profileId);
     let apiId = profile?.api;
-    let fallbackReason = '';
 
     if (!apiId) {
         apiId = SillyTavern.getContext().mainApi || '';
-        fallbackReason = profile ? `Profile "${profile.name}" has no API defined.` : `Profile ID "${profileId}" not found.`;
-        logger.warn(`Using fallback API "${apiId}" for preset dropdown. Reason: ${fallbackReason}`);
     }
 
     const presets = availablePresetsByApi[apiId] || [];
-    
-    return `<option value="Current" ${(!currentPreset || currentPreset === 'Current') ? 'selected' : ''}>Current Preset</option>` +
-        presets.map(p => `<option value="${p}" ${p === currentPreset ? 'selected' : ''}>${p}</option>`).join('');
+    const isCurrent = !currentPreset || currentPreset === 'Current';
+    const isValid = isCurrent || presets.includes(currentPreset);
+
+    let html = `<option value="Current" ${isCurrent ? 'selected' : ''}>Current Preset</option>`;
+
+    // If the saved preset is missing from this API, add a warning entry
+    if (!isCurrent && !isValid) {
+        html += `<option value="${currentPreset}" selected style="color: var(--red); font-weight: bold;">⚠️ ${currentPreset} (Incompatible)</option>`;
+    }
+
+    html += presets.map(p => {
+        const isSelected = (!isCurrent && isValid && p === currentPreset) ? 'selected' : '';
+        return `<option value="${p}" ${isSelected}>${p}</option>`;
+    }).join('');
+
+    return html;
 }
 
 /**
  * Renders the HTML for a single task node.
  */
 export function renderTask(stepId, task) {
-    const profileOptions = `<option value="none">(Template Only - No LLM)</option>` +
-        availableProfiles.map(p => `<option value="${p.id}" ${p.id === task.profile ? 'selected' : ''}>${p.name}</option>`).join('');
+    const profileFound = task.profile === 'none' || availableProfiles.some(p => p.id === task.profile);
+    let profileOptions = `<option value="none" ${task.profile === 'none' ? 'selected' : ''}>(Template Only - No LLM)</option>`;
+    
+    if (!profileFound && task.profile) {
+        profileOptions += `<option value="${task.profile}" selected style="color: var(--red); font-weight: bold;">⚠️ ${task.profile} (Missing Profile)</option>`;
+    }
+    
+    profileOptions += availableProfiles.map(p => `<option value="${p.id}" ${p.id === task.profile ? 'selected' : ''}>${p.name}</option>`).join('');
 
     const presetOptions = getPresetOptionsHTML(task.profile, task.preset);
 
