@@ -312,6 +312,7 @@ export function loadSettings() {
                     if (n.isCharacter === undefined) n.isCharacter = false;
                     if (n.stripThink === undefined) n.stripThink = false;
                     if (n.preset === undefined) n.preset = 'Current';
+                    if (n.antiLoop === undefined) n.antiLoop = true;
                 });
             });
         });

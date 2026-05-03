@@ -56,6 +56,10 @@ export function renderTask(stepId, task) {
                         <input type="checkbox" class="polyceph-node-character-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.isCharacter ? 'checked' : ''} title="If persisted, use character name/avatar">
                         <label style="font-size: 0.8em; cursor: pointer;" title="If persisted, use character name/avatar">Character Message</label>
                     </div>
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        <input type="checkbox" class="polyceph-node-antiloop-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.antiLoop !== false ? 'checked' : ''} title="Abort generation if the model starts looping">
+                        <label style="font-size: 0.8em; cursor: pointer;" title="Abort generation if the model starts looping">Anti-Loop</label>
+                    </div>
                 </div>
             </div>
             <textarea class="polyceph-node-template text_pole" data-step="${stepId}" data-node="${task.id}" placeholder="Use {{user_input}} or {{chat_history:2}}...">${task.template || ''}</textarea>
@@ -252,6 +256,17 @@ export function bindStepEvents() {
             for (const step of activePipeline.steps) {
                 const task = step.tasks.find(n => n.id === nodeId);
                 if (task) { task.isCharacter = e.target.checked; break; }
+            }
+            saveSettings();
+        });
+    });
+
+    container.querySelectorAll('.polyceph-node-antiloop-checkbox').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+            const nodeId = e.target.getAttribute('data-node-id');
+            for (const step of activePipeline.steps) {
+                const task = step.tasks.find(n => n.id === nodeId);
+                if (task) { task.antiLoop = e.target.checked; break; }
             }
             saveSettings();
         });

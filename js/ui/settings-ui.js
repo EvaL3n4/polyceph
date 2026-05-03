@@ -117,6 +117,14 @@ export function createSettingsHTML() {
                         ${renderNeoSlider('Retry Delay (ms)', 'polyceph_retry_delay', settings.retryDelayMs !== undefined ? settings.retryDelayMs : 2000, 0, 10000, 100)}
                     </div>
 
+                    <div style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 15px; align-items: center;">
+                        <label class="checkbox_label" style="margin-right: 10px; cursor: pointer;" title="Enable streaming for Chat Completion APIs. Allows real-time output and mid-stream loop detection.">
+                            <input type="checkbox" id="polyceph_enable_streaming_checkbox" ${settings.enableStreaming !== false ? 'checked' : ''}>
+                            <span>Enable Streaming</span>
+                        </label>
+                        ${renderNeoSlider('Loop Detection Threshold', 'polyceph_loop_threshold', settings.loopDetectionThreshold !== undefined ? settings.loopDetectionThreshold : 3, 1, 10, 1)}
+                    </div>
+
                     <button id="polyceph_refresh_profiles" class="menu_button" style="margin-bottom: 15px;">
                         <i class="fa-solid fa-refresh"></i> Refresh Profiles
                     </button>
@@ -237,6 +245,13 @@ export function addSettingsUI() {
     bindSlider('polyceph_max_retries', 'maxRetries');
     bindSlider('polyceph_retry_delay', 'retryDelayMs');
     bindSlider('polyceph_tool_recursion_limit', 'toolRecursionLimit');
+    bindSlider('polyceph_loop_threshold', 'loopDetectionThreshold');
+
+    // Enable Streaming toggle
+    getEl('polyceph_enable_streaming_checkbox')?.addEventListener('change', (e) => {
+        settings.enableStreaming = e.target.checked;
+        saveSettings();
+    });
 
     // Global settings toggles
     getEl('polyceph_show_hidden_checkbox')?.addEventListener('change', (e) => {

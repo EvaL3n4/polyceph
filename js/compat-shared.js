@@ -29,7 +29,7 @@
 
 import { MODULE_NAME } from './constants.js';
 import { logger } from './logger.js';
-import { getWorldInfoModule, getOpenAIModule, getTextGenModelsModule, getTextGenSettingsModule } from './compat-st.js';
+import { getWorldInfoModule, getOpenAIModule, getTextGenModelsModule, getTextGenSettingsModule, getSSEModule, getScriptModule } from './compat-st.js';
 
 // ---------------------------------------------------------------------------
 // Stopping Strings
@@ -365,11 +365,19 @@ export function getActiveApi() {
 }
 
 /**
- * Returns true if the active API is a Chat Completion API (OpenAI-compatible).
+ * Returns true if the active (or overridden) API is a Chat Completion API (OpenAI-compatible).
+ * @param {string} [apiOverride] - Optional API identifier to check instead of the active one.
  * @returns {boolean}
  */
-export function isChatCompletionApi() {
-    return getActiveApi() === 'openai';
+export function isChatCompletionApi(apiOverride = null) {
+    let api = apiOverride || getActiveApi();
+    const ctx = SillyTavern.getContext();
+    if (ctx.CONNECT_API_MAP && ctx.CONNECT_API_MAP[api]) {
+        if (ctx.CONNECT_API_MAP[api].selected) {
+            api = ctx.CONNECT_API_MAP[api].selected;
+        }
+    }
+    return api === 'openai';
 }
 
 // ---------------------------------------------------------------------------
@@ -411,6 +419,194 @@ export async function generateViaApi(messages, tools = null, tool_choice = null)
         handleExecutionErrors: false, handleParserErrors: false
     });
     return result;
+}
+
+/**
+ * Streaming variant of generateViaApi for Chat Completion APIs.
+ * Uses ST's own exported internal functions to build the payload and parse SSE chunks,
+ * avoiding reimplementation of sampler assembly and vendor-specific chunk parsing.
+ *
+ * Returns null if streaming is not available (non-CC API, import failures),
+ * in which case the caller should fall back to generateViaApi.
+ *
+ * @param {object[]} messages - Chat-style message array [{role, content}, ...].
+ * @param {AbortSignal} signal - Abort signal for cancellation.
+ * @param {function} onChunk - Called with {text: string, toolCalls: any[], done: boolean} per delta.
+ * @param {object[]} [tools] - Optional tool definitions.
+ * @param {string} [tool_choice] - Optional tool choice.
+ * @param {string} [apiOverride] - Optional API override.
+ * @returns {Promise<object|null>} Accumulated response data, or null if streaming unavailable.
+ */
+export async function generateViaApiStreaming(messages, signal, onChunk, tools = null, tool_choice = null, apiOverride = null) {
+    const context = SillyTavern.getContext();
+    let api = apiOverride || context.mainApi;
+    
+    if (context.CONNECT_API_MAP && context.CONNECT_API_MAP[api]) {
+        if (context.CONNECT_API_MAP[api].selected) {
+            api = context.CONNECT_API_MAP[api].selected;
+        }
+    }
+
+    // Only chat completion APIs support our streaming path
+    if (api !== 'openai') {
+        logger.debug('Streaming not available for non-chat-completion API:', api);
+        return null;
+    }
+
+    // Import ST internal modules
+    let openaiModule, sseModule;
+    try {
+        [openaiModule, sseModule] = await Promise.all([
+            getOpenAIModule(),
+            getSSEModule(),
+        ]);
+    } catch (e) {
+        logger.warn('Failed to import ST modules for streaming:', e);
+        return null;
+    }
+
+    if (!openaiModule?.createGenerationParameters || !openaiModule?.getStreamingReply || !sseModule?.getEventSourceStream) {
+        logger.warn('Required ST streaming functions not found. Falling back to non-streaming.');
+        return null;
+    }
+
+    const { createGenerationParameters, getStreamingReply, tryParseStreamingError, oai_settings, getChatCompletionModel } = openaiModule;
+    const { getEventSourceStream } = sseModule;
+
+    // Resolve model
+    const model = typeof getChatCompletionModel === 'function'
+        ? getChatCompletionModel(oai_settings)
+        : (oai_settings?.openai_model || '');
+
+    // Emit CHAT_COMPLETION_PROMPT_READY (mirrors generateRawData behavior)
+    if (context.eventSource && context.eventTypes?.CHAT_COMPLETION_PROMPT_READY) {
+        const eventData = { chat: messages, dryRun: false };
+        await context.eventSource.emit(context.eventTypes.CHAT_COMPLETION_PROMPT_READY, eventData);
+        messages = eventData.chat;
+    }
+
+    // Build payload using ST's own function (gets all samplers, logit bias, stop strings, etc.)
+    const { generate_data } = await createGenerationParameters(oai_settings, model, 'quiet', messages);
+
+    // Override stream flag (createGenerationParameters sets stream=false for 'quiet' type)
+    generate_data.stream = true;
+
+    // Inject tools if provided
+    if (tools && tools.length > 0) {
+        generate_data.tools = tools;
+        generate_data.tool_choice = tool_choice || 'auto';
+    }
+
+    // Emit CHAT_COMPLETION_SETTINGS_READY (mirrors sendOpenAIRequest behavior)
+    if (context.eventSource && context.eventTypes?.CHAT_COMPLETION_SETTINGS_READY) {
+        await context.eventSource.emit(context.eventTypes.CHAT_COMPLETION_SETTINGS_READY, generate_data);
+    }
+
+    logger.debug(`Starting streaming fetch to /api/backends/chat-completions/generate with model: ${model}`);
+
+    // Set up abort handling for GENERATION_STOPPED event
+    const fetchAbortController = new AbortController();
+    const abortHook = () => {
+        fetchAbortController.abort(new Error('Cancelled by stop event'));
+    };
+
+    // Chain the external signal into our fetch controller
+    if (signal) {
+        if (signal.aborted) {
+            fetchAbortController.abort(new Error('Aborted'));
+        } else {
+            signal.addEventListener('abort', () => fetchAbortController.abort(new Error('Aborted')), { once: true });
+        }
+    }
+
+    if (context.eventSource && context.eventTypes?.GENERATION_STOPPED) {
+        context.eventSource.on(context.eventTypes.GENERATION_STOPPED, abortHook);
+    }
+
+    try {
+        const response = await fetch('/api/backends/chat-completions/generate', {
+            method: 'POST',
+            body: JSON.stringify(generate_data),
+            headers: context.getRequestHeaders(),
+            signal: fetchAbortController.signal,
+        });
+
+        if (!response.ok) {
+            if (typeof tryParseStreamingError === 'function') {
+                tryParseStreamingError(response, await response.text());
+            }
+            throw new Error(`Streaming request failed with status ${response.status}`);
+        }
+
+        // Parse SSE using ST's own transformer
+        const eventStream = getEventSourceStream();
+        response.body.pipeThrough(eventStream);
+        const reader = eventStream.readable.getReader();
+
+        let text = '';
+        const toolCalls = [];
+        const state = { reasoning: '', images: [], signature: '', toolSignatures: {} };
+        let chunkCount = 0;
+
+        try {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const rawData = value.data;
+                if (rawData === '[DONE]') break;
+
+                if (typeof tryParseStreamingError === 'function') {
+                    tryParseStreamingError(response, rawData);
+                }
+
+                const parsed = JSON.parse(rawData);
+                const delta = getStreamingReply(parsed, state);
+                text += delta;
+                chunkCount++;
+
+                // Accumulate tool calls
+                if (context.ToolManager && typeof context.ToolManager.parseToolCalls === 'function') {
+                    const beforeCount = toolCalls.length;
+                    context.ToolManager.parseToolCalls(toolCalls, parsed, state.toolSignatures);
+                    if (toolCalls.length > beforeCount) {
+                        logger.debug(`Streaming detected tool call: ${toolCalls[toolCalls.length - 1].function?.name || 'unknown'}`);
+                    }
+                }
+
+                // Notify caller
+                if (typeof onChunk === 'function') {
+                    await onChunk({ text, toolCalls, done: false });
+                }
+            }
+        } finally {
+            try { reader.cancel(); } catch (_) { /* ignore */ }
+        }
+
+        // Final notification
+        if (typeof onChunk === 'function') {
+            onChunk({ text, toolCalls, done: true });
+        }
+
+        logger.debug(`Streaming fetch completed. Received ${chunkCount} chunks, total length: ${text.length} chars.`);
+
+        // Return a response-like object compatible with the non-streaming path
+        return {
+            choices: [{
+                message: {
+                    content: text,
+                    tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
+                },
+            }],
+            _streaming: true,
+            _state: state,
+        };
+
+    } finally {
+        if (context.eventSource && context.eventTypes?.GENERATION_STOPPED) {
+            context.eventSource.removeListener(context.eventTypes.GENERATION_STOPPED, abortHook);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

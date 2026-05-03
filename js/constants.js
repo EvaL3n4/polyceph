@@ -1,11 +1,13 @@
 export const MODULE_NAME = 'polyceph';
-export const VERSION = '0.7.5';
+export const VERSION = '0.8.0';
 
 export const defaultSettings = {
     delayMs: 250,
     generationTimeoutMs: 60000,
     maxRetries: 3,
     retryDelayMs: 2000,
+    enableStreaming: true,
+    loopDetectionThreshold: 3,
     toolRecursionLimit: 5,
     activePipelineId: 'default',
     interceptSend: true,
@@ -37,7 +39,8 @@ export const defaultSettings = {
                             template: '{{user_input}}',
                             persist: false,
                             isCharacter: false,
-                            stripThink: true
+                            stripThink: true,
+                            antiLoop: true
                         }
                     ]
                 }

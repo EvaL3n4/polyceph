@@ -86,3 +86,35 @@ export async function getTextGenModelsModule() {
 export async function getTextGenSettingsModule() {
     return await tryImportST('textgen-settings.js');
 }
+
+/**
+ * Imports SillyTavern's sse-stream.js for SSE parsing in streaming mode.
+ */
+export async function getSSEModule() {
+    return await tryImportST('sse-stream.js');
+}
+
+/**
+ * Imports SillyTavern's main script.js for createRawPrompt and other utilities.
+ */
+export async function getScriptModule() {
+    // script.js is one level above the scripts/ directory
+    const paths = [
+        `../../script.js`,
+        `../../../script.js`,
+        `/script.js`
+    ];
+
+    const errors = [];
+    for (const path of paths) {
+        try {
+            const module = await import(path);
+            if (module) return module;
+        } catch (e) {
+            errors.push(`${path} -> ${e.message}`);
+        }
+    }
+
+    logger.debug('Could not find SillyTavern script.js. Attempts:', errors);
+    return null;
+}

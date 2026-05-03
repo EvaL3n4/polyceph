@@ -3,6 +3,7 @@ import { settings, switchProfile } from '../state.js';
 import { initializePipelineContext } from './context.js';
 import { runTask } from './task-executor.js';
 import { handleBackgroundOutput, handleCharacterOutput, persistReasoningMessage } from './message-manager.js';
+import { postMessageToChat, getActiveCharacterInfo } from '../compat-shared.js';
 
 /**
  * Executes the core pipeline logic, including step iteration, task grouping,
@@ -63,8 +64,55 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                 }
                 if (signal.aborted) return;
 
-                // 3. Run Task
-                const taskResult = await runTask(node, nodeIndex, stepIdx, totalSteps, contextVault, cleanChat, signal);
+                // 3. Set up streaming for character tasks
+                const taskOptions = {};
+                let streamMessageIndex = null;
+
+                if (node.isCharacter && settings.enableStreaming !== false) {
+                    const { name: charName, avatarUrl: avatarStr } = getActiveCharacterInfo();
+
+                    taskOptions.onStream = async ({ text, done }) => {
+                        const ctx = SillyTavern.getContext();
+
+                        // Create the placeholder message on first chunk
+                        if (streamMessageIndex === null && text) {
+                            streamMessageIndex = await postMessageToChat({
+                                content: '...',
+                                name: charName,
+                                forceAvatar: avatarStr,
+                                extra: {
+                                    polyceph_source: 'polyceph',
+                                    polyceph_streaming: true,
+                                    polyceph_batch: batchData.batchId,
+                                },
+                                save: false,
+                                silent: true,
+                            });
+                        }
+
+                        if (streamMessageIndex === null) return;
+
+                        // Update the message content
+                        const msg = ctx.chat[streamMessageIndex];
+                        if (!msg) return;
+                        msg.mes = text;
+
+                        // Update DOM
+                        const mesEl = document.querySelector(`#chat .mes[mesid="${streamMessageIndex}"] .mes_text`);
+                        if (mesEl && typeof ctx.messageFormatting === 'function') {
+                            mesEl.innerHTML = ctx.messageFormatting(text, msg.name, false, false, streamMessageIndex);
+                        }
+
+                        // Auto-scroll during streaming
+                        if (!done) {
+                            const chatEl = document.getElementById('chat');
+                            if (chatEl) chatEl.scrollTop = chatEl.scrollHeight;
+                        }
+                    };
+                }
+
+                // 4. Run Task
+                const taskResult = await runTask(node, nodeIndex, stepIdx, totalSteps, contextVault, cleanChat, signal, taskOptions);
                 if (!taskResult || signal.aborted) return;
 
                 if (taskResult.error) {
@@ -105,7 +153,39 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                         if (node.isCharacter) {
                             const taskThoughts = accumulatedThoughts;
                             accumulatedThoughts = [];
-                            await handleCharacterOutput(content, taskThoughts, charMsgOutputCount++, node, batchData, taskApi, taskModel, userInput, pipelineName);
+
+                            let streamingHandled = false;
+
+                            // If we already created a streaming placeholder, update it in-place
+                            if (streamMessageIndex !== null) {
+                                const ctx = SillyTavern.getContext();
+                                const streamMsg = ctx.chat[streamMessageIndex];
+                                if (streamMsg && streamMsg.extra?.polyceph_streaming) {
+                                    streamMsg.mes = content;
+                                    streamMsg.extra.polyceph_streaming = false;
+                                    streamMsg.extra.polyceph_batch = batchData.batchId;
+                                    streamMsg.extra.polyceph_input = userInput;
+                                    streamMsg.extra.polyceph_task_id = node.id;
+                                    streamMsg.extra.polyceph_pipeline = pipelineName;
+                                    streamMsg.extra.api = taskApi;
+                                    streamMsg.extra.model = taskModel;
+                                    if (taskThoughts.length > 0) {
+                                        streamMsg.extra.polyceph_thoughts = taskThoughts;
+                                    }
+
+                                    if (typeof ctx.updateMessageBlock === 'function') {
+                                        ctx.updateMessageBlock(streamMessageIndex, streamMsg);
+                                    }
+                                    await (typeof ctx.saveChat === 'function' ? ctx.saveChat() : Promise.resolve());
+                                    streamingHandled = true;
+                                    charMsgOutputCount++;
+                                }
+                            }
+
+                            // Fall back to normal handleCharacterOutput if streaming didn't handle it
+                            if (!streamingHandled) {
+                                await handleCharacterOutput(content, taskThoughts, charMsgOutputCount++, node, batchData, taskApi, taskModel, userInput, pipelineName);
+                            }
                         }
                     }
                 }

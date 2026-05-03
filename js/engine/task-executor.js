@@ -9,7 +9,7 @@ import { generateQuietly } from './generator.js';
 /**
  * Executes a single task, including prompt expansion, generation, and retry logic.
  */
-export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault, cleanChat, signal) {
+export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault, cleanChat, signal, options = {}) {
     const stContext = SillyTavern.getContext();
     const taskIdIndx = nodeIndex + 1;
 
@@ -78,12 +78,25 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
         let parsedResult = null;
         const maxAttempts = (settings.maxRetries !== undefined) ? settings.maxRetries : 0;
 
+        // 4b. Build streaming options
+        const streamingOptions = {
+            streaming: settings.enableStreaming !== false,
+            antiLoop: node.antiLoop !== false,
+            loopThreshold: settings.loopDetectionThreshold || 3,
+            onStream: null, // Can be set by orchestrator for character message streaming
+        };
+
+        // Allow orchestrator to inject a stream callback (for character message streaming)
+        if (typeof options?.onStream === 'function') {
+            streamingOptions.onStream = options.onStream;
+        }
+
         // 5. Generation Loop (Retries)
         for (let attempt = 0; attempt <= maxAttempts; attempt++) {
             if (signal.aborted) return null;
 
             try {
-                const rawRes = await generateQuietly(node.profile, prompt, taskApi, signal);
+                const rawRes = await generateQuietly(node.profile, prompt, taskApi, signal, streamingOptions);
                 lastRawResponse = rawRes;
 
                 if (signal.aborted) return null;
@@ -101,15 +114,30 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
             } catch (e) {
                 if (signal.aborted) throw e;
 
-                lastRawResponse = e.message;
-                if (attempt === maxAttempts) {
-                    throw e;
+                // Loop detection: on last retry, return truncated text instead of failing
+                if (e.message === 'Loop detected' && attempt === maxAttempts) {
+                    logger.warn(`Task ${node.id}: loop detected on final attempt. Returning truncated output.`);
+                    // The truncated text will be in the error's context — use what we have
+                    if (lastRawResponse && lastRawResponse.trim()) {
+                        parsedResult = parseOutputTags(lastRawResponse, node.label || `Task ${taskIdIndx}`, profileDisplayName, node.persist && !node.isCharacter);
+                        break;
+                    }
+                    throw new Error('Loop detected: no usable output after all retries.');
                 }
 
-                logger.warn(`Task ${node.id} attempt ${attempt + 1} failed: ${e.message}. Retrying...`);
+                if (e.message === 'Loop detected') {
+                    logger.warn(`Task ${node.id} attempt ${attempt + 1}: loop detected. Retrying...`);
+                    toastr.warning(`Loop detected. Retrying (${attempt + 1}/${maxAttempts})...`, 'Polyceph');
+                } else {
+                    lastRawResponse = e.message;
+                    if (attempt === maxAttempts) {
+                        throw e;
+                    }
+                    logger.warn(`Task ${node.id} attempt ${attempt + 1} failed: ${e.message}. Retrying...`);
+                    toastr.warning(`Task failed. Retrying (${attempt + 1}/${maxAttempts})...`, 'Polyceph');
+                }
             }
 
-            toastr.warning(`Task failed. Retrying (${attempt + 1}/${maxAttempts})...`, 'Polyceph');
             const delayWait = settings.retryDelayMs !== undefined ? settings.retryDelayMs : 2000;
             await new Promise(r => setTimeout(r, delayWait));
         }

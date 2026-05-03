@@ -147,19 +147,22 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
             await ensureChatSaved();
 
             // Recapture mutex AFTER core events for the actual pipeline execution.
+            logger.debug('Recapturing mutex for pipeline execution...');
             await stContext.eventSource.emit(generationMutexEvents.MUTEX_CAPTURED, { extension_name: MODULE_NAME });
 
-            logger.debug('Mutex captured and core events fired. Proceeding with pipeline.');
+            logger.debug(`Mutex recaptured. signal.aborted = ${signal.aborted}`);
         }
 
         // 1. Capture current state for restoration
         captureSessionState();
 
         // 2. Execute pipeline steps
+        logger.debug(`Calling executePipelineSteps (signal.aborted = ${signal.aborted})...`);
         await executePipelineSteps(userInput, generateSwipesForBatchId, signal);
+        logger.debug('executePipelineSteps returned.');
 
     } catch (e) {
-        if (e.message === 'Aborted') {
+        if (e.message === 'Aborted' || e.name === 'AbortError') {
             logger.info('Pipeline aborted by user.');
         } else {
             toastr.error('Pipeline execution encountered an error.', 'Polyceph');

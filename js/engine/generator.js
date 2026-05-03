@@ -1,22 +1,40 @@
 import { logger } from '../logger.js';
 import { settings } from '../state.js';
 import { waitForApiReady } from '../utils.js';
-import { getMaxContextTokens, getMaxResponseTokens, countTokens, generateViaApi } from '../compat-shared.js';
+import { getMaxContextTokens, getMaxResponseTokens, countTokens, generateViaApi, generateViaApiStreaming, isChatCompletionApi } from '../compat-shared.js';
 import { parsePromptToMessages } from './parser.js';
+import { LoopDetector } from './loop-detector.js';
 
 import { getToolCallingModule } from '../compat-st.js';
 
 /**
  * Executes a generation request through the SillyTavern API in "quiet" mode.
  * This avoids the main generation UI and allows background processing.
+ *
+ * @param {string} profileName - Connection profile to use.
+ * @param {string} prompt - The assembled prompt text (with [[ROLE:...]] tags).
+ * @param {string} [api=''] - API identifier.
+ * @param {AbortSignal} [signal=null] - Abort signal.
+ * @param {object} [options={}] - Streaming and loop detection options.
+ * @param {boolean} [options.streaming] - Whether to attempt streaming (default: from settings).
+ * @param {function} [options.onStream] - Called with {text, done} on each chunk.
+ * @param {boolean} [options.antiLoop] - Enable loop detection (default: true).
+ * @param {number} [options.loopThreshold] - Repetitions to trigger abort (default: from settings).
+ * @returns {Promise<string>} The generated response text.
  */
-export async function generateQuietly(profileName, prompt, api = '', signal = null) {
+export async function generateQuietly(profileName, prompt, api = '', signal = null, options = {}) {
     if (!profileName || profileName === 'none') return prompt;
 
     // Ensure API is ready and settled before starting generation
     await waitForApiReady(3000);
 
     if (signal && signal.aborted) throw new Error('Aborted');
+
+    // Resolve streaming options from settings + overrides
+    const useStreaming = options.streaming !== undefined ? options.streaming : (settings.enableStreaming !== false);
+    const antiLoop = options.antiLoop !== undefined ? options.antiLoop : true;
+    const loopThreshold = options.loopThreshold || settings.loopDetectionThreshold || 3;
+    const onStream = options.onStream || null;
 
     try {
         const context = SillyTavern.getContext();
@@ -80,24 +98,67 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                 }
             }
 
-            const apiPromise = generateViaApi(messages, tools, tool_choice);
-            const timeoutMs = settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 120000;
+            // --- Determine whether to use streaming or non-streaming ---
+            const canStream = useStreaming && isChatCompletionApi(api);
+            let loopDetector = null;
 
-            const abortPromise = signal ? new Promise((_, reject) => {
-                if (signal.aborted) reject(new Error('Aborted'));
-                signal.addEventListener('abort', () => reject(new Error('Aborted')), { once: true });
-            }) : null;
+            if (canStream && antiLoop) {
+                loopDetector = new LoopDetector(loopThreshold);
+            }
 
             let responseData;
-            if (timeoutMs > 0) {
-                const raceArr = [
-                    apiPromise,
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Generation Timeout')), timeoutMs))
-                ];
+            const timeoutMs = settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 120000;
+
+            if (canStream) {
+                // ========== STREAMING PATH ==========
+                logger.debug('Using streaming generation path.');
+
+                const streamingChunkHandler = async (chunk) => {
+                    // Feed loop detector
+                    if (loopDetector && !chunk.done) {
+                        loopDetector.feed(chunk.text.slice(loopDetector.getFullText().length));
+                        if (loopDetector.isLooping()) {
+                            const info = loopDetector.getLoopInfo();
+                            logger.warn(`Loop detected during streaming: "${info.pattern}" (${info.repetitions}× at period ${info.patternLength})`);
+                            throw new Error('Loop detected');
+                        }
+                    }
+
+                    // Forward to caller's stream handler
+                    if (onStream) {
+                        await onStream({ text: chunk.text, done: chunk.done });
+                    }
+                };
+
+                const streamingPromise = generateViaApiStreaming(messages, signal, streamingChunkHandler, tools, tool_choice, api);
+
+                // Build race array for timeout + abort
+                const raceArr = [streamingPromise];
+
+                if (timeoutMs > 0) {
+                    raceArr.push(new Promise((_, reject) => setTimeout(() => reject(new Error('Generation Timeout')), timeoutMs)));
+                }
+
+                const abortPromise = signal ? new Promise((_, reject) => {
+                    if (signal.aborted) reject(new Error('Aborted'));
+                    signal.addEventListener('abort', () => reject(new Error('Aborted')), { once: true });
+                }) : null;
                 if (abortPromise) raceArr.push(abortPromise);
-                responseData = await Promise.race(raceArr);
+
+                const streamResult = await Promise.race(raceArr);
+
+                if (streamResult === null) {
+                    // Streaming unavailable — fallback to non-streaming in next loop pass
+                    logger.info('Streaming returned null (unavailable). Falling back to non-streaming.');
+                    responseData = await _generateNonStreaming(messages, tools, tool_choice, signal, timeoutMs);
+                } else {
+                    logger.debug('Streaming path successfully returned result object.');
+                    responseData = streamResult;
+                }
             } else {
-                responseData = await (abortPromise ? Promise.race([apiPromise, abortPromise]) : apiPromise);
+                // ========== NON-STREAMING PATH (unchanged) ==========
+                logger.debug(`Streaming disabled or unsupported for API: ${api}. Using non-streaming generation path.`);
+                responseData = await _generateNonStreaming(messages, tools, tool_choice, signal, timeoutMs);
             }
 
             if (!responseData) {
@@ -132,7 +193,23 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
             }
 
             // No more tool calls, clean up and return
-            if (typeof context.extractMessageFromData === 'function' && typeof context.cleanUpMessage === 'function') {
+            if (responseData?._streaming) {
+                // Streaming path: text is already extracted
+                const rawText = responseData.choices?.[0]?.message?.content || '';
+                if (typeof context.cleanUpMessage === 'function') {
+                    finalResponse = context.cleanUpMessage({
+                        getMessage: rawText,
+                        isImpersonate: false,
+                        isContinue: false,
+                        displayIncompleteSentences: true,
+                        includeUserPromptBias: false,
+                        trimNames: true,
+                        trimWrongNames: true,
+                    });
+                } else {
+                    finalResponse = rawText;
+                }
+            } else if (typeof context.extractMessageFromData === 'function' && typeof context.cleanUpMessage === 'function') {
                 const rawText = context.extractMessageFromData(responseData, api || context.main_api);
                 finalResponse = context.cleanUpMessage({
                     getMessage: rawText,
@@ -154,6 +231,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
 
     } catch (err) {
         if (err.message === 'Aborted') throw err;
+        if (err.message === 'Loop detected') throw err;
 
         // Parse deep SillyTavern/API error responses if available
         let errorDetail = err.message || 'Unknown error';
@@ -168,5 +246,29 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
 
         logger.error('Generation failed:', errorDetail, err);
         throw new Error(errorDetail);
+    }
+}
+
+/**
+ * Internal helper: runs the non-streaming generation path with timeout/abort racing.
+ * Extracted to avoid code duplication between the streaming fallback and non-streaming branch.
+ */
+async function _generateNonStreaming(messages, tools, tool_choice, signal, timeoutMs) {
+    const apiPromise = generateViaApi(messages, tools, tool_choice);
+
+    const abortPromise = signal ? new Promise((_, reject) => {
+        if (signal.aborted) reject(new Error('Aborted'));
+        signal.addEventListener('abort', () => reject(new Error('Aborted')), { once: true });
+    }) : null;
+
+    if (timeoutMs > 0) {
+        const raceArr = [
+            apiPromise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Generation Timeout')), timeoutMs))
+        ];
+        if (abortPromise) raceArr.push(abortPromise);
+        return await Promise.race(raceArr);
+    } else {
+        return await (abortPromise ? Promise.race([apiPromise, abortPromise]) : apiPromise);
     }
 }
