@@ -39,13 +39,6 @@ async function tryImportST(fileName) {
 }
 
 /**
- * Imports SillyTavern's openai.js which contains ChatCompletion and Message classes.
- */
-export async function getOpenAIModule() {
-    return await tryImportST('openai.js');
-}
-
-/**
  * Imports SillyTavern's chat-completion.js as a fallback for ChatCompletion class.
  */
 export async function getChatCompletionModule() {

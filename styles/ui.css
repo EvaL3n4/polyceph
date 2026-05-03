@@ -900,3 +900,17 @@ body.polyceph-pipeline-active #mes_stop {
     background-color: gold;
     color: black;
 }
+
+/* Settings Buttons */
+#polyceph_preview_prompts_btn {
+    background-color: var(--black70a);
+    transition: all 0.2s ease;
+    border: 1px solid var(--SmartThemeQuoteColor);
+}
+
+#polyceph_preview_prompts_btn:hover {
+    background-color: var(--black50a);
+    border-color: var(--SmartThemeQuoteColor);
+    color: var(--SmartThemeQuoteColor);
+    box-shadow: 0 0 5px var(--SmartThemeQuoteColor);
+}

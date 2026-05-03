@@ -113,9 +113,12 @@ export async function showPromptPreview() {
     // 4. Show Modal
     const modalContent = `
         <div class="polyceph-preview-modal-content">
-            <h3 style="margin-top: 0; display: flex; align-items: center; gap: 10px;">
+            <h3 style="margin-top: 0; margin-bottom: 12px; display: flex; align-items: center; gap: 10px;">
                 <i class="fa-solid fa-eye"></i> Pipeline Prompt Preview
             </h3>
+            <p style="font-size: 0.85em; opacity: 0.7; margin-top: 0; margin-bottom: 20px; background: var(--black30a); padding: 8px 12px; border-radius: 4px; border-left: 3px solid var(--SmartThemeQuoteColor);">
+                <i class="fa-solid fa-circle-info"></i> <b>Note:</b> Some third-party extension injections may not be shown in this preview because they are resolved during pipeline runtime (probably sending prompts and stuff).
+            </p>
             <div class="polyceph-preview-search-container">
                 <div class="polyceph-preview-search-input-wrapper">
                     <input type="text" id="polyceph_preview_search_input" placeholder="Search prompt text..." class="text_pole">

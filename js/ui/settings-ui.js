@@ -185,7 +185,7 @@ export function createSettingsHTML() {
                         <i class="fa-solid fa-plus"></i> Add Pipeline Step
                     </button>
 
-                    <button id="polyceph_preview_prompts_btn" class="menu_button" style="background-color: var(--black70a);">
+                    <button id="polyceph_preview_prompts_btn" class="menu_button">
                         <i class="fa-solid fa-eye"></i> Preview Assembled Prompts
                     </button>
                 </div>
