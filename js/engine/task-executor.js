@@ -21,13 +21,24 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
             logger.info(`Applying task preset: "${taskPreset}" (was: "${currentPreset}")`);
             const switched = applyPreset(taskPreset);
             if (switched) {
+                // Give ST time to settle the new preset settings
                 await new Promise(r => setTimeout(r, 300));
             } else {
                 logger.error(`Failed to apply preset "${taskPreset}".`);
             }
         }
     } else {
-        restorePresetState();
+        // If "Current" is selected, we should still ensure we are using the session-original preset
+        // rather than a task-specific one from a previous step.
+        const originalPreset = getCapturedPresetName();
+        const currentPreset = getCurrentPresetName();
+
+        if (originalPreset && originalPreset !== currentPreset) {
+            logger.info(`Restoring session-original preset: "${originalPreset}" (was: "${currentPreset}")`);
+            if (applyPreset(originalPreset)) {
+                await new Promise(r => setTimeout(r, 1000));
+            }
+        }
     }
 
     // 2. Resolve Profile & API Info

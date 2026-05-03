@@ -502,6 +502,7 @@ export async function generateViaApiStreaming(messages, signal, onChunk, tools =
         await context.eventSource.emit(context.eventTypes.CHAT_COMPLETION_SETTINGS_READY, generate_data);
     }
 
+    logger.debug('Streaming generation payload:', generate_data);
     logger.debug(`Starting streaming fetch to /api/backends/chat-completions/generate with model: ${model}`);
 
     // Set up abort handling for GENERATION_STOPPED event
@@ -589,6 +590,10 @@ export async function generateViaApiStreaming(messages, signal, onChunk, tools =
         }
 
         logger.debug(`Streaming fetch completed. Received ${chunkCount} chunks, total length: ${text.length} chars.`);
+        
+        if (chunkCount > 0 && text.length === 0) {
+             throw new Error(`Generation returned metadata chunks but no content. This usually indicates the prompt was rejected by the API or the model returned an empty response.`);
+        }
 
         // Return a response-like object compatible with the non-streaming path
         return {
