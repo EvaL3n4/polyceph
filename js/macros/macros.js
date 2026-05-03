@@ -46,7 +46,36 @@ export async function expandPrompt(template, settings, contextVault, cleanChat, 
 
     // 5. Resolve SillyTavern standard macros (Description, Persona, Char, etc.)
     if (typeof stContext.substituteParams === 'function') {
+        // Protection: SillyTavern's macro parser may throw warnings or errors if it encounters 
+        // Polyceph's specialized macro syntax (like pipes '|') or unknown placeholders.
+        const protectedMacros = [];
+        const protectRegex = /\{\{[^}]+\}\}/g;
+        
+        // We temporarily hide macros that:
+        // 1. Contain a pipe (Polyceph specialized syntax)
+        // 2. Are chat_history or user_input (Polyceph handles these later with accurate token budgets)
+        // 3. Are in our contextVault (Step/Task outputs)
+        result = result.replace(protectRegex, (match) => {
+            const inner = match.slice(2, -2);
+            const baseKey = inner.split('|')[0];
+            const isOurKey = contextVault && Object.prototype.hasOwnProperty.call(contextVault, baseKey);
+            const isSpecial = inner.includes('|') || baseKey === 'chat_history' || baseKey === 'user_input';
+
+            if (isSpecial || isOurKey) {
+                const id = `__POLY_PROT_${protectedMacros.length}__`;
+                protectedMacros.push({ id, original: match });
+                return id;
+            }
+            return match;
+        });
+
+        // Pass the "cleaned" string to SillyTavern
         result = stContext.substituteParams(result);
+
+        // Restore our protected macros
+        protectedMacros.forEach(p => {
+            result = result.replace(p.id, p.original);
+        });
     }
 
     // 6. Calculate template overhead (tokens used by other macros and static text)
