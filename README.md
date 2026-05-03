@@ -22,6 +22,7 @@ Standard AI interaction is linear: you send a prompt, and a single model respond
 - **Silent Reasoning**: Optionally show pipeline tasks blocks in a dedicated, collapsible "Reasoning" UI element.
 - **Native Swipe Support**: Swiping a Polyceph message reruns the entire pipeline batch, keeping all multi-step results in sync.
 - **Agentic Tool Calling**: Supports multi-pass "thought" cycles. If a model generates tool calls, Polyceph will execute them and provide the results back to the model recursively.
+- **Streaming Loop Detection**: When streaming tokens from a model, Polyceph can detect and halt token loops during tasks, triggering automatic retry or truncation.
 
 ## Installation
 
@@ -35,7 +36,7 @@ Standard AI interaction is linear: you send a prompt, and a single model respond
 
 ### Manual Installation
 
-1. Navigate to your SillyTavern installation's `public/scripts/extensions` folder.
+1. Navigate to your SillyTavern installation's `public/scripts/extensions/third-party` folder.
 2. Clone this repository or download the ZIP into a folder named `polyceph`.
 3. Restart SillyTavern or refresh your browser.
 

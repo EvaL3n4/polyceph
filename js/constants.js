@@ -1,5 +1,5 @@
 export const MODULE_NAME = 'polyceph';
-export const VERSION = '0.8.0';
+export const VERSION = '0.8.1';
 
 export const defaultSettings = {
     delayMs: 250,
@@ -17,6 +17,7 @@ export const defaultSettings = {
     compactSelectorMode: false,
     showHiddenMessages: false,
     showReasoning: true,
+    stickyTypingIndicator: false,
     restore_after_run: true,
     emulateCoreEvents: true,
     logLevel: 2,

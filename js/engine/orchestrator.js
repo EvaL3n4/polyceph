@@ -4,6 +4,7 @@ import { initializePipelineContext } from './context.js';
 import { runTask } from './task-executor.js';
 import { handleBackgroundOutput, handleCharacterOutput, persistReasoningMessage } from './message-manager.js';
 import { postMessageToChat, getActiveCharacterInfo } from '../compat-shared.js';
+import { scrollToBottomIfNear } from '../ui/ui-shared.js';
 
 /**
  * Executes the core pipeline logic, including step iteration, task grouping,
@@ -105,8 +106,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
 
                         // Auto-scroll during streaming
                         if (!done) {
-                            const chatEl = document.getElementById('chat');
-                            if (chatEl) chatEl.scrollTop = chatEl.scrollHeight;
+                            scrollToBottomIfNear();
                         }
                     };
                 }

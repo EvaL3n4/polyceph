@@ -53,6 +53,10 @@ export function createSettingsHTML() {
                                 <label for="polyceph_show_reasoning_checkbox" style="cursor: pointer;">Show Polyceph Reasoning Blocks</label>
                             </div>
                             <div style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="polyceph_sticky_typing_checkbox" ${settings.stickyTypingIndicator ? 'checked' : ''}>
+                                <label for="polyceph_sticky_typing_checkbox" style="cursor: pointer;">Show Typing Indicator at Top of Chat (Sticky)</label>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
                                 <input type="checkbox" id="polyceph_show_hidden_checkbox" ${settings.showHiddenMessages ? 'checked' : ''}>
                                 <label for="polyceph_show_hidden_checkbox" style="cursor: pointer;">Show Hidden Background Messages</label>
                             </div>
@@ -214,6 +218,7 @@ export function addSettingsUI() {
 
     const wrapper = document.createElement('div');
     wrapper.id = SELECTORS.SETTINGS_CONTAINER;
+    wrapper.classList.add('extension_container');
     wrapper.innerHTML = createSettingsHTML();
     container.appendChild(wrapper);
 
@@ -263,6 +268,11 @@ export function addSettingsUI() {
     getEl('polyceph_show_reasoning_checkbox')?.addEventListener('change', (e) => {
         settings.showReasoning = e.target.checked;
         syncHiddenMessageVisibility();
+        saveSettings();
+    });
+
+    getEl('polyceph_sticky_typing_checkbox')?.addEventListener('change', (e) => {
+        settings.stickyTypingIndicator = e.target.checked;
         saveSettings();
     });
 

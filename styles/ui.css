@@ -612,7 +612,7 @@ body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open
 
 /* Custom Typing Indicator */
 .polyceph-typing-indicator {
-    background: var(--black50a);
+    background: var(--black70a);
     backdrop-filter: blur(5px);
     border: 1px solid var(--SmartThemeBodyColor);
     border-radius: 8px;
@@ -622,6 +622,19 @@ body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open
     font-family: var(--mainFontFamily);
     color: var(--white);
     max-width: 400px;
+}
+
+.polyceph-typing-indicator.polyceph-sticky {
+    position: fixed;
+    top: 5.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    max-width: 320px;
+    width: 100%;
+    margin: 0;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+    border: 1px solid var(--SmartThemeQuoteColor);
 }
 
 .polyceph-typing-header {

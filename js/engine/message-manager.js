@@ -22,11 +22,11 @@ export async function handleBackgroundOutput(bg, bgIndex, batchData, api, model)
             targetBg.swipe_info = [{ extra: { ...(targetBg.extra || {}) } }];
             targetBg.swipe_id = 0;
         }
-        
+
         targetBg.swipes.push(bg);
         targetBg.swipe_id = targetBg.swipes.length - 1;
         targetBg.mes = bg;
-        
+
         const bgExtra = {
             polyceph_source: 'polyceph',
             polyceph_hidden: true,
@@ -134,7 +134,7 @@ export async function persistReasoningMessage(thoughts, batchData, userInput) {
         if (!batchReasoningMsg.extra) batchReasoningMsg.extra = {};
         batchReasoningMsg.extra.polyceph_thoughts = thoughts;
         batchReasoningMsg.swipe_info.push({ extra: { polyceph_thoughts: thoughts } });
-        
+
         if (rIdx !== -1 && typeof stContext.updateMessageBlock === 'function') {
             stContext.updateMessageBlock(rIdx, batchReasoningMsg);
             await ensureChatSaved();

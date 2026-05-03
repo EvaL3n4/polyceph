@@ -160,6 +160,21 @@ export function scrollToBottom(smooth = true) {
 }
 
 /**
+ * Scrolls to the bottom only if the user is already near the bottom.
+ * @param {number} threshold - Distance from bottom in pixels to trigger scroll.
+ */
+export function scrollToBottomIfNear(threshold = 100) {
+    const chat = document.getElementById('chat');
+    if (!chat) return;
+
+    // Use SillyTavern's native scroll check if possible, or fall back to DOM
+    const isNearBottom = chat.scrollHeight - chat.scrollTop - chat.clientHeight < threshold;
+    if (isNearBottom) {
+        scrollToBottom();
+    }
+}
+
+/**
  * Checks if the SillyTavern message editor is currently open.
  */
 export function isEditorOpen() {

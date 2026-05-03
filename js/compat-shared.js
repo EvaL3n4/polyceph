@@ -440,7 +440,7 @@ export async function generateViaApi(messages, tools = null, tool_choice = null)
 export async function generateViaApiStreaming(messages, signal, onChunk, tools = null, tool_choice = null, apiOverride = null) {
     const context = SillyTavern.getContext();
     let api = apiOverride || context.mainApi;
-    
+
     if (context.CONNECT_API_MAP && context.CONNECT_API_MAP[api]) {
         if (context.CONNECT_API_MAP[api].selected) {
             api = context.CONNECT_API_MAP[api].selected;
@@ -590,9 +590,9 @@ export async function generateViaApiStreaming(messages, signal, onChunk, tools =
         }
 
         logger.debug(`Streaming fetch completed. Received ${chunkCount} chunks, total length: ${text.length} chars.`);
-        
+
         if (chunkCount > 0 && text.length === 0) {
-             throw new Error(`Generation returned metadata chunks but no content. This usually indicates the prompt was rejected by the API or the model returned an empty response.`);
+            throw new Error(`Generation returned metadata chunks but no content. This usually indicates the prompt was rejected by the API or the model returned an empty response.`);
         }
 
         // Return a response-like object compatible with the non-streaming path
