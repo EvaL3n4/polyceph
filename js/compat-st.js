@@ -13,16 +13,25 @@ import { logger } from './logger.js';
  * @returns {Promise<any|null>} The imported module or null if not found.
  */
 async function tryImportST(fileName) {
-    // Relative to js/ directory:
-    // Standard: public/scripts/extensions/polyceph/js/ -> 3 levels to scripts/
-    // Third-party: public/scripts/extensions/third-party/polyceph/js/ -> 4 levels to scripts/
+    const basePath = getExtensionPath();
+    const segments = basePath.split('/').filter(s => s.length > 0);
+    
+    // To reach SillyTavern root from js/ folder:
+    // segments.length + 1 levels up.
+    // e.g. 'scripts/extensions/polyceph' (3) + 'js' (1) = 4 levels to root
+    const levelsToRoot = segments.length + 1;
+    const rootDots = '../'.repeat(levelsToRoot);
+    
+    // To reach 'scripts/' folder:
+    // levelsToRoot - 1
+    const scriptsDots = '../'.repeat(levelsToRoot - 1);
+
     const paths = [
-        `../../../${fileName}`,
-        `../../../../${fileName}`,
-        `../../../scripts/${fileName}`,
-        `../../../../scripts/${fileName}`,
+        `${scriptsDots}${fileName}`,
+        `${rootDots}scripts/${fileName}`,
         `/scripts/${fileName}` // Absolute fallback
     ];
+
 
     const errors = [];
     for (const path of paths) {
@@ -98,12 +107,16 @@ export async function getSSEModule() {
  * Imports SillyTavern's main script.js for createRawPrompt and other utilities.
  */
 export async function getScriptModule() {
-    // script.js is one level above the scripts/ directory
+    const basePath = getExtensionPath();
+    const segments = basePath.split('/').filter(s => s.length > 0);
+    const levelsToRoot = segments.length + 1;
+    const rootDots = '../'.repeat(levelsToRoot);
+
     const paths = [
-        `../../script.js`,
-        `../../../script.js`,
+        `${rootDots}script.js`,
         `/script.js`
     ];
+
 
     const errors = [];
     for (const path of paths) {
@@ -118,3 +131,35 @@ export async function getScriptModule() {
     logger.debug('Could not find SillyTavern script.js. Attempts:', errors);
     return null;
 }
+
+/**
+ * Detects the extension's base directory relative to the SillyTavern root.
+ * This ensures that assets like HTML files can be fetched regardless of whether
+ * the extension is installed in the standard or third-party directory.
+ * @returns {string} The base path (e.g., 'scripts/extensions/polyceph')
+ */
+export function getExtensionPath() {
+    // import.meta.url for this file is at [base]/js/compat-st.js
+    const metaUrl = import.meta.url;
+    
+    // Find the 'polyceph' segment and everything before it
+    const match = metaUrl.match(/.*scripts\/extensions\/.*polyceph/);
+    if (match) {
+        const fullPath = match[0];
+        // Convert full URL to relative path from origin
+        try {
+            const url = new URL(fullPath);
+            let path = url.pathname;
+            // Remove leading slash if it exists (for fetch consistency)
+            if (path.startsWith('/')) path = path.substring(1);
+            return path;
+        } catch (e) {
+            // Fallback if URL parsing fails (unlikely in browser)
+            return 'scripts/extensions/polyceph';
+        }
+    }
+    
+    // Default fallback
+    return 'scripts/extensions/polyceph';
+}
+

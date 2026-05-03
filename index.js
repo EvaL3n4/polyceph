@@ -243,7 +243,7 @@ async function init() {
 
     // Initialize UI Subsystems
     initUI();
-    addSettingsUI();
+    await addSettingsUI();
     setupIntercepts();
     injectChatPipelineSelector(handlePolycephSend);
 
