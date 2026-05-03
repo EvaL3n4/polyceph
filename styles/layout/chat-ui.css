@@ -1,0 +1,96 @@
+/* Polyceph Chat Interface Integration Styles */
+
+/* Global Intercept Indicator (Near the top bar) */
+#polyceph-status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.8em;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--smartThemeKeyColor);
+    color: var(--white);
+    margin-left: 10px;
+    display: none;
+}
+
+#polyceph-status-indicator.active {
+    display: inline-flex;
+}
+
+/* Chat Form Pipeline Selector */
+#rightSendForm .polyceph-chat-pipeline-container {
+    display: inline-flex !important;
+    align-items: center !important;
+    width: auto !important;
+    margin-right: 0.3rem !important;
+    gap: 0.3rem !important;
+    opacity: 0.8;
+    flex-shrink: 0 !important;
+    position: relative !important;
+}
+
+#rightSendForm .polyceph-chat-pipeline-container.polyceph-hidden {
+    display: none !important;
+}
+
+.polyceph-chat-pipeline-label {
+    width: auto !important;
+    max-width: 7.5rem !important;
+    height: 100% !important;
+    padding: 0 0.5rem !important;
+    font-size: 0.75rem !important;
+    cursor: pointer;
+    border-radius: 0.4rem;
+    border: none;
+    background-color: var(--SmartThemeChatTintColor, rgba(0, 0, 0, 0.2));
+    color: var(--SmartThemeBodyColor);
+    line-height: 1.5rem !important;
+    vertical-align: middle;
+    white-space: nowrap;
+    user-select: none;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: background 0.2s;
+}
+
+.polyceph-chat-pipeline-label:hover {
+    background-color: var(--SmartThemeBotMesBlurTintColor, rgba(0, 0, 0, 0.4));
+}
+
+.polyceph-chat-pipeline-label.polyceph-hidden {
+    display: none !important;
+}
+
+.polyceph-chat-pipeline-icon {
+    font-size: 1.5rem;
+    color: var(--SmartThemeKeyColor);
+    cursor: pointer;
+    user-select: none;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+}
+
+.polyceph-chat-pipeline-selector:hover {
+    background-color: var(--SmartThemeBotMesBlurTintColor, rgba(0, 0, 0, 0.4));
+    opacity: 1;
+}
+
+.polyceph-chat-pipeline-selector.polyceph-compact-hidden {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+    display: block !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}

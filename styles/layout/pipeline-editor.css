@@ -1,5 +1,47 @@
-/* Pipeline steps and nodes layout elements */
+/* Polyceph Pipeline Manager and Step Editor Layout */
 
+.polyceph-pipeline-manager {
+    margin-bottom: 20px;
+}
+
+.polyceph-header {
+    margin-bottom: 15px;
+    font-size: 0.9em;
+    color: var(--greyLight);
+}
+
+.polyceph-placeholders-container {
+    margin-bottom: 15px;
+    background: var(--black30a);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.polyceph-placeholders-header {
+    padding: 8px;
+    cursor: pointer;
+    font-size: 0.85em;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--black10a);
+}
+
+.polyceph-placeholders-header:hover {
+    background: var(--black40a);
+}
+
+.polyceph-placeholders-content {
+    padding: 8px;
+    font-size: 1em;
+    display: none;
+}
+
+.polyceph-placeholders-content.active {
+    display: block;
+}
+
+/* Step and Node List Layout (from former pipeline.css) */
 .polyceph-step-list {
     display: flex;
     flex-direction: column;

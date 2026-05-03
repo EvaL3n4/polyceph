@@ -1,0 +1,141 @@
+/* Polyceph Button Styles */
+
+/* Custom Send Button in Chat Form */
+#polyceph-send-button {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--SmartThemeKeyColor);
+    margin-right: 0.2rem;
+    margin-left: 0.2rem;
+    transition: all 0.2s ease;
+    width: 32px;
+    height: 32px;
+    position: relative;
+}
+
+#polyceph-send-button:hover {
+    color: var(--SmartThemeQuoteColor);
+}
+
+.polyceph-send-button-overlay {
+    position: absolute;
+    bottom: 3px;
+    right: -3px;
+    font-size: 1.3rem;
+    background: var(--SmartThemeChatTintColor, rgba(0, 0, 0, 0.5));
+    width: 1.2rem;
+    height: 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 1px solid var(--SmartThemeKeyColor);
+    color: var(--SmartThemeKeyColor);
+    font-weight: bold;
+    pointer-events: none;
+    line-height: 1;
+    padding-top: 1px;
+}
+
+#polyceph-send-button:hover .polyceph-send-button-overlay {
+    border-color: var(--SmartThemeQuoteColor);
+    color: var(--SmartThemeQuoteColor);
+}
+
+/* Custom Stop Button in Chat Form */
+#polyceph-stop-button {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--SmartThemeBodyColor);
+    margin-right: 0.2rem;
+    margin-left: 0.2rem;
+    transition: all 0.2s ease;
+    width: 32px;
+    height: 32px;
+    position: relative;
+    font-size: inherit;
+    background: var(--SmartThemeChatTintColor);
+}
+
+#polyceph-stop-button:hover {
+    color: #ff4d4d;
+    transform: none;
+}
+
+#polyceph-stop-button:hover .polyceph-send-button-overlay {
+    border-color: #ff4d4d;
+    color: #ff4d4d;
+}
+
+/* Stop Button inside Typing Indicator */
+.polyceph-stop-button {
+    cursor: pointer;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--SmartThemeShadowColor);
+    border-radius: 4px;
+    color: var(--white);
+    transition: all 0.2s ease;
+}
+
+.polyceph-stop-button:hover {
+    background: #ff4444;
+    color: white;
+    transform: scale(1.1);
+}
+
+/* Pagination Buttons */
+.polyceph-page-btn {
+    min-width: 35px;
+    height: 35px;
+    border-radius: 5px;
+    background: var(--black70a);
+    border: 1px solid var(--SmartThemeBodyColor);
+    color: var(--SmartThemeBodyColor);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.polyceph-page-btn:hover {
+    background: var(--black50a);
+    border-color: var(--gold);
+}
+
+.polyceph-page-btn.active {
+    background: var(--gold);
+    color: var(--SmartThemeQuoteColor);
+    border-color: var(--gold);
+    font-weight: bold;
+}
+
+/* Settings Action Buttons */
+#polyceph_preview_prompts_btn {
+    background-color: var(--black70a);
+    transition: all 0.2s ease;
+    border: 1px solid var(--SmartThemeQuoteColor);
+}
+
+#polyceph_preview_prompts_btn:hover {
+    background-color: var(--black50a);
+    border-color: var(--SmartThemeQuoteColor);
+    color: var(--SmartThemeQuoteColor);
+    box-shadow: 0 0 5px var(--SmartThemeQuoteColor);
+}
+
+.polyceph-pipeline-manager .small_button {
+    padding: 5px 10px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}

@@ -1,0 +1,89 @@
+/* Polyceph Typing Indicator Styles */
+
+.polyceph-typing-indicator {
+    background: var(--black70a);
+    backdrop-filter: blur(5px);
+    border: 1px solid var(--SmartThemeBodyColor);
+    border-radius: 8px;
+    padding: 12px;
+    margin: 10px 0;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    font-family: var(--mainFontFamily);
+    color: var(--white);
+    max-width: 400px;
+}
+
+.polyceph-typing-indicator.polyceph-sticky {
+    position: fixed;
+    top: 2.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    max-width: 400px;
+    width: 100%;
+    margin: 0;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+    border: 1px solid var(--SmartThemeQuoteColor);
+}
+
+.polyceph-typing-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--SmartThemeBodyColor);
+    padding-bottom: 8px;
+}
+
+.polyceph-typing-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: bold;
+    color: var(--SmartThemeQuoteColor);
+    font-size: 0.9em;
+}
+
+.polyceph-active-tasks-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.polyceph-active-task {
+    background: var(--SmartThemeShadowColor);
+    border-left: 3px solid var(--SmartThemeQuoteColor);
+    padding: 6px 10px;
+    border-radius: 4px;
+    animation: polyceph-pulse 2s infinite ease-in-out;
+}
+
+.polyceph-active-task-label {
+    font-size: 0.85em;
+    font-weight: bold;
+}
+
+.polyceph-active-task-profile {
+    font-size: 0.75em;
+    opacity: 0.7;
+}
+
+@keyframes polyceph-pulse {
+    0% {
+        opacity: 0.7;
+    }
+
+    50% {
+        opacity: 1;
+        border-left-color: var(--SmartThemeQuoteColor);
+    }
+
+    100% {
+        opacity: 0.7;
+    }
+}
+
+/* Hide SillyTavern's native stop button when pipeline is active */
+body.polyceph-pipeline-active #mes_stop {
+    display: none !important;
+}

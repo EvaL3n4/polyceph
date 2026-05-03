@@ -1,0 +1,51 @@
+/* Polyceph Dropdown and Menu Styles */
+
+.polyceph-custom-dropdown {
+    position: fixed !important;
+    z-index: 200000;
+    background: var(--SmartThemeChatTintColor);
+    backdrop-filter: blur(20px) !important;
+    border: 1px solid var(--SmartThemeBorderColor) !important;
+    border-radius: 8px !important;
+    min-width: 180px !important;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.9) !important;
+    display: none !important;
+    flex-direction: column !important;
+    padding: 8px 0 !important;
+    pointer-events: all !important;
+}
+
+.polyceph-custom-dropdown.active {
+    display: flex !important;
+}
+
+.polyceph-dropdown-item {
+    padding: 10px 16px !important;
+    cursor: pointer !important;
+    font-size: 0.95rem !important;
+    color: var(--white) !important;
+    transition: background 0.1s ease-in-out !important;
+    line-height: 1.2 !important;
+    user-select: none !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+}
+
+.polyceph-dropdown-item:hover {
+    background-color: var(--black30a);
+    color: var(--white) !important;
+}
+
+.polyceph-dropdown-item.selected {
+    color: var(--SmartThemeKeyColor) !important;
+    font-weight: bold !important;
+}
+
+.polyceph-dropdown-item.selected:hover::before {
+    color: var(--white);
+}
+
+.polyceph-dropdown-item.selected:hover {
+    color: var(--white) !important;
+}

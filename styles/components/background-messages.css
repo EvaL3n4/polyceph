@@ -1,0 +1,140 @@
+/* Polyceph Hidden/Background Message Styles */
+
+/* Robust hiding for background messages */
+.mes[ch_name="Background"],
+.mes[polyceph_hidden="true"] {
+    display: none !important;
+}
+
+body.polyceph-show-hidden .mes[ch_name="Background"],
+body.polyceph-show-hidden .mes[polyceph_hidden="true"] {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    margin: 5px 0 !important;
+    min-height: auto !important;
+}
+
+/* Force show background messages (collapsed) in delete mode even if hidden in settings */
+body.polyceph-delete-mode .mes[polyceph_hidden="true"] {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    min-height: auto !important;
+    margin: 5px 0 !important;
+}
+
+body.polyceph-delete-mode .mes[polyceph_hidden="true"] .polyceph-background-separator {
+    flex: 1 1 auto !important;
+    margin-bottom: 0 !important;
+}
+
+/* Align delete checkbox with separator line for background messages */
+.mes[polyceph_hidden="true"] .del_checkbox,
+.mes[polyceph_hidden="true"] .for_checkbox {
+    order: -1 !important;
+    margin-top: 0 !important;
+    margin-right: 15px !important;
+    align-self: center !important;
+    position: relative;
+    z-index: 10;
+    flex-shrink: 0 !important;
+}
+
+body.polyceph-show-hidden .mes[polyceph_hidden="true"] .mes_block {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+/* Background Separator Header */
+.polyceph-background-separator {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    margin: 0 0 10px 0;
+    cursor: pointer;
+    user-select: none;
+    opacity: 0.4;
+    transition: opacity 0.2s;
+    position: relative;
+}
+
+.polyceph-background-separator:hover {
+    opacity: 0.8;
+}
+
+.polyceph-background-separator::before,
+.polyceph-background-separator::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--SmartThemeBorderColor, #444);
+}
+
+.polyceph-background-label {
+    padding: 0 10px;
+    font-size: 0.7em;
+    font-weight: bold;
+    color: var(--SmartThemeKeyColor);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.polyceph-background-delete {
+    position: absolute;
+    right: 15px;
+    opacity: 0;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 1.1em;
+    color: var(--SmartThemeBodyColor);
+    background-color: var(--SmartThemeChatTintColor, rgba(0, 0, 0, 0.4));
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.1));
+    border-radius: 4px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    z-index: 5;
+}
+
+.polyceph-background-separator:hover .polyceph-background-delete {
+    opacity: 0.6;
+}
+
+.polyceph-background-delete:hover {
+    opacity: 1 !important;
+    color: var(--SmartThemeQuoteColor, #ff4444) !important;
+    background-color: var(--SmartThemeBotMesBlurTintColor, rgba(0, 0, 0, 0.6));
+    border-color: var(--SmartThemeQuoteColor);
+    transform: scale(1.05);
+}
+
+/* Hidden Content State */
+.mes[polyceph_hidden="true"] .mes_text {
+    display: none;
+    padding: 15px;
+    background: var(--SmartThemeBotMesBlurTintColor, rgba(0, 0, 0, 0.2));
+    border-radius: 8px;
+    margin-top: 5px;
+    font-size: 0.95em;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.1));
+}
+
+.mes[polyceph_hidden="true"].polyceph-hidden-open .mes_text {
+    display: block !important;
+}
+
+/* Hide metadata and avatars for hidden messages when collapsed */
+body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open) .ch_name,
+body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open) .avatar,
+body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open) .mes_buttons,
+body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open) .swipe_left,
+body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open) .swipe_right,
+body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open) .swipes-counter,
+body.polyceph-show-hidden .mes[polyceph_hidden="true"]:not(.polyceph-hidden-open) .mes_edit_buttons {
+    display: none !important;
+}

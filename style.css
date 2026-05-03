@@ -1,3 +1,17 @@
-/* Polyceph Extension Styles - SillyTavern */
-@import url('./styles/ui.css');
-@import url('./styles/pipeline.css');
+/* Polyceph Extension Styles - SillyTavern (Modular Atomic Structure) */
+
+/* 1. Base Styles (Variables, Resets) */
+@import url('./styles/base/variables.css');
+
+/* 2. Layout Styles (Containers, Sections) */
+@import url('./styles/layout/settings.css');
+@import url('./styles/layout/chat-ui.css');
+@import url('./styles/layout/pipeline-editor.css');
+
+/* 3. Component Styles (UI Elements) */
+@import url('./styles/components/buttons.css');
+@import url('./styles/components/dropdowns.css');
+@import url('./styles/components/typing-indicator.css');
+@import url('./styles/components/thoughts.css');
+@import url('./styles/components/background-messages.css');
+@import url('./styles/components/preview-modal.css');

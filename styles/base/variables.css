@@ -1,0 +1,10 @@
+/* Shared Polyceph Variables and Resets */
+:root {
+    /* Potential future variables here */
+}
+
+.polyceph-disabled {
+    opacity: 0.5 !important;
+    pointer-events: none !important;
+    cursor: not-allowed !important;
+}
