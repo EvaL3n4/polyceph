@@ -171,6 +171,14 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                                     streamMsg.extra.model = taskModel;
                                     if (taskThoughts.length > 0) {
                                         streamMsg.extra.polyceph_thoughts = taskThoughts;
+                                        // Also update swipe_info so the renderer (which prioritizes swipes) sees it
+                                        if (streamMsg.swipe_info && streamMsg.swipe_info[streamMsg.swipe_id || 0]) {
+                                            if (!streamMsg.swipe_info[streamMsg.swipe_id || 0].extra) {
+                                                streamMsg.swipe_info[streamMsg.swipe_id || 0].extra = {};
+                                            }
+                                            streamMsg.swipe_info[streamMsg.swipe_id || 0].extra.polyceph_thoughts = taskThoughts;
+                                            streamMsg.swipe_info[streamMsg.swipe_id || 0].extra.polyceph_pipeline = pipelineName;
+                                        }
                                     }
 
                                     if (typeof ctx.updateMessageBlock === 'function') {
