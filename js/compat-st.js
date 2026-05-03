@@ -72,3 +72,24 @@ export async function getWorldInfoModule() {
 export async function getToolCallingModule() {
     return await tryImportST('tool-calling.js');
 }
+
+/**
+ * Imports SillyTavern's openai.js for model listing and metadata.
+ */
+export async function getOpenAIModule() {
+    return await tryImportST('openai.js');
+}
+
+/**
+ * Imports SillyTavern's textgen-models.js for model name resolution.
+ */
+export async function getTextGenModelsModule() {
+    return await tryImportST('textgen-models.js');
+}
+
+/**
+ * Imports SillyTavern's textgen-settings.js for API settings access.
+ */
+export async function getTextGenSettingsModule() {
+    return await tryImportST('textgen-settings.js');
+}

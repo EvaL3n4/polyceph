@@ -29,6 +29,7 @@
 
 import { MODULE_NAME } from './constants.js';
 import { logger } from './logger.js';
+import { getWorldInfoModule, getOpenAIModule, getTextGenModelsModule, getTextGenSettingsModule } from './compat-st.js';
 
 // ---------------------------------------------------------------------------
 // Stopping Strings
@@ -201,8 +202,8 @@ export async function getMaxContextTokens() {
         const isUnlocked = oaiSettings?.max_context_unlocked || powerUser?.max_context_unlocked;
         if (!isUnlocked) {
             try {
-                // Dynamic import to access SillyTavern's internal model metadata
-                const { model_list, getChatCompletionModel } = await import('../../openai.js');
+                const openaiModule = await getOpenAIModule();
+                const { model_list, getChatCompletionModel } = openaiModule || {};
                 const activeModelId = getChatCompletionModel(oaiSettings);
                 const model = model_list.find(m => m.id === activeModelId);
 
@@ -230,8 +231,10 @@ export async function getMaxContextTokens() {
         // For TextGen, check if it's OpenRouter which provides model-specific caps
         if (api === 'textgenerationwebui' && !isUnlocked) {
             try {
-                const { openRouterModels } = await import('../../textgen-models.js');
-                const { textgenerationwebui_settings } = await import('../../textgen-settings.js');
+                const tgModelsModule = await getTextGenModelsModule();
+                const tgSettingsModule = await getTextGenSettingsModule();
+                const { openRouterModels } = tgModelsModule || {};
+                const { textgenerationwebui_settings } = tgSettingsModule || {};
                 const activeModelId = textgenerationwebui_settings?.openrouter_model;
                 const model = openRouterModels.find(m => m.id === activeModelId);
 
@@ -620,7 +623,8 @@ export async function getWorldInfoForChat(chat, isDryRun = false, triggerType = 
 
     // Log settings for debugging
     try {
-        const { world_info_recursive, world_info_depth } = await import('../../world-info.js');
+        const wiModule = await getWorldInfoModule();
+        const { world_info_recursive, world_info_depth } = wiModule || {};
         logger.debug(`World Info Settings: Recursive=${world_info_recursive}, GlobalDepth=${world_info_depth}, Trigger=${triggerType}`);
     } catch (e) { }
 
