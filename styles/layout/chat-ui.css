@@ -88,7 +88,7 @@
 /* Increase hit area specifically for touch devices */
 @media (pointer: coarse) {
     .polyceph-chat-pipeline-icon {
-        padding: 6px 12px;
+        padding: 2px 12px;
         margin: -4px -6px;
         /* Offset padding to keep visual alignment same */
     }
