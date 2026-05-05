@@ -144,7 +144,7 @@
 .polyceph-textarea-container .editor_maximize {
     position: absolute;
     top: 8px;
-    right: 5px;
+    right: 10px;
     opacity: 0.6;
     transition: opacity 0.2s;
     background: var(--black70a);
@@ -161,3 +161,7 @@
     padding-right: 30px;
     /* Make room for the button */
 }
+
+.polyceph-locked .editor_maximize {
+    display: none !important;
+}
