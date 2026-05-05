@@ -18,10 +18,14 @@ export function forceHideStopButton() {
     if (polyStopBtn) polyStopBtn.style.display = 'none';
     
     if (stSendBut) {
+        stSendBut.style.display = '';
         stSendBut.style.opacity = '1';
         stSendBut.style.pointerEvents = 'auto';
         stSendBut.classList.remove('polyceph-disabled');
     }
+
+    document.body.classList.remove('polyceph-pipeline-active');
+
 
     if (typeof context.activateSendButtons === 'function') {
         context.activateSendButtons();

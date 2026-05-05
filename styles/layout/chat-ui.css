@@ -120,3 +120,8 @@
     opacity: 0 !important;
     pointer-events: none !important;
 }
+
+/* Force-hide ST Send button when a pipeline is active to prevent overlapping */
+body.polyceph-pipeline-active #send_but {
+    display: none !important;
+}
