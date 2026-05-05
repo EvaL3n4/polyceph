@@ -44,6 +44,18 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
         let charMsgOutputCount = 0;
         let bgMsgOutputCount = 0;
 
+        // Pre-calculate message indices for parallel tasks
+        step.tasks.forEach(node => {
+            if (node.isCharacter || node.persist) {
+                node._charIndex = charMsgOutputCount++;
+            }
+            // Always assign a base background index to keep them ordered
+            node._bgBaseIndex = bgMsgOutputCount;
+            // We don't know how many BGs yet, but we'll use this as a stable anchor
+            // Actually, for BGs it's better to just use a shared counter at the moment of completion
+            // but for character messages it MUST be pre-calculated.
+        });
+
         // Process profile groups sequentially
         for (const [profileId, groupNodes] of Object.entries(profileGroups)) {
             if (signal.aborted) return;
@@ -68,6 +80,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                 // 3. Set up streaming for character tasks
                 const taskOptions = {};
                 let streamMessageIndex = null;
+                let isStreamingSwipe = false;
 
                 if (node.isCharacter && settings.enableStreaming !== false) {
                     const { name: charName, avatarUrl: avatarStr } = getActiveCharacterInfo();
@@ -75,23 +88,59 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                     taskOptions.onStream = async ({ text, done }) => {
                         const ctx = SillyTavern.getContext();
 
-                        // Create the placeholder message on first chunk
+                        // 3a. Handle placeholder or swipe anchoring on first chunk
                         if (streamMessageIndex === null && text) {
-                            streamMessageIndex = await postMessageToChat({
-                                content: '...',
-                                name: charName,
-                                forceAvatar: avatarStr,
-                                extra: {
-                                    polyceph_source: 'polyceph',
-                                    polyceph_streaming: true,
-                                    polyceph_batch: batchData.batchId,
-                                },
-                                save: false,
-                                silent: true,
-                            });
+                            const charIdx = node._charIndex;
+                            const isSwipe = batchData.generateSwipesForBatchId && charIdx < batchData.batchCharMessages.length;
+
+                            if (isSwipe) {
+                                const targetMsg = batchData.batchCharMessages[charIdx];
+                                streamMessageIndex = ctx.chat.indexOf(targetMsg);
+                                if (streamMessageIndex === -1) {
+                                    streamMessageIndex = ctx.chat.findIndex(m => m.extra?.polyceph_batch === batchData.batchId && m.extra?.polyceph_task_id === node.id);
+                                }
+
+                                if (streamMessageIndex !== -1) {
+                                    isStreamingSwipe = true;
+                                    const msg = ctx.chat[streamMessageIndex];
+                                    
+                                    // Initialize swipes if missing
+                                    if (!Array.isArray(msg.swipes)) {
+                                        msg.swipes = [msg.mes];
+                                        msg.swipe_info = [{ extra: { ...(msg.extra || {}) } }];
+                                        msg.swipe_id = 0;
+                                    }
+
+                                    // Push new swipe for THIS generation
+                                    msg.swipes.push('...');
+                                    msg.swipe_id = msg.swipes.length - 1;
+                                    msg.swipe_info.push({ extra: { polyceph_source: 'polyceph', polyceph_batch: batchData.batchId, polyceph_streaming: true } });
+                                    
+                                    // Set a temp state to indicate we are streaming
+                                    msg.extra.polyceph_streaming = true;
+
+                                    if (typeof ctx.swipe?.refresh === 'function') ctx.swipe.refresh(true);
+                                }
+                            }
+
+                            // If not a swipe or target not found, create new message
+                            if (streamMessageIndex === null || streamMessageIndex === -1) {
+                                streamMessageIndex = await postMessageToChat({
+                                    content: '...',
+                                    name: charName,
+                                    forceAvatar: avatarStr,
+                                    extra: {
+                                        polyceph_source: 'polyceph',
+                                        polyceph_streaming: true,
+                                        polyceph_batch: batchData.batchId,
+                                    },
+                                    save: false,
+                                    silent: true,
+                                });
+                            }
                         }
 
-                        if (streamMessageIndex === null) return;
+                        if (streamMessageIndex === null || streamMessageIndex === -1) return;
 
                         // Update the message content
                         const msg = ctx.chat[streamMessageIndex];
@@ -141,7 +190,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
 
                     accumulatedThoughts.push(...thoughts);
 
-                    // 4. Handle Backgrounds
+                    // 4. Handle Backgrounds (Sequential access to the counter is fine here as it's within a single task's result processing)
                     for (const bg of hiddenBackgrounds) {
                         if (signal.aborted) return;
                         await handleBackgroundOutput(bg, bgMsgOutputCount++, batchData, taskApi, taskModel);
@@ -157,10 +206,10 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                             let streamingHandled = false;
 
                             // If we already created a streaming placeholder, update it in-place
-                            if (streamMessageIndex !== null) {
+                            if (streamMessageIndex !== null && streamMessageIndex !== -1) {
                                 const ctx = SillyTavern.getContext();
                                 const streamMsg = ctx.chat[streamMessageIndex];
-                                if (streamMsg && streamMsg.extra?.polyceph_streaming) {
+                                if (streamMsg && (streamMsg.extra?.polyceph_streaming || isStreamingSwipe)) {
                                     streamMsg.mes = content;
                                     streamMsg.extra.polyceph_streaming = false;
                                     streamMsg.extra.polyceph_batch = batchData.batchId;
@@ -169,6 +218,15 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                                     streamMsg.extra.polyceph_pipeline = pipelineName;
                                     streamMsg.extra.api = taskApi;
                                     streamMsg.extra.model = taskModel;
+
+                                    // Also update the specific swipe entry
+                                    if (Array.isArray(streamMsg.swipes)) {
+                                        streamMsg.swipes[streamMsg.swipe_id] = content;
+                                        if (streamMsg.swipe_info && streamMsg.swipe_info[streamMsg.swipe_id]) {
+                                            streamMsg.swipe_info[streamMsg.swipe_id].extra = { ...streamMsg.extra };
+                                        }
+                                    }
+
                                     if (taskThoughts.length > 0) {
                                         streamMsg.extra.polyceph_thoughts = taskThoughts;
                                         // Also update swipe_info so the renderer (which prioritizes swipes) sees it
@@ -186,21 +244,20 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                                     }
                                     await (typeof ctx.saveChat === 'function' ? ctx.saveChat() : Promise.resolve());
                                     streamingHandled = true;
-                                    charMsgOutputCount++;
                                 }
                             }
 
                             // Fall back to normal handleCharacterOutput if streaming didn't handle it
                             if (!streamingHandled) {
-                                await handleCharacterOutput(content, taskThoughts, charMsgOutputCount++, node, batchData, taskApi, taskModel, userInput, pipelineName);
+                                await handleCharacterOutput(content, taskThoughts, node._charIndex, node, batchData, taskApi, taskModel, userInput, pipelineName);
                             }
                         }
                     }
                 }
             }));
         }
-
         // Store step results
+
         const stepResult = resultsByIndex.join('\n\n---\n\n');
         contextVault[step.id] = stepResult;
         contextVault[`s${stepIdx}`] = stepResult;
