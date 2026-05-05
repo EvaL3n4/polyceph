@@ -149,6 +149,12 @@ export function renderPolycephThoughts() {
     const context = SillyTavern.getContext();
     if (!context || !context.chat) return;
 
+    // 0. Global Typing State Check
+    const anyTyping = context.chat.some(m => m && m.extra && m.extra.polyceph_typing);
+    if (!anyTyping && settings.stickyTypingIndicator) {
+        $('#polyceph-sticky-container .polyceph-typing-indicator').remove();
+    }
+
     $('#chat .mes').each((_, messageElement) => {
         const mesId = messageElement.getAttribute('mesid');
         const chatMsg = context.chat[mesId];
@@ -160,12 +166,11 @@ export function renderPolycephThoughts() {
             renderPolycephTyping(messageElement, chatMsg);
             return;
         } else {
+            // Only remove inline indicators here; sticky is handled globally
             $(messageElement).find('.polyceph-typing-indicator').remove();
-            if (settings.stickyTypingIndicator) {
-                $('#polyceph-sticky-container .polyceph-typing-indicator').remove();
-            }
             messageElement.removeAttribute('polyceph_typing');
         }
+
 
         // 2. Handle Hidden Background Messages
         if ((chatMsg.extra && chatMsg.extra.polyceph_hidden) || chatMsg.name === 'Background') {
