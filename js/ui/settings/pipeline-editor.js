@@ -79,7 +79,10 @@ export function renderTask(stepId, task, isLocked = false) {
                     </div>
                 </div>
             </div>
-            <textarea class="polyceph-node-template text_pole" data-step="${stepId}" data-node="${task.id}" placeholder="Use {{user_input}} or {{chat_history:2}}..." ${disabled}>${task.template || ''}</textarea>
+            <div class="polyceph-textarea-container">
+                <textarea id="polyceph-template-${task.id}" class="polyceph-node-template text_pole" data-step="${stepId}" data-node="${task.id}" placeholder="Use {{user_input}} or {{chat_history:2}}..." ${disabled}>${task.template || ''}</textarea>
+                <i class="editor_maximize fa-solid fa-maximize right_menu_button sttt--enabled interactable" data-for="polyceph-template-${task.id}" data-i18n="[title]Expand the editor" data-sttt--title="Expand the editor" tabindex="0" role="button"></i>
+            </div>
         </div>
     `;
 }

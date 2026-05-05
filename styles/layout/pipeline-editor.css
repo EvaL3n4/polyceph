@@ -136,3 +136,28 @@
     cursor: not-allowed !important;
 }
 
+.polyceph-textarea-container {
+    position: relative;
+    width: 100%;
+}
+
+.polyceph-textarea-container .editor_maximize {
+    position: absolute;
+    top: 8px;
+    right: 5px;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+    background: var(--black70a);
+    padding: 4px;
+    border-radius: 4px;
+    z-index: 10;
+}
+
+.polyceph-textarea-container .editor_maximize:hover {
+    opacity: 1;
+}
+
+.polyceph-textarea-container textarea {
+    padding-right: 30px;
+    /* Make room for the button */
+}

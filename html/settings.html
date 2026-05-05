@@ -87,7 +87,10 @@
 
             <div style="margin-bottom: 20px;">
                 <label for="polyceph_prompt_input" style="font-weight: bold; display: block; margin-bottom: 5px;">Polyceph Prompt</label>
-                <textarea id="polyceph_prompt_input" class="text_pole" style="width: 100%; min-height: 80px; font-family: monospace;" placeholder="Global context or instructions..."></textarea>
+                <div class="polyceph-textarea-container">
+                    <textarea id="polyceph_prompt_input" class="text_pole" style="width: 100%; min-height: 80px; font-family: monospace;" placeholder="Global context or instructions..."></textarea>
+                    <i class="editor_maximize fa-solid fa-maximize right_menu_button sttt--enabled interactable" data-for="polyceph_prompt_input" data-i18n="[title]Expand the editor" data-sttt--title="Expand the editor" tabindex="0" role="button"></i>
+                </div>
             </div>
             
             <div style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 15px;">
