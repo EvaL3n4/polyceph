@@ -191,7 +191,9 @@ function interceptSwipe(e) {
             }
         }
 
-        toastr.info('Polyceph generation running...', 'Polyceph');
+        if (!settings.stickyTypingIndicator) {
+            toastr.info('Polyceph generation running...', 'Polyceph');
+        }
         runPipeline(userInput, batchId, triggeringUserMesId);
     }
 }
