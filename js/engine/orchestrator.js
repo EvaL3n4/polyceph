@@ -213,7 +213,6 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                                     streamMsg.mes = content;
                                     streamMsg.extra.polyceph_streaming = false;
                                     streamMsg.extra.polyceph_batch = batchData.batchId;
-                                    streamMsg.extra.polyceph_input = userInput;
                                     streamMsg.extra.polyceph_task_id = node.id;
                                     streamMsg.extra.polyceph_pipeline = pipelineName;
                                     streamMsg.extra.api = taskApi;
@@ -266,6 +265,6 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
 
     // 6. Final Thoughts Persistence
     if (accumulatedThoughts.length > 0 && !signal.aborted) {
-        await persistReasoningMessage(accumulatedThoughts, batchData, userInput);
+        await persistReasoningMessage(accumulatedThoughts, batchData);
     }
 }

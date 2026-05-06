@@ -181,12 +181,12 @@ function interceptSwipe(e) {
         e.stopImmediatePropagation();
 
         const batchId = chatMsg.extra.polyceph_batch;
-        const userInput = chatMsg.extra.polyceph_input || '';
-
+        let userInput = '';
         let triggeringUserMesId = -1;
         for (let i = mesId - 1; i >= 0; i--) {
             if (context.chat[i]?.is_user) {
                 triggeringUserMesId = i;
+                userInput = context.chat[i].mes;
                 break;
             }
         }
