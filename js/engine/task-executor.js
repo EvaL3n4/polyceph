@@ -1,7 +1,7 @@
 import { logger } from '../logger.js';
 import { settings, availableProfiles } from '../state.js';
 import { expandPrompt } from '../macros/macros.js';
-import { getCurrentPresetName, applyPreset, restorePresetState } from '../compat-presets.js';
+import { getCurrentPresetName, applyPreset, restorePresetState, getCapturedPresetName } from '../compat-presets.js';
 import { updateTypingIndicator } from './ui-utils.js';
 import { parseOutputTags } from './parser.js';
 import { generateQuietly } from './generator.js';
