@@ -39,14 +39,16 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
     // Resolve streaming options from settings + overrides
     const outputType = options.outputType || 'internal';
     const allowTools = options.allowTools !== false;
-    
+
     // Force non-streaming for tool-heavy tasks per requirement
     const forceNoStreaming = outputType === 'tool';
     const useStreaming = !forceNoStreaming && (options.streaming !== undefined ? options.streaming : (settings.enableStreaming !== false));
-    
+
     const antiLoop = options.antiLoop !== undefined ? options.antiLoop : true;
     const loopThreshold = options.loopThreshold || settings.loopDetectionThreshold || 3;
     const onStream = options.onStream || null;
+    const skipSuccessRecursion = !!options.skipSuccessRecursion;
+    const hideSuccessResponse = !!options.hideSuccessResponse;
 
     try {
         const context = SillyTavern.getContext();
@@ -94,7 +96,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
             // Only request tools if allowed for this task
             if (allowTools && ToolManager && typeof ToolManager.isToolCallingSupported === 'function' && ToolManager.isToolCallingSupported()) {
                 const isOaiCompatible = isChatCompletionApi(api);
-                
+
                 // Prepare metadata for event listeners
                 const generateData = {
                     model: isOaiCompatible ? (context.chatCompletionSettings?.openai_model || '') : '',
@@ -241,6 +243,15 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
 
                 depth++;
                 logger.info(`Continuing generation loop: ${toolCalls.length} tool calls executed, Turn ${depth} follows.`);
+
+                // If "No Success Recursion" is enabled and all tools succeeded, we can stop here
+                if (options.skipSuccessRecursion && !hasErrors) {
+                    logger.info('skipSuccessRecursion is true and tools succeeded. Ending task early.');
+                    // Return empty if success response is hidden, otherwise return a status
+                    finalResponse = options.hideSuccessResponse ? '' : 'Tools executed successfully, see console "[polyceph] [Tool]" debug logs for details.\nFor generated output following tool success, disable "No Success Recursion" in the Task settings in your pipeline.\nTo hide this message, which appears in place of the generated success response, enable "Hide Success Response".';
+                    break;
+                }
+
                 continue; // Loop again with tool results
             }
 
@@ -267,7 +278,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                 if (typeof context.extractMessageFromData === 'function') {
                     rawText = context.extractMessageFromData(responseData, api || context.main_api);
                 }
-                
+
                 // Fallback extraction if extractMessageFromData fails or returns something non-string
                 if (typeof rawText !== 'string' || !rawText) {
                     rawText = responseData?.choices?.[0]?.message?.content || responseData?.choices?.[0]?.text || '';

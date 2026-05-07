@@ -173,9 +173,9 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                 if (parsedResult) {
                     let { cleanOutput, persistentOutput, thoughts, hiddenBackgrounds } = parsedResult;
                     
-                    // Honor the "Return Empty" flag
-                    if (node.returnEmpty) {
-                        logger.debug(`Task ${node.id}: returnEmpty is true. Silencing output.`);
+                    // Honor the "Hide Success Response" flag
+                    if (node.hideSuccessResponse) {
+                        logger.debug(`Task ${node.id}: hideSuccessResponse is true. Silencing output.`);
                         cleanOutput = '';
                     }
 

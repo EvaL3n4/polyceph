@@ -1,5 +1,5 @@
 export const MODULE_NAME = 'polyceph';
-export const VERSION = '0.8.11';
+export const VERSION = '0.9.0';
 export const PIPELINE_DATA_VERSION = '1.0.0';
 
 export const defaultSettings = {
@@ -7,7 +7,6 @@ export const defaultSettings = {
     generationTimeoutMs: 60000,
     maxRetries: 3,
     retryDelayMs: 2000,
-    enableStreaming: true,
     loopDetectionThreshold: 3,
     toolRecursionLimit: 5,
     activePipelineId: 'default',
@@ -44,7 +43,9 @@ export const defaultSettings = {
                             outputType: 'internal',
                             stripThink: true,
                             antiLoop: true,
-                            allowTools: true
+                            allowTools: true,
+                            hideSuccessResponse: false,
+                            skipSuccessRecursion: false
                         }
                     ]
                 }

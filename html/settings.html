@@ -122,11 +122,6 @@
             </div>
 
             <div style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 15px; align-items: center;">
-                <label class="checkbox_label" style="margin-right: 10px; cursor: pointer;"
-                    title="Enable streaming for Chat Completion APIs. Allows real-time output and mid-stream loop detection.">
-                    <input type="checkbox" id="polyceph_enable_streaming_checkbox">
-                    <span>Enable Streaming</span>
-                </label>
                 <div id="polyceph_loop_threshold_container" style="flex: 1; min-width: 200px;"></div>
             </div>
 
@@ -162,8 +157,8 @@
                         <li><code>{{cc_enhance_definitions}}</code> - CC Enhance Definitions prompt.</li>
                     </ul>
                     <div style="margin-top: 10px; border-top: 1px solid var(--white10a); padding-top: 10px;">
-                        <b style="font-size: 0.9em; opacity: 0.8;">Advanced: Chat History</b>
-                        <div style="font-size: 0.85em; opacity: 0.9; margin-top: 5px;">
+                        <b style="font-size: 1em; opacity: 0.8;">Advanced: Chat History</b>
+                        <div style="font-size: 1em; opacity: 0.9; margin-top: 5px;">
                             Format: <code>{{chat_history|last:10|bg_last:2|live:true|no_extensions:true}}</code>
                             <ul style="margin: 5px 0 0 0; padding-left: 15px;">
                                 <li><code>last:N</code> - Limit total messages to N.</li>

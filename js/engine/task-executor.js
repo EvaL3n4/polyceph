@@ -91,12 +91,14 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
 
         // 4b. Build streaming options
         const streamingOptions = {
-            streaming: settings.enableStreaming !== false,
+            streaming: node.streaming !== false,
             antiLoop: node.antiLoop !== false,
             loopThreshold: settings.loopDetectionThreshold || 3,
             onStream: null, // Can be set by orchestrator for character message streaming
             outputType: node.outputType || 'internal',
             allowTools: node.allowTools !== false,
+            skipSuccessRecursion: !!node.skipSuccessRecursion,
+            hideSuccessResponse: !!node.hideSuccessResponse,
         };
 
         // Allow orchestrator to inject a stream callback (for character message streaming)

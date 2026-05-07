@@ -1,4 +1,5 @@
 import { availableProfiles, availablePresetsByApi, settings, saveSettings, getActivePipeline } from '../../state.js';
+import { isChatCompletionApi } from '../../compat-chat.js';
 import { autoResizeTextarea, generateId } from '../../utils.js';
 import { logger } from '../../logger.js';
 import { SELECTORS, getEl } from '../ui-shared.js';
@@ -34,11 +35,65 @@ function getPresetOptionsHTML(profileId, currentPreset) {
 }
 
 /**
+ * Renders the options bar for a task based on its type and API.
+ */
+function renderTaskOptionsBar(task, apiId, disabled) {
+    if (!apiId || apiId === 'none') return '';
+
+    const isCC = isChatCompletionApi(apiId);
+    let html = '';
+
+    if ((task.outputType === 'thinking' || task.outputType === 'character') && isCC) {
+        html = `
+            <div class="polyceph-node-option" style="display: flex; align-items: center; gap: 4px;">
+                <input type="checkbox" class="polyceph-node-streaming-checkbox" data-node-id="${task.id}" ${task.streaming !== false ? 'checked' : ''} title="Enable streaming for this task" ${disabled}>
+                <label style="font-size: 0.8em; cursor: pointer;">Streaming</label>
+            </div>
+            <div class="polyceph-node-option" style="display: flex; align-items: center; gap: 4px;">
+                <input type="checkbox" class="polyceph-node-antiloop-checkbox" data-node-id="${task.id}" ${task.antiLoop !== false ? 'checked' : ''} title="Abort generation if the model starts looping" ${disabled}>
+                <label style="font-size: 0.8em; cursor: pointer;">Anti-Loop</label>
+            </div>
+        `;
+    } else if (task.outputType === 'tool' && isCC) {
+        html = `
+            <div class="polyceph-node-option" style="display: flex; align-items: center; gap: 4px;">
+                <input type="checkbox" class="polyceph-node-skip-recursion-checkbox" data-node-id="${task.id}" ${task.skipSuccessRecursion ? 'checked' : ''} title="If checked, the task will end immediately after successful tool calls, skipping the model's final response." ${disabled}>
+                <label style="font-size: 0.8em; cursor: pointer;">No Success Recursion</label>
+            </div>
+            <div class="polyceph-node-option" style="display: flex; align-items: center; gap: 4px;">
+                <input type="checkbox" class="polyceph-node-hide-success-checkbox" data-node-id="${task.id}" ${task.hideSuccessResponse ? 'checked' : ''} title="If checked, this task will return an empty string regardless of LLM output. Useful for background tool processors." ${disabled}>
+                <label style="font-size: 0.8em; cursor: pointer;">Hide Success Response</label>
+            </div>
+        `;
+    } else if (isCC) {
+        // Fallback for CC tasks that are internal
+        html = `
+            <div class="polyceph-node-option" style="display: flex; align-items: center; gap: 4px;">
+                <input type="checkbox" class="polyceph-node-antiloop-checkbox" data-node-id="${task.id}" ${task.antiLoop !== false ? 'checked' : ''} title="Abort generation if the model starts looping" ${disabled}>
+                <label style="font-size: 0.8em; cursor: pointer;">Anti-Loop</label>
+            </div>
+        `;
+    }
+
+    if (!html) return '';
+
+    return `
+        <div class="polyceph-task-options-bar" data-node-id="${task.id}" style="display: flex; align-items: center; gap: 15px; padding: 4px 6px; background: rgba(0,0,0,0.2); border-radius: 4px; margin-top: 4px;">
+            ${html}
+        </div>
+    `;
+}
+
+/**
  * Renders the HTML for a single task node.
  */
 export function renderTask(stepId, task, isLocked = false) {
     const profileId = task.profile || 'none';
-    const profileFound = profileId === 'none' || availableProfiles.some(p => p.id === profileId);
+    const profile = availableProfiles.find(p => p.id === profileId);
+    const apiId = profileId === 'none' ? 'none' : (profile?.api || SillyTavern.getContext().mainApi || '');
+    const isCC = profileId !== 'none' && isChatCompletionApi(apiId);
+
+    const profileFound = profileId === 'none' || !!profile;
     let profileOptions = `<option value="none" ${profileId === 'none' ? 'selected' : ''}>(Template Only - No LLM)</option>`;
 
     if (!profileFound && task.profile) {
@@ -49,6 +104,8 @@ export function renderTask(stepId, task, isLocked = false) {
 
     const presetOptions = getPresetOptionsHTML(task.profile, task.preset);
     const disabled = isLocked ? 'disabled' : '';
+
+    const optionsBarHtml = renderTaskOptionsBar(task, apiId, disabled);
 
     return `
         <div class="polyceph-node-card ${isLocked ? 'polyceph-locked' : ''}" data-node-id="${task.id}">
@@ -67,23 +124,16 @@ export function renderTask(stepId, task, isLocked = false) {
                 </div>
                 <div style="display: flex; align-items: center; gap: 15px; padding-left: 2px; flex-wrap: wrap;">
                     <div style="display: flex; align-items: center; gap: 4px;">
-                        <label style="font-size: 0.8em;">Output:</label>
-                        <select class="polyceph-node-output-type text_pole" data-step-id="${stepId}" data-node-id="${task.id}" style="font-size: 0.85em; padding: 1px 3px;" ${disabled}>
+                        <label>Task Type</label>
+                        <select class="polyceph-node-output-type text_pole" data-step-id="${stepId}" data-node-id="${task.id}" ${disabled}>
                             <option value="internal" ${task.outputType === 'internal' ? 'selected' : ''}>Internal (Hidden)</option>
-                            <option value="thinking" ${task.outputType === 'thinking' ? 'selected' : ''}>Reasoning (Thinking)</option>
+                            <option value="thinking" ${task.outputType === 'thinking' ? 'selected' : ''}>Reasoning</option>
                             <option value="character" ${task.outputType === 'character' ? 'selected' : ''}>Character Message</option>
-                            <option value="tool" ${task.outputType === 'tool' ? 'selected' : ''}>Tool Processor</option>
+                            ${isCC ? `<option value="tool" ${task.outputType === 'tool' ? 'selected' : ''}>Tool Processor</option>` : ''}
                         </select>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 4px;">
-                        <input type="checkbox" class="polyceph-node-antiloop-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.antiLoop !== false ? 'checked' : ''} title="Abort generation if the model starts looping" ${disabled}>
-                        <label style="font-size: 0.8em; cursor: pointer;" title="Abort generation if the model starts looping">Anti-Loop</label>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 4px;">
-                        <input type="checkbox" class="polyceph-node-return-empty-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.returnEmpty ? 'checked' : ''} title="If checked, this task will return an empty string regardless of LLM output. Useful for background tool processors." ${disabled}>
-                        <label style="font-size: 0.8em; cursor: pointer;" title="If checked, this task will return an empty string regardless of LLM output.">Return Empty</label>
-                    </div>
                 </div>
+                ${optionsBarHtml}
             </div>
             <div class="polyceph-textarea-container">
                 <textarea id="polyceph-template-${task.id}" class="polyceph-node-template text_pole" data-step="${stepId}" data-node="${task.id}" placeholder="Use {{user_input}} or {{chat_history:2}}..." ${disabled}>${task.template || ''}</textarea>
@@ -241,15 +291,7 @@ export function bindStepEvents() {
                 }
             }
             saveSettings();
-
-            // Dynamic preset list update
-            if (updatedTask) {
-                const card = e.target.closest('.polyceph-node-card');
-                const presetSelect = card?.querySelector('.polyceph-preset-select');
-                if (presetSelect) {
-                    presetSelect.innerHTML = getPresetOptionsHTML(updatedTask.profile, updatedTask.preset);
-                }
-            }
+            updatePipelineEditorUI();
         });
     });
 
@@ -300,17 +342,20 @@ export function bindStepEvents() {
             const stepId = e.currentTarget.getAttribute('data-step');
             const step = activePipeline.steps.find(s => s.id === stepId);
             if (step) {
-                step.tasks.push({ 
-                    id: 'task_' + generateId(), 
-                    profile: 'none', 
-                    preset: 'Current', 
+                step.tasks.push({
+                    id: 'task_' + generateId(),
+                    profile: 'none',
+                    preset: 'Current',
                     template: '{{user_input}}',
                     outputType: 'internal',
                     persist: false,
                     isCharacter: false,
                     stripThink: true,
                     antiLoop: true,
-                    allowTools: false
+                    allowTools: false,
+                    hideSuccessResponse: false,
+                    skipSuccessRecursion: false,
+                    streaming: true
                 });
                 saveSettings();
                 updatePipelineEditorUI();
@@ -356,15 +401,17 @@ export function bindStepEvents() {
                 }
             }
             saveSettings();
+            updatePipelineEditorUI();
         });
     });
 
-    container.querySelectorAll('.polyceph-node-return-empty-checkbox').forEach(cb => {
+    // Options Bar Checkboxes
+    container.querySelectorAll('.polyceph-node-streaming-checkbox').forEach(cb => {
         cb.addEventListener('change', (e) => {
             const nodeId = e.target.getAttribute('data-node-id');
             for (const step of activePipeline.steps) {
                 const task = step.tasks.find(n => n.id === nodeId);
-                if (task) { task.returnEmpty = e.target.checked; break; }
+                if (task) { task.streaming = e.target.checked; break; }
             }
             saveSettings();
         });
@@ -381,6 +428,27 @@ export function bindStepEvents() {
         });
     });
 
+    container.querySelectorAll('.polyceph-node-skip-recursion-checkbox').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+            const nodeId = e.target.getAttribute('data-node-id');
+            for (const step of activePipeline.steps) {
+                const task = step.tasks.find(n => n.id === nodeId);
+                if (task) { task.skipSuccessRecursion = e.target.checked; break; }
+            }
+            saveSettings();
+        });
+    });
+
+    container.querySelectorAll('.polyceph-node-hide-success-checkbox').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+            const nodeId = e.target.getAttribute('data-node-id');
+            for (const step of activePipeline.steps) {
+                const task = step.tasks.find(n => n.id === nodeId);
+                if (task) { task.hideSuccessResponse = e.target.checked; break; }
+            }
+            saveSettings();
+        });
+    });
     // Remove Step
     container.querySelectorAll('.polyceph-del-step').forEach(btn => {
         btn.addEventListener('click', (e) => {

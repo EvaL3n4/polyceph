@@ -58,9 +58,8 @@ function syncSettingsToUI() {
     injectSlider('polyceph_generation_timeout_container', 'Model Timeout (ms)', 'polyceph_generation_timeout', settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 60000, 0, 300000, 1000);
     injectSlider('polyceph_max_retries_container', 'Max Retries', 'polyceph_max_retries', settings.maxRetries !== undefined ? settings.maxRetries : 3, 0, 10, 1);
     injectSlider('polyceph_retry_delay_container', 'Retry Delay (ms)', 'polyceph_retry_delay', settings.retryDelayMs !== undefined ? settings.retryDelayMs : 2000, 0, 10000, 100);
-    injectSlider('polyceph_loop_threshold_container', 'Loop Detection Threshold', 'polyceph_loop_threshold', settings.loopDetectionThreshold !== undefined ? settings.loopDetectionThreshold : 3, 1, 10, 1);
+    injectSlider('polyceph_loop_threshold_container', 'Streaming Loop Detection Threshold', 'polyceph_loop_threshold', settings.loopDetectionThreshold !== undefined ? settings.loopDetectionThreshold : 3, 1, 10, 1);
 
-    setChecked('polyceph_enable_streaming_checkbox', settings.enableStreaming !== false);
     setValue('polyceph_prompt_input', settings.polycephPrompt || '');
 }
 
@@ -102,7 +101,7 @@ export async function addSettingsUI() {
     // Bind Global Settings
     const bindSlider = (id, settingKey) => {
         // We use event delegation or re-query because sliders were just injected
-        const parent = wrapper; 
+        const parent = wrapper;
         const slider = parent.querySelector('#' + id);
         const input = parent.querySelector('#' + id + '_value');
         if (!slider || !input) return;
@@ -128,12 +127,6 @@ export async function addSettingsUI() {
     bindSlider('polyceph_retry_delay', 'retryDelayMs');
     bindSlider('polyceph_tool_recursion_limit', 'toolRecursionLimit');
     bindSlider('polyceph_loop_threshold', 'loopDetectionThreshold');
-
-    // Enable Streaming toggle
-    getEl('polyceph_enable_streaming_checkbox')?.addEventListener('change', (e) => {
-        settings.enableStreaming = e.target.checked;
-        saveSettings();
-    });
 
     // Global settings toggles
     getEl('polyceph_show_hidden_checkbox')?.addEventListener('change', (e) => {
