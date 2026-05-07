@@ -1,5 +1,6 @@
 import { availableProfiles, availablePresetsByApi, settings, saveSettings, getActivePipeline } from '../../state.js';
 import { isChatCompletionApi } from '../../compat-chat.js';
+import { getPresetSettings } from '../../compat-presets.js';
 import { autoResizeTextarea, generateId } from '../../utils.js';
 import { logger } from '../../logger.js';
 import { SELECTORS, getEl } from '../ui-shared.js';
@@ -41,20 +42,17 @@ function renderTaskOptionsBar(task, apiId, disabled) {
     if (!apiId || apiId === 'none') return '';
 
     const isCC = isChatCompletionApi(apiId);
+
+    // Resolve which settings to check for function calling
+    const presetName = task.preset || 'Current';
+    const presetSettings = (presetName === 'Current')
+        ? SillyTavern.getContext().chatCompletionSettings
+        : getPresetSettings(presetName, apiId);
+
+    const isFunctionCallingDisabled = presetSettings?.function_calling === false;
     let html = '';
 
-    if ((task.outputType === 'thinking' || task.outputType === 'character') && isCC) {
-        html = `
-            <div class="polyceph-node-option" style="display: flex; align-items: center; gap: 4px;">
-                <input type="checkbox" class="polyceph-node-streaming-checkbox" data-node-id="${task.id}" ${task.streaming !== false ? 'checked' : ''} title="Enable streaming for this task" ${disabled}>
-                <label style="font-size: 0.8em; cursor: pointer;">Streaming</label>
-            </div>
-            <div class="polyceph-node-option" style="display: flex; align-items: center; gap: 4px;">
-                <input type="checkbox" class="polyceph-node-antiloop-checkbox" data-node-id="${task.id}" ${task.antiLoop !== false ? 'checked' : ''} title="Abort generation if the model starts looping" ${disabled}>
-                <label style="font-size: 0.8em; cursor: pointer;">Anti-Loop</label>
-            </div>
-        `;
-    } else if (task.outputType === 'tool' && isCC) {
+    if (task.outputType === 'tool' && isCC) {
         html = `
             <div class="polyceph-node-option" style="display: flex; align-items: center; gap: 4px;">
                 <input type="checkbox" class="polyceph-node-skip-recursion-checkbox" data-node-id="${task.id}" ${task.skipSuccessRecursion ? 'checked' : ''} title="If checked, the task will end immediately after successful tool calls, skipping the model's final response." ${disabled}>
@@ -63,6 +61,23 @@ function renderTaskOptionsBar(task, apiId, disabled) {
             <div class="polyceph-node-option" style="display: flex; align-items: center; gap: 4px;">
                 <input type="checkbox" class="polyceph-node-hide-success-checkbox" data-node-id="${task.id}" ${task.hideSuccessResponse ? 'checked' : ''} title="If checked, this task will return an empty string regardless of LLM output. Useful for background tool processors." ${disabled}>
                 <label style="font-size: 0.8em; cursor: pointer;">Hide Success Response</label>
+            </div>
+            ${isFunctionCallingDisabled ? `
+                <div class="polyceph-node-option" style="display: flex; align-items: center; gap: 4px; color: #ff4d4d; font-weight: bold;" title="Function calling is disabled in the selected preset for this task. This task will fail to execute tools.">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    <span style="font-size: 0.8em;">Function Calling Disabled</span>
+                </div>
+            ` : ''}
+        `;
+    } else if ((task.outputType === 'thinking' || task.outputType === 'character') && isCC) {
+        html = `
+            <div class="polyceph-node-option" style="display: flex; align-items: center; gap: 4px;">
+                <input type="checkbox" class="polyceph-node-streaming-checkbox" data-node-id="${task.id}" ${task.streaming !== false ? 'checked' : ''} title="Enable streaming for this task" ${disabled}>
+                <label style="font-size: 0.8em; cursor: pointer;">Streaming</label>
+            </div>
+            <div class="polyceph-node-option" style="display: flex; align-items: center; gap: 4px;">
+                <input type="checkbox" class="polyceph-node-antiloop-checkbox" data-node-id="${task.id}" ${task.antiLoop !== false ? 'checked' : ''} title="Abort generation if the model starts looping" ${disabled}>
+                <label style="font-size: 0.8em; cursor: pointer;">Anti-Loop</label>
             </div>
         `;
     } else if (isCC) {

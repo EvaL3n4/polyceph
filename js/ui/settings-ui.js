@@ -53,7 +53,6 @@ function syncSettingsToUI() {
         if (container) container.innerHTML = renderNeoSlider(label, id, val, min, max, step);
     };
 
-    injectSlider('polyceph_tool_recursion_limit_container', 'Tool Recursion Limit', 'polyceph_tool_recursion_limit', settings.toolRecursionLimit || 5, 0, 20, 1);
     injectSlider('polyceph_delay_container', 'Request Delay (ms)', 'polyceph_delay', settings.delayMs || 0, 0, 5000, 50);
     injectSlider('polyceph_generation_timeout_container', 'Model Timeout (ms)', 'polyceph_generation_timeout', settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 60000, 0, 300000, 1000);
     injectSlider('polyceph_max_retries_container', 'Max Retries', 'polyceph_max_retries', settings.maxRetries !== undefined ? settings.maxRetries : 3, 0, 10, 1);
@@ -125,7 +124,6 @@ export async function addSettingsUI() {
     bindSlider('polyceph_generation_timeout', 'generationTimeoutMs');
     bindSlider('polyceph_max_retries', 'maxRetries');
     bindSlider('polyceph_retry_delay', 'retryDelayMs');
-    bindSlider('polyceph_tool_recursion_limit', 'toolRecursionLimit');
     bindSlider('polyceph_loop_threshold', 'loopDetectionThreshold');
 
     // Global settings toggles
@@ -305,4 +303,16 @@ export async function addSettingsUI() {
         toastr.success(`Found ${availableProfiles.length} profiles, ${totalPresets} presets.`, 'Polyceph');
         updateUI();
     });
+
+    // Listen for SillyTavern settings changes to update our UI warnings (e.g. Function Calling disabled)
+    const context = SillyTavern.getContext();
+    if (context.eventSource && context.eventTypes) {
+        context.eventSource.on(context.eventTypes.CHAT_COMPLETION_SETTINGS_READY, () => {
+            logger.debug('ST Chat Completion settings ready, refreshing Polyceph UI...');
+            updateUI();
+        });
+        context.eventSource.on(context.eventTypes.SETTINGS_UPDATED, () => {
+            updateUI();
+        });
+    }
 }

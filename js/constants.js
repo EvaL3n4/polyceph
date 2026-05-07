@@ -1,6 +1,7 @@
 export const MODULE_NAME = 'polyceph';
 export const VERSION = '0.9.0';
 export const PIPELINE_DATA_VERSION = '1.0.0';
+export const DEFAULT_TOOL_RECURSION_LIMIT = 5; //fallback
 
 export const defaultSettings = {
     delayMs: 250,
@@ -8,7 +9,6 @@ export const defaultSettings = {
     maxRetries: 3,
     retryDelayMs: 2000,
     loopDetectionThreshold: 3,
-    toolRecursionLimit: 5,
     activePipelineId: 'default',
     interceptSend: true,
     enterBehavior: 'all',

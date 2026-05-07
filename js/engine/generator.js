@@ -1,4 +1,5 @@
 import { logger } from '../logger.js';
+import { DEFAULT_TOOL_RECURSION_LIMIT } from '../constants.js';
 import { settings, getCapturedPresetName } from '../state.js';
 import { waitForApiReady } from '../utils.js';
 import { getMaxContextTokens, getMaxResponseTokens, countTokens, getActiveApi } from '../compat-shared.js';
@@ -82,8 +83,17 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
             logger.error('Failed to load SillyTavern ToolManager:', e);
         }
 
+        const stCCSettings = context.chatCompletionSettings || {};
+        const stRecurseLimit = stCCSettings.tool_call_recurse_limit;
+        const interleavedThinking = stCCSettings.interleaved_thinking;
+        
+        if (interleavedThinking !== undefined) {
+            logger.debug(`Interleaved Thinking status in current preset: ${interleavedThinking}`);
+        }
+
         let depth = 0;
-        const maxDepth = settings.toolRecursionLimit !== undefined ? settings.toolRecursionLimit : 5;
+        // Priority: 1. ST Preset Limit, 2. Existing Polyceph Setting (legacy), 3. Constant Fallback
+        const maxDepth = stRecurseLimit !== undefined ? Number(stRecurseLimit) : (settings.toolRecursionLimit !== undefined ? settings.toolRecursionLimit : DEFAULT_TOOL_RECURSION_LIMIT);
         let finalResponse = "";
         let anyToolError = false;
 
