@@ -85,11 +85,9 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
 
         const stCCSettings = context.chatCompletionSettings || {};
         const stRecurseLimit = stCCSettings.tool_call_recurse_limit;
-        const interleavedThinking = stCCSettings.interleaved_thinking;
+        const toolReasoningMode = stCCSettings.tool_reasoning_mode || 'disabled';
         
-        if (interleavedThinking !== undefined) {
-            logger.debug(`Interleaved Thinking status in current preset: ${interleavedThinking}`);
-        }
+        logger.debug(`Tool Reasoning Mode (Interleaved Thinking) in current preset: ${toolReasoningMode}`);
 
         let depth = 0;
         // Priority: 1. ST Preset Limit, 2. Existing Polyceph Setting (legacy), 3. Constant Fallback
@@ -98,6 +96,9 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
         let anyToolError = false;
 
         while (depth < maxDepth) {
+            depth++;
+            logger.info(`Starting tool recursion depth ${depth}/${maxDepth}`);
+
             if (signal && signal.aborted) throw new Error('Aborted');
 
             let tools = null;
@@ -235,12 +236,22 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
             if (toolCalls && toolCalls.length > 0 && ToolManager) {
                 logger.debug(`Tool calls detected (depth ${depth}):`, toolCalls);
 
-                // 1. Add assistant message with tool calls to history
-                messages.push({
+                // 1. Add assistant message with tool calls and reasoning to history
+                const assistantMessage = responseData?.choices?.[0]?.message;
+                const assistantHistoryItem = {
                     role: 'assistant',
-                    content: responseData?.choices?.[0]?.message?.content || '',
+                    content: assistantMessage?.content || '',
                     tool_calls: toolCalls
-                });
+                };
+
+                // Only include reasoning metadata if interleaved thinking is enabled
+                if (toolReasoningMode !== 'disabled') {
+                    assistantHistoryItem.reasoning_content = assistantMessage?.reasoning_content || assistantMessage?.reasoning || '';
+                    assistantHistoryItem.signature = assistantMessage?.signature || '';
+                    assistantHistoryItem.toolSignatures = assistantMessage?.toolSignatures || {};
+                }
+
+                messages.push(assistantHistoryItem);
 
                 // 2. Execute tools in parallel
                 const { results, hasErrors } = await executeToolCallsParallel(ToolManager, toolCalls);

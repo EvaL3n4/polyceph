@@ -293,15 +293,51 @@ export async function generateViaCCStreaming(messages, signal, onChunk, tools = 
             const { done, value } = await reader.read();
             if (done) break;
 
-            const parsed = getStreamingReply(value, state);
-            if (parsed) {
-                text += parsed;
-                if (onChunk) onChunk({ text, toolCalls: state.toolCalls || [], done: false });
+            if (value.event === 'error') {
+                logger.error('SSE Error:', value.data);
+                continue;
+            }
+
+            if (value.data === '[DONE]') break;
+
+            let parsed;
+            try {
+                parsed = JSON.parse(value.data);
+            } catch (e) {
+                logger.warn('Failed to parse SSE data:', value.data);
+                continue;
+            }
+
+            const delta = getStreamingReply(parsed, state);
+            if (delta) {
+                text += delta;
+                if (onChunk) onChunk({ 
+                    text, 
+                    reasoning: state.reasoning,
+                    toolCalls: state.toolCalls || [], 
+                    done: false 
+                });
             }
         }
 
-        if (onChunk) onChunk({ text, toolCalls: state.toolCalls || [], done: true });
-        return { choices: [{ message: { content: text, tool_calls: state.toolCalls } }] };
+        if (onChunk) onChunk({ 
+            text, 
+            reasoning: state.reasoning,
+            toolCalls: state.toolCalls || [], 
+            done: true 
+        });
+
+        return { 
+            choices: [{ 
+                message: { 
+                    content: text, 
+                    reasoning_content: state.reasoning,
+                    signature: state.signature,
+                    toolSignatures: state.toolSignatures,
+                    tool_calls: state.toolCalls 
+                } 
+            }] 
+        };
     } finally {
         if (context.eventSource && context.eventTypes?.GENERATION_STOPPED) {
             context.eventSource.removeListener(context.eventTypes.GENERATION_STOPPED, abortHook);
