@@ -171,14 +171,25 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                 const { parsedResult, taskApi, taskModel, profileDisplayName } = taskResult;
                 
                 if (parsedResult) {
-                    const { cleanOutput, persistentOutput, thoughts, hiddenBackgrounds } = parsedResult;
+                    let { cleanOutput, persistentOutput, thoughts, hiddenBackgrounds } = parsedResult;
                     
+                    // Honor the "Return Empty" flag
+                    if (node.returnEmpty) {
+                        logger.debug(`Task ${node.id}: returnEmpty is true. Silencing output.`);
+                        cleanOutput = '';
+                    }
+
                     // Store in vault
                     contextVault[`${step.id}_task_${taskResult.taskIdIndx}`] = cleanOutput;
                     contextVault[`${step.id}_target_${taskResult.taskIdIndx}`] = cleanOutput; // Legacy support
                     contextVault[`s${stepIdx}k${taskResult.taskIdIndx}`] = cleanOutput;
                     contextVault[`s${stepIdx}t${taskResult.taskIdIndx}`] = cleanOutput; // Legacy support
-                    if (node.label) contextVault[node.label.trim()] = cleanOutput;
+                    
+                    if (node.label && node.label.trim()) {
+                        const labelKey = node.label.trim();
+                        contextVault[labelKey] = cleanOutput;
+                        logger.debug(`Stored result for label "${labelKey}":`, cleanOutput);
+                    }
 
                     // Prepare display result
                     if (node.profile === 'none' || node.isCharacter) {

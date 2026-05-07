@@ -17,11 +17,11 @@ import { logger } from './js/logger.js';
  */
 export async function handlePolycephSend(e) {
     if (settings.activePipelineId === 'none') return;
-    logger.debug('Polyceph send button clicked.');
+    logger.info('Polyceph send button clicked.');
     if (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        if (typeof e.stopPropagation === 'function') e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
     }
     return await processSendAction();
 }
@@ -104,10 +104,17 @@ async function processSendAction() {
     const textarea = document.getElementById('send_textarea');
     const text = textarea ? textarea.value.trim() : '';
 
+    const lastMsg = context.chat[context.chat.length - 1];
+    const isRepeatOfLast = lastMsg && lastMsg.is_user && lastMsg.mes === text;
+
+    logger.info(`processSendAction: text_length=${text.length}, is_repeat=${isRepeatOfLast}`);
+    if (text.length > 0) {
+        logger.info(`processSendAction: text_preview="${text.substring(0, 50)}..."`);
+    }
+
     if (!text) {
-        const lastMsg = context.chat[context.chat.length - 1];
         if (lastMsg && lastMsg.is_user && !lastMsg.extra?.polyceph_typing) {
-            logger.info('Empty input detected. Re-triggering pipeline.');
+            logger.info('Empty input detected. Re-triggering pipeline with last message.', { lastMes: lastMsg.mes?.substring(0, 30) });
             if (!lastMsg.extra) lastMsg.extra = {};
             lastMsg.extra.polyceph_typing = true;
             lastMsg.extra.polyceph_active_tasks = [];
@@ -214,6 +221,16 @@ function setupIntercepts() {
         };
         rightForm.addEventListener('click', handleSendEvent, true);
         rightForm.addEventListener('mousedown', handleSendEvent, true);
+        
+        // Block native form submission
+        rightForm.addEventListener('submit', (e) => {
+            if (settings.activePipelineId !== 'none' && settings.interceptSend !== false) {
+                logger.debug('Intercepted native form submit.');
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+            }
+        }, true);
 
         const observer = new MutationObserver(() => {
             if (!document.getElementById('polyceph-chat-pipeline-container')) {
@@ -224,7 +241,7 @@ function setupIntercepts() {
     }
 
     if (textArea) textArea.addEventListener('keydown', (e) => {
-        if (settings.enterBehavior !== 'none') {
+        if (settings.enterBehavior !== 'none' && e.key === 'Enter' && !e.shiftKey) {
             interceptSend(e);
         }
     }, true);

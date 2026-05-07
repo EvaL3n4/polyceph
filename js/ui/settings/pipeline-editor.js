@@ -37,8 +37,9 @@ function getPresetOptionsHTML(profileId, currentPreset) {
  * Renders the HTML for a single task node.
  */
 export function renderTask(stepId, task, isLocked = false) {
-    const profileFound = task.profile === 'none' || availableProfiles.some(p => p.id === task.profile);
-    let profileOptions = `<option value="none" ${task.profile === 'none' ? 'selected' : ''}>(Template Only - No LLM)</option>`;
+    const profileId = task.profile || 'none';
+    const profileFound = profileId === 'none' || availableProfiles.some(p => p.id === profileId);
+    let profileOptions = `<option value="none" ${profileId === 'none' ? 'selected' : ''}>(Template Only - No LLM)</option>`;
 
     if (!profileFound && task.profile) {
         profileOptions += `<option value="${task.profile}" selected style="color: var(--red); font-weight: bold;">⚠️ ${task.profile} (Missing Profile)</option>`;
@@ -66,16 +67,21 @@ export function renderTask(stepId, task, isLocked = false) {
                 </div>
                 <div style="display: flex; align-items: center; gap: 15px; padding-left: 2px; flex-wrap: wrap;">
                     <div style="display: flex; align-items: center; gap: 4px;">
-                        <input type="checkbox" class="polyceph-node-persist-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.persist ? 'checked' : ''} title="Display this task result as Thinking" ${disabled}>
-                        <label style="font-size: 0.8em; cursor: pointer;" title="Display this task result as Thinking">Thinking</label>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 4px;">
-                        <input type="checkbox" class="polyceph-node-character-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.isCharacter ? 'checked' : ''} title="If persisted, use character name/avatar" ${disabled}>
-                        <label style="font-size: 0.8em; cursor: pointer;" title="If persisted, use character name/avatar">Character Message</label>
+                        <label style="font-size: 0.8em;">Output:</label>
+                        <select class="polyceph-node-output-type text_pole" data-step-id="${stepId}" data-node-id="${task.id}" style="font-size: 0.85em; padding: 1px 3px;" ${disabled}>
+                            <option value="internal" ${task.outputType === 'internal' ? 'selected' : ''}>Internal (Hidden)</option>
+                            <option value="thinking" ${task.outputType === 'thinking' ? 'selected' : ''}>Reasoning (Thinking)</option>
+                            <option value="character" ${task.outputType === 'character' ? 'selected' : ''}>Character Message</option>
+                            <option value="tool" ${task.outputType === 'tool' ? 'selected' : ''}>Tool Processor</option>
+                        </select>
                     </div>
                     <div style="display: flex; align-items: center; gap: 4px;">
                         <input type="checkbox" class="polyceph-node-antiloop-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.antiLoop !== false ? 'checked' : ''} title="Abort generation if the model starts looping" ${disabled}>
                         <label style="font-size: 0.8em; cursor: pointer;" title="Abort generation if the model starts looping">Anti-Loop</label>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        <input type="checkbox" class="polyceph-node-return-empty-checkbox" data-step-id="${stepId}" data-node-id="${task.id}" ${task.returnEmpty ? 'checked' : ''} title="If checked, this task will return an empty string regardless of LLM output. Useful for background tool processors." ${disabled}>
+                        <label style="font-size: 0.8em; cursor: pointer;" title="If checked, this task will return an empty string regardless of LLM output.">Return Empty</label>
                     </div>
                 </div>
             </div>
@@ -294,7 +300,18 @@ export function bindStepEvents() {
             const stepId = e.currentTarget.getAttribute('data-step');
             const step = activePipeline.steps.find(s => s.id === stepId);
             if (step) {
-                step.tasks.push({ id: 'task_' + generateId(), profile: '', preset: 'Current', template: '{{user_input}}' });
+                step.tasks.push({ 
+                    id: 'task_' + generateId(), 
+                    profile: 'none', 
+                    preset: 'Current', 
+                    template: '{{user_input}}',
+                    outputType: 'internal',
+                    persist: false,
+                    isCharacter: false,
+                    stripThink: true,
+                    antiLoop: true,
+                    allowTools: false
+                });
                 saveSettings();
                 updatePipelineEditorUI();
             }
@@ -322,24 +339,32 @@ export function bindStepEvents() {
         });
     });
 
-    // Checkboxes
-    container.querySelectorAll('.polyceph-node-persist-checkbox').forEach(cb => {
-        cb.addEventListener('change', (e) => {
+    // Output Type Select
+    container.querySelectorAll('.polyceph-node-output-type').forEach(select => {
+        select.addEventListener('change', (e) => {
             const nodeId = e.target.getAttribute('data-node-id');
+            const val = e.target.value;
             for (const step of activePipeline.steps) {
                 const task = step.tasks.find(n => n.id === nodeId);
-                if (task) { task.persist = e.target.checked; break; }
+                if (task) {
+                    task.outputType = val;
+                    // Keep legacy flags in sync for engine compatibility
+                    task.persist = (val === 'thinking' || val === 'character');
+                    task.isCharacter = (val === 'character');
+                    task.allowTools = (val === 'tool'); // Tools only enabled for Tool Processor mode
+                    break;
+                }
             }
             saveSettings();
         });
     });
 
-    container.querySelectorAll('.polyceph-node-character-checkbox').forEach(cb => {
+    container.querySelectorAll('.polyceph-node-return-empty-checkbox').forEach(cb => {
         cb.addEventListener('change', (e) => {
             const nodeId = e.target.getAttribute('data-node-id');
             for (const step of activePipeline.steps) {
                 const task = step.tasks.find(n => n.id === nodeId);
-                if (task) { task.isCharacter = e.target.checked; break; }
+                if (task) { task.returnEmpty = e.target.checked; break; }
             }
             saveSettings();
         });

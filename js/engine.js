@@ -2,7 +2,7 @@ import { MODULE_NAME, generationMutexEvents } from './constants.js';
 import { settings, switchProfile, getActivePipeline, availableProfiles, saveSettings, clearProfileState } from './state.js';
 import { generateId, waitForApiReady } from './utils.js';
 import { expandPrompt } from './macros/macros.js';
-import { getMaxContextTokens, getMaxResponseTokens, countTokens, generateViaApi, postMessageToChat, ensureChatSaved, getWorldInfoForChat, getActiveCharacterInfo, getMainSystemPrompt } from './compat-shared.js';
+import { getMaxContextTokens, getMaxResponseTokens, countTokens, postMessageToChat, ensureChatSaved, getWorldInfoForChat, getActiveCharacterInfo, getMainSystemPrompt } from './compat-shared.js';
 import { clearPresetState, applyPreset, getCurrentPresetName } from './compat-presets.js';
 import { logger } from './logger.js';
 

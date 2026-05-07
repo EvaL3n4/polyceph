@@ -43,7 +43,7 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
 
     // 2. Resolve Profile & API Info
     const prof = availableProfiles.find(p => p.id === node.profile);
-    const profileDisplayName = prof ? prof.name : (node.profile || 'Default');
+    const profileDisplayName = node.profile === 'none' ? '(Template Only)' : (prof ? prof.name : (node.profile || 'Default'));
 
     let taskApi = '';
     let taskModel = '';
@@ -95,6 +95,8 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
             antiLoop: node.antiLoop !== false,
             loopThreshold: settings.loopDetectionThreshold || 3,
             onStream: null, // Can be set by orchestrator for character message streaming
+            outputType: node.outputType || 'internal',
+            allowTools: node.allowTools !== false,
         };
 
         // Allow orchestrator to inject a stream callback (for character message streaming)

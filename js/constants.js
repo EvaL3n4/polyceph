@@ -41,8 +41,10 @@ export const defaultSettings = {
                             template: '{{user_input}}',
                             persist: false,
                             isCharacter: false,
+                            outputType: 'internal',
                             stripThink: true,
-                            antiLoop: true
+                            antiLoop: true,
+                            allowTools: true
                         }
                     ]
                 }

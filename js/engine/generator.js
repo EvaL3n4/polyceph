@@ -1,9 +1,11 @@
 import { logger } from '../logger.js';
-import { settings } from '../state.js';
+import { settings, getCapturedPresetName } from '../state.js';
 import { waitForApiReady } from '../utils.js';
-import { getMaxContextTokens, getMaxResponseTokens, countTokens, generateViaApi, generateViaApiStreaming, isChatCompletionApi } from '../compat-shared.js';
+import { getMaxContextTokens, getMaxResponseTokens, countTokens, getActiveApi } from '../compat-shared.js';
+import { generateViaCC, generateViaCCStreaming, isChatCompletionApi } from '../compat-chat.js';
 import { parsePromptToMessages } from './parser.js';
 import { LoopDetector } from './loop-detector.js';
+import { extractToolCalls, executeToolCallsParallel } from './tool-handler.js';
 
 import { getToolCallingModule } from '../compat-st.js';
 
@@ -23,15 +25,25 @@ import { getToolCallingModule } from '../compat-st.js';
  * @returns {Promise<string>} The generated response text.
  */
 export async function generateQuietly(profileName, prompt, api = '', signal = null, options = {}) {
-    if (!profileName || profileName === 'none') return prompt;
+    if (!profileName || profileName === 'none') {
+        logger.debug('Template-only task detected (No LLM). Returning expanded template.');
+        return prompt;
+    }
 
     // Ensure API is ready and settled before starting generation
+    // We only wait if we are actually calling an LLM
     await waitForApiReady(3000);
 
     if (signal && signal.aborted) throw new Error('Aborted');
 
     // Resolve streaming options from settings + overrides
-    const useStreaming = options.streaming !== undefined ? options.streaming : (settings.enableStreaming !== false);
+    const outputType = options.outputType || 'internal';
+    const allowTools = options.allowTools !== false;
+    
+    // Force non-streaming for tool-heavy tasks per requirement
+    const forceNoStreaming = outputType === 'tool';
+    const useStreaming = !forceNoStreaming && (options.streaming !== undefined ? options.streaming : (settings.enableStreaming !== false));
+    
     const antiLoop = options.antiLoop !== undefined ? options.antiLoop : true;
     const loopThreshold = options.loopThreshold || settings.loopDetectionThreshold || 3;
     const onStream = options.onStream || null;
@@ -61,7 +73,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
         try {
             const tmModule = await getToolCallingModule();
             ToolManager = tmModule?.ToolManager;
-            if (!ToolManager) {
+            if (!ToolManager && allowTools) {
                 logger.warn('SillyTavern ToolManager not found. Tool calling features will be disabled for this generation.');
             }
         } catch (e) {
@@ -71,6 +83,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
         let depth = 0;
         const maxDepth = settings.toolRecursionLimit !== undefined ? settings.toolRecursionLimit : 5;
         let finalResponse = "";
+        let anyToolError = false;
 
         while (depth < maxDepth) {
             if (signal && signal.aborted) throw new Error('Aborted');
@@ -78,23 +91,52 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
             let tools = null;
             let tool_choice = null;
 
-            if (ToolManager && typeof ToolManager.isToolCallingSupported === 'function' && ToolManager.isToolCallingSupported()) {
-                tools = ToolManager.getFunctionTools();
-                tool_choice = (tools && tools.length > 0) ? 'auto' : null;
+            // Only request tools if allowed for this task
+            if (allowTools && ToolManager && typeof ToolManager.isToolCallingSupported === 'function' && ToolManager.isToolCallingSupported()) {
+                const isOaiCompatible = isChatCompletionApi(api);
+                
+                // Prepare metadata for event listeners
+                const generateData = {
+                    model: isOaiCompatible ? (context.chatCompletionSettings?.openai_model || '') : '',
+                    messages: messages,
+                    tools: null,
+                    tool_choice: null,
+                    temperature: context.chatCompletionSettings?.temp_openai,
+                    max_tokens: context.chatCompletionSettings?.openai_max_tokens || context.chatCompletionSettings?.max_tokens_openai,
+                };
 
-                if (tools && tools.length > 0 && context.eventSource && context.eventTypes?.CHAT_COMPLETION_SETTINGS_READY) {
-                    const generateData = {
-                        model: api === 'openai' ? (context.chatCompletionSettings?.openai_model || '') : '',
-                        messages: messages,
-                        tools: tools,
-                        tool_choice: tool_choice,
-                        // Passing additional settings to satisfy potential listeners (e.g. loggers/converters)
-                        temperature: context.chatCompletionSettings?.temp_openai,
-                        max_tokens: context.chatCompletionSettings?.openai_max_tokens || context.chatCompletionSettings?.max_tokens_openai,
-                    };
+                // Use native ST registration if available (most robust)
+                if (typeof ToolManager.registerFunctionToolsOpenAI === 'function') {
+                    await ToolManager.registerFunctionToolsOpenAI(generateData);
+                } else {
+                    // Fallback: Manual collection
+                    const availableTools = [];
+                    for (const tool of (ToolManager.tools || [])) {
+                        try {
+                            if (typeof tool.shouldRegister === 'function' ? await tool.shouldRegister() : true) {
+                                const toolDef = typeof tool.toFunctionOpenAI === 'function' ? tool.toFunctionOpenAI() : tool;
+                                if (toolDef) availableTools.push(toolDef);
+                            }
+                        } catch (e) {
+                            logger.warn('Failed to process tool definition:', tool, e);
+                        }
+                    }
+                    if (availableTools.length > 0) {
+                        generateData.tools = availableTools;
+                        generateData.tool_choice = 'auto';
+                    }
+                }
+
+                // Emit event to allow other extensions (like specialized tool managers) to modify
+                if (context.eventSource && context.eventTypes?.CHAT_COMPLETION_SETTINGS_READY) {
                     await context.eventSource.emit(context.eventTypes.CHAT_COMPLETION_SETTINGS_READY, generateData);
-                    tools = generateData.tools;
-                    tool_choice = generateData.tool_choice;
+                }
+
+                tools = generateData.tools;
+                tool_choice = generateData.tool_choice;
+
+                if (tools && tools.length > 0) {
+                    logger.debug('Tools to be sent:', JSON.stringify(tools, null, 2));
                 }
             }
 
@@ -107,7 +149,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
             }
 
             let responseData;
-            const timeoutMs = settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 120000;
+            const timeoutMs = settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 60000;
 
             if (canStream) {
                 // ========== STREAMING PATH ==========
@@ -130,7 +172,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                     }
                 };
 
-                const streamingPromise = generateViaApiStreaming(messages, signal, streamingChunkHandler, tools, tool_choice, api);
+                const streamingPromise = generateViaCCStreaming(messages, signal, streamingChunkHandler, tools, tool_choice, api);
 
                 // Build race array for timeout + abort
                 const raceArr = [streamingPromise];
@@ -156,19 +198,27 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                     responseData = streamResult;
                 }
             } else {
-                // ========== NON-STREAMING PATH (unchanged) ==========
+                // ========== NON-STREAMING PATH ==========
                 logger.debug(`Streaming disabled or unsupported for API: ${api}. Using non-streaming generation path.`);
                 responseData = await _generateNonStreaming(messages, tools, tool_choice, signal, timeoutMs);
             }
 
             if (!responseData) {
+                logger.warn(`Turn ${depth} returned no data.`);
                 finalResponse = "(Generation returned empty)";
                 break;
             }
 
+            logger.debug(`Turn ${depth} response:`, responseData);
+
             // Extract tool calls from response
-            // ST's generateRawData returns the raw API response
-            const toolCalls = responseData?.choices?.[0]?.message?.tool_calls || responseData?.tool_calls;
+            const toolCalls = extractToolCalls(responseData);
+
+            // Check for API-level errors in choices
+            if (responseData.choices?.[0]?.finish_reason === 'error') {
+                const errorDetail = responseData.choices[0].native_finish_reason || 'Unknown API Error';
+                throw new Error(`API returned an error: ${errorDetail}`);
+            }
 
             if (toolCalls && toolCalls.length > 0 && ToolManager) {
                 logger.debug(`Tool calls detected (depth ${depth}):`, toolCalls);
@@ -180,8 +230,9 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                     tool_calls: toolCalls
                 });
 
-                // 2. Execute tools
-                const results = await ToolManager.executeToolCalls(toolCalls);
+                // 2. Execute tools in parallel
+                const { results, hasErrors } = await executeToolCallsParallel(ToolManager, toolCalls);
+                if (hasErrors) anyToolError = true;
 
                 // 3. Add tool results to history
                 if (results && Array.isArray(results)) {
@@ -189,6 +240,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                 }
 
                 depth++;
+                logger.info(`Continuing generation loop: ${toolCalls.length} tool calls executed, Turn ${depth} follows.`);
                 continue; // Loop again with tool results
             }
 
@@ -198,7 +250,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                 const rawText = responseData.choices?.[0]?.message?.content || '';
                 if (typeof context.cleanUpMessage === 'function') {
                     finalResponse = context.cleanUpMessage({
-                        getMessage: rawText,
+                        getMessage: String(rawText),
                         isImpersonate: false,
                         isContinue: false,
                         displayIncompleteSentences: true,
@@ -207,23 +259,45 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                         trimWrongNames: true,
                     });
                 } else {
-                    finalResponse = rawText;
+                    finalResponse = String(rawText);
                 }
-            } else if (typeof context.extractMessageFromData === 'function' && typeof context.cleanUpMessage === 'function') {
-                const rawText = context.extractMessageFromData(responseData, api || context.main_api);
-                finalResponse = context.cleanUpMessage({
-                    getMessage: rawText,
-                    isImpersonate: false,
-                    isContinue: false,
-                    displayIncompleteSentences: true,
-                    includeUserPromptBias: false,
-                    trimNames: true,
-                    trimWrongNames: true,
-                });
             } else {
-                finalResponse = responseData?.choices?.[0]?.message?.content || responseData?.choices?.[0]?.text || String(responseData);
+                // Non-streaming path: extract message from data
+                let rawText = '';
+                if (typeof context.extractMessageFromData === 'function') {
+                    rawText = context.extractMessageFromData(responseData, api || context.main_api);
+                }
+                
+                // Fallback extraction if extractMessageFromData fails or returns something non-string
+                if (typeof rawText !== 'string' || !rawText) {
+                    rawText = responseData?.choices?.[0]?.message?.content || responseData?.choices?.[0]?.text || '';
+                }
+
+                if (typeof context.cleanUpMessage === 'function') {
+                    finalResponse = context.cleanUpMessage({
+                        getMessage: String(rawText),
+                        isImpersonate: false,
+                        isContinue: false,
+                        displayIncompleteSentences: true,
+                        includeUserPromptBias: false,
+                        trimNames: true,
+                        trimWrongNames: true,
+                    });
+                } else {
+                    finalResponse = String(rawText);
+                }
             }
             break;
+        }
+
+        logger.debug('Generation loop finished. Final Response length:', finalResponse?.length || 0);
+
+        // --- Success Enforcement ---
+        // If tools were enabled and any failed, and we are in a strict mode, abort.
+        // For now, we'll log it. If outputType is 'tool', success is critical.
+        if (anyToolError && outputType === 'tool') {
+            logger.warn('Tool execution encountered errors in a Tool Processor task.');
+            return "(Error during tool execution)";
         }
 
         if (finalResponse) return finalResponse;
@@ -254,7 +328,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
  * Extracted to avoid code duplication between the streaming fallback and non-streaming branch.
  */
 async function _generateNonStreaming(messages, tools, tool_choice, signal, timeoutMs) {
-    const apiPromise = generateViaApi(messages, tools, tool_choice);
+    const apiPromise = generateViaCC(messages, tools, tool_choice);
 
     const abortPromise = signal ? new Promise((_, reject) => {
         if (signal.aborted) reject(new Error('Aborted'));

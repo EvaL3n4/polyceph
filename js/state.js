@@ -1,6 +1,7 @@
 import { MODULE_NAME, defaultSettings } from './constants.js';
 import { waitForApiReady, generateId } from './utils.js';
-import { capturePresetState, restorePresetState, clearPresetState, getAvailablePresets } from './compat-presets.js';
+import { capturePresetState, restorePresetState, clearPresetState, getAvailablePresets, getCapturedPresetName } from './compat-presets.js';
+export { capturePresetState, restorePresetState, clearPresetState, getAvailablePresets, getCapturedPresetName };
 import { setLogLevel, logger } from './logger.js';
 
 export let settings = { ...defaultSettings };
@@ -373,11 +374,19 @@ export function loadSettings() {
 
                 // Ensure all tasks have new properties
                 s.tasks.forEach(n => {
+                    // Migration: persist/isCharacter -> outputType
+                    if (n.outputType === undefined) {
+                        if (n.isCharacter) n.outputType = 'character';
+                        else if (n.persist) n.outputType = 'thinking';
+                        else n.outputType = 'internal';
+                    }
+
                     if (n.persist === undefined) n.persist = false;
                     if (n.isCharacter === undefined) n.isCharacter = false;
                     if (n.stripThink === undefined) n.stripThink = false;
                     if (n.preset === undefined) n.preset = 'Current';
                     if (n.antiLoop === undefined) n.antiLoop = true;
+                    if (n.allowTools === undefined) n.allowTools = true;
                 });
             });
         });
