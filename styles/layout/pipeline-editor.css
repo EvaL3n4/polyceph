@@ -121,6 +121,7 @@
     font-family: monospace;
     font-size: 0.85em;
     line-height: 1.4;
+    max-height: 64dvh;
 }
 
 .polyceph-add-node-btn,
@@ -164,4 +165,4 @@
 
 .polyceph-locked .editor_maximize {
     display: none !important;
-}
+}
