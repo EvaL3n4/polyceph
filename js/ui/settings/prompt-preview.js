@@ -7,10 +7,14 @@ import { initSearchListeners } from './search-manager.js';
 /**
  * Generates and displays a modal with the assembled prompts for each task in the active pipeline.
  */
-export async function showPromptPreview() {
+export async function showPromptPreview(initialPageIndex = 0) {
     // ... (rest of the setup code remains the same)
     const pipeline = getActivePipeline();
     const stContext = SillyTavern.getContext();
+
+    // Ensure initialPageIndex is within bounds
+    const totalTasks = pipeline.steps.reduce((acc, s) => acc + s.tasks.length, 0);
+    if (initialPageIndex >= totalTasks) initialPageIndex = 0;
 
     // Use the current chat state, excluding typing indicators and system commands
     const cleanChat = stContext.chat.filter(m => m && !m.extra?.polyceph_typing && !m.is_system && !m.mes?.trim().startsWith('/'));
@@ -85,7 +89,8 @@ export async function showPromptPreview() {
 
     // 3. Render HTML
     const html = results.map((res, idx) => `
-        <div class="polyceph-preview-task-container polyceph-preview-page ${idx === 0 ? 'active' : ''}" data-page="${idx}">
+        <div class="polyceph-preview-task-container polyceph-preview-page ${idx === initialPageIndex ? 'active' : ''}" data-page="${idx}">
+
             <div class="polyceph-preview-task-header">
                 <span>${res.title}</span>
                 <div style="display: flex; gap: 15px; font-size: 0.8em; font-weight: normal;">
@@ -105,7 +110,8 @@ export async function showPromptPreview() {
     const pagination = `
         <div class="polyceph-preview-pagination">
             ${results.map((_, idx) => `
-                <button class="polyceph-page-btn ${idx === 0 ? 'active' : ''}" data-page="${idx}">${idx + 1}</button>
+                <button class="polyceph-page-btn ${idx === initialPageIndex ? 'active' : ''}" data-page="${idx}">${idx + 1}</button>
+
             `).join('')}
         </div>
     `;

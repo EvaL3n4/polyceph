@@ -5,9 +5,6 @@
             <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
         </div>
         <div class="inline-drawer-content">
-            <div class="polyceph-header">
-                Reasoning pipeline options:
-            </div>
 
             <div class="polyceph-settings-section">
                 <div class="polyceph-settings-section-header" id="polyceph_ui_settings_toggle">
@@ -15,36 +12,42 @@
                     <i class="fa-solid fa-chevron-down"></i>
                 </div>
                 <div class="polyceph-settings-section-content" id="polyceph_ui_settings_content">
-                    <div style="display: flex; align-items: center; gap: 8px;">
+                    <div class="polyceph-settings-row">
                         <input type="checkbox" id="polyceph_show_selector_checkbox">
-                        <label for="polyceph_show_selector_checkbox" style="cursor: pointer;">Show Pipeline Selector in
+                        <label for="polyceph_show_selector_checkbox" class="polyceph-pointer">Show Pipeline Selector in
                             Input Bar</label>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
+
+                    <div class="polyceph-settings-row">
                         <input type="checkbox" id="polyceph_show_icon_checkbox">
-                        <label for="polyceph_show_icon_checkbox" style="cursor: pointer;">Show Pipeline Selector
+                        <label for="polyceph_show_icon_checkbox" class="polyceph-pointer">Show Pipeline Selector
                             Icon</label>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
+
+                    <div class="polyceph-settings-row">
                         <input type="checkbox" id="polyceph_compact_selector_checkbox">
-                        <label for="polyceph_compact_selector_checkbox" style="cursor: pointer;">Compact Pipeline
+                        <label for="polyceph_compact_selector_checkbox" class="polyceph-pointer">Compact Pipeline
                             Selector</label>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
+
+                    <div class="polyceph-settings-row">
                         <input type="checkbox" id="polyceph_show_reasoning_checkbox">
-                        <label for="polyceph_show_reasoning_checkbox" style="cursor: pointer;">Show Polyceph Reasoning
+                        <label for="polyceph_show_reasoning_checkbox" class="polyceph-pointer">Show Polyceph Reasoning
                             Blocks</label>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
+
+                    <div class="polyceph-settings-row">
                         <input type="checkbox" id="polyceph_sticky_typing_checkbox">
-                        <label for="polyceph_sticky_typing_checkbox" style="cursor: pointer;">Show Typing Indicator at
+                        <label for="polyceph_sticky_typing_checkbox" class="polyceph-pointer">Show Typing Indicator at
                             Top of Chat (Sticky)</label>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
+
+                    <div class="polyceph-settings-row">
                         <input type="checkbox" id="polyceph_show_hidden_checkbox">
-                        <label for="polyceph_show_hidden_checkbox" style="cursor: pointer;">Show Hidden Background
+                        <label for="polyceph_show_hidden_checkbox" class="polyceph-pointer">Show Hidden Background
                             Messages</label>
                     </div>
+
                 </div>
             </div>
 
@@ -54,37 +57,41 @@
                     <i class="fa-solid fa-chevron-down"></i>
                 </div>
                 <div class="polyceph-settings-section-content" id="polyceph_behavior_settings_content">
-                    <div style="display: flex; align-items: center; gap: 8px;">
+                    <div class="polyceph-settings-row">
                         <input type="checkbox" id="polyceph_restore_after_run_checkbox">
-                        <label for="polyceph_restore_after_run_checkbox" style="cursor: pointer;">Restore Profile &
+                        <label for="polyceph_restore_after_run_checkbox" class="polyceph-pointer">Restore Profile &
                             Preset after Run</label>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
+
+                    <div class="polyceph-settings-row">
                         <input type="checkbox" id="polyceph_intercept_send_checkbox">
-                        <label for="polyceph_intercept_send_checkbox" style="cursor: pointer;">Intercept Send Button
+                        <label for="polyceph_intercept_send_checkbox" class="polyceph-pointer">Intercept Send Button
                             (Single Send Button)</label>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
+
+                    <div class="polyceph-settings-row">
                         <input type="checkbox" id="polyceph_emulate_events_checkbox">
-                        <label for="polyceph_emulate_events_checkbox" style="cursor: pointer;"
+                        <label for="polyceph_emulate_events_checkbox" class="polyceph-pointer"
                             title="Allows third-party extensions (like Tracker Enhanced) to interact with Polyceph runs.">Emulate
                             Core Generation Events (Ext. Compat)</label>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 8px; margin-top: 5px;">
-                        <b style="min-width: 120px; font-size: 0.9em; opacity: 0.8;"
+
+                    <div class="polyceph-settings-row mt-1">
+                        <b class="polyceph-settings-label"
                             title="Capture Enter key behavior. PC: Only on desktop. Mobile: Only on touch. All: Everywhere. None: Disable Enter capture.">Enter
                             Key</b>
-                        <select id="polyceph_enter_behavior_selector" class="text_pole" style="flex: 1;">
+                        <select id="polyceph_enter_behavior_selector" class="text_pole polyceph-flex-1">
+
                             <option value="pc">PC Capture</option>
                             <option value="mobile">Mobile Capture</option>
                             <option value="all">All Capture</option>
                             <option value="none">No Capture</option>
                         </select>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 8px; margin-top: 5px;">
-                        <b style="min-width: 120px; font-size: 0.9em; opacity: 0.8;"
-                            title="Control the verbosity of console logs.">Log Level</b>
-                        <select id="polyceph_log_level_selector" class="text_pole" style="flex: 1;">
+                    <div class="polyceph-settings-row mt-1">
+                        <b class="polyceph-settings-label" title="Control the verbosity of console logs.">Log Level</b>
+                        <select id="polyceph_log_level_selector" class="text_pole polyceph-flex-1">
+
                             <option value="0">None</option>
                             <option value="1">Error</option>
                             <option value="2">Warn</option>
@@ -95,36 +102,89 @@
                 </div>
             </div>
 
-            <div style="margin-bottom: 20px;">
-                <label for="polyceph_prompt_input"
-                    style="font-weight: bold; display: block; margin-bottom: 5px;">Polyceph Prompt</label>
-                <div class="polyceph-textarea-container">
-                    <textarea id="polyceph_prompt_input" class="text_pole"
-                        style="width: 100%; min-height: 80px; font-family: monospace;"
-                        placeholder="Global context or instructions..."></textarea>
-                    <i class="editor_maximize fa-solid fa-maximize right_menu_button sttt--enabled interactable"
-                        data-for="polyceph_prompt_input" data-i18n="[title]Expand the editor"
-                        data-sttt--title="Expand the editor" tabindex="0" role="button"></i>
+            <div class="polyceph-divider-container">
+                <div class="polyceph-divider-line"></div>
+                <small class="polyceph-section-heading">Pipelines</small>
+            </div>
+
+            <div class="polyceph-settings-section">
+                <div class="polyceph-settings-section-header" id="polyceph_pipeline_settings_toggle">
+                    <span>Shared Pipeline Settings</span>
+                    <i class="fa-solid fa-chevron-down"></i>
+                </div>
+                <div class="polyceph-settings-section-content" id="polyceph_pipeline_settings_content">
+                    <div class="polyceph-field-container">
+                        <label for="polyceph_prompt_input" class="polyceph-field-label">Polyceph Prompt</label>
+                        <div class="polyceph-textarea-container">
+                            <textarea id="polyceph_prompt_input" class="text_pole polyceph-prompt-textarea"
+                                placeholder="Global context or instructions..."></textarea>
+                            <i class="editor_maximize fa-solid fa-maximize right_menu_button sttt--enabled interactable"
+                                data-for="polyceph_prompt_input" data-i18n="[title]Expand the editor"
+                                data-sttt--title="Expand the editor" tabindex="0" role="button"></i>
+                        </div>
+                    </div>
+
+                    <div class="polyceph-slider-row">
+                        <div id="polyceph_delay_container" class="polyceph-slider-item"></div>
+                        <div id="polyceph_generation_timeout_container" class="polyceph-slider-item"></div>
+                    </div>
+
+                    <div class="polyceph-slider-row">
+                        <div id="polyceph_max_retries_container" class="polyceph-slider-item"></div>
+                        <div id="polyceph_retry_delay_container" class="polyceph-slider-item"></div>
+                    </div>
+
+                    <div class="polyceph-slider-row polyceph-align-center">
+                        <div id="polyceph_loop_threshold_container" class="polyceph-slider-item"></div>
+                    </div>
                 </div>
             </div>
 
-            <div style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 15px;">
-                <div id="polyceph_delay_container" style="flex: 1; min-width: 200px;"></div>
-                <div id="polyceph_generation_timeout_container" style="flex: 1; min-width: 200px;"></div>
-            </div>
+            <div class="polyceph-step-card polyceph-pipeline-manager mt-1">
+                <div class="polyceph-step-header polyceph-flex-column polyceph-border-none polyceph-gap-2">
+                    <!-- Row 1: Management Actions -->
+                    <div class="polyceph-management-actions">
+                        <div class="polyceph-management-row">
 
-            <div style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 15px;">
-                <div id="polyceph_max_retries_container" style="flex: 1; min-width: 200px;"></div>
-                <div id="polyceph_retry_delay_container" style="flex: 1; min-width: 200px;"></div>
-            </div>
+                            <i id="polyceph_new_pipeline_btn" class="fa-solid fa-plus polyceph-pointer"
+                                title="Create New Pipeline"></i>
+                            <i id="polyceph_duplicate_pipeline_btn" class="fa-solid fa-copy polyceph-pointer"
+                                title="Duplicate Current Pipeline"></i>
+                            <i id="polyceph_import_pipeline_btn" class="fa-solid fa-file-import polyceph-pointer"
+                                title="Import Pipeline (JSON)"></i>
+                            <i id="polyceph_export_pipeline_btn" class="fa-solid fa-file-export polyceph-pointer"
+                                title="Export Pipeline (JSON)"></i>
 
-            <div style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 15px; align-items: center;">
-                <div id="polyceph_loop_threshold_container" style="flex: 1; min-width: 200px;"></div>
-            </div>
+                        </div>
+                        <i id="polyceph_lock_pipeline_btn" class="fa-solid fa-lock-open polyceph-pointer"
+                            title="Lock/Unlock Pipeline Editing"></i>
+                        <div class="polyceph-management-row">
 
-            <button id="polyceph_refresh_profiles" class="menu_button" style="margin-bottom: 15px;">
-                <i class="fa-solid fa-refresh"></i> Refresh Profiles
-            </button>
+                            <i id="polyceph_move_up_pipeline_btn" class="fa-solid fa-chevron-up polyceph-pointer"
+                                title="Move Up in List"></i>
+                            <i id="polyceph_move_down_pipeline_btn" class="fa-solid fa-chevron-down polyceph-pointer"
+                                title="Move Down in List"></i>
+                        </div>
+
+                        <i id="polyceph_del_pipeline_btn" class="fa-solid fa-trash polyceph-pointer polyceph-text-red"
+                            title="Delete Current Pipeline"></i>
+                    </div>
+
+                    <!-- Row 2: Pipeline Selection -->
+                    <div class="polyceph-management-row polyceph-w-100">
+                        <b class="polyceph-management-label">Active Pipeline</b>
+                        <select id="polyceph_pipeline_selector" class="text_pole polyceph-flex-1"></select>
+                    </div>
+
+                    <!-- Row 3: Pipeline Identity -->
+                    <div class="polyceph-management-row polyceph-w-100">
+                        <b class="polyceph-management-label">Pipeline Name</b>
+                        <input type="text" id="polyceph_active_pipeline_name"
+                            class="text_pole polyceph-flex-1 polyceph-input-compact" placeholder="Pipeline Name..." />
+                    </div>
+
+                </div>
+            </div>
 
             <div class="polyceph-placeholders-container">
                 <div class="polyceph-placeholders-header" id="polyceph_placeholders_toggle">
@@ -132,7 +192,8 @@
                     <i class="fa-solid fa-chevron-down"></i>
                 </div>
                 <div class="polyceph-placeholders-content" id="polyceph_placeholders_content">
-                    <ul style="margin: 0; padding-left: 20px;">
+                    <ul class="polyceph-info-list">
+
                         <li><code>{{user_input}}</code> - Original text from the send box.</li>
                         <li><code>{{chat_history}}</code> - All chat messages - see below for advanced use.</li>
                         <li><code>{{s1}}</code>, <code>{{s2}}</code> - Combined output of all tasks in a previous Step.
@@ -153,11 +214,12 @@
                         <li><code>{{cc_post_history_instructions}}</code> - CC Post-History instructions.</li>
                         <li><code>{{cc_enhance_definitions}}</code> - CC Enhance Definitions prompt.</li>
                     </ul>
-                    <div style="margin-top: 10px; border-top: 1px solid var(--white10a); padding-top: 10px;">
-                        <b style="font-size: 1em; opacity: 0.8;">Advanced: Chat History</b>
-                        <div style="font-size: 1em; opacity: 0.9; margin-top: 5px;">
+                    <div class="polyceph-info-section">
+                        <b class="polyceph-info-header">Advanced: Chat History</b>
+                        <div class="polyceph-info-text">
                             Format: <code>{{chat_history|last:10|bg_last:2|live:true|no_extensions:true}}</code>
-                            <ul style="margin: 5px 0 0 0; padding-left: 15px;">
+                            <ul class="polyceph-info-sublist">
+
                                 <li><code>last:N</code> - Limit total messages to N.</li>
                                 <li><code>bg_last:N</code> - Keep only the last N background messages (interspersed).
                                 </li>
@@ -167,9 +229,10 @@
                             </ul>
                         </div>
                     </div>
-                    <div style="margin-top: 10px; border-top: 1px solid var(--white10a); padding-top: 10px;">
-                        <b style="font-size: 1em; opacity: 0.8;">Post-Processing Tags (in Model Output)</b>
-                        <ul style="margin: 5px 0 0 0; padding-left: 20px; font-size: 0.9em; opacity: 0.9;">
+                    <div class="polyceph-info-section">
+                        <b class="polyceph-info-header">Post-Processing Tags (in Model Output)</b>
+                        <ul class="polyceph-info-list">
+
                             <li><code>&lt;think&gt;...&lt;/think&gt;</code> - Stripped if "Strip Thinking" is enabled on
                                 the task.</li>
                             <li><code>&lt;ramble&gt;...&lt;/ramble&gt;</code> - Renders as a reasoning card.</li>
@@ -180,57 +243,16 @@
                 </div>
             </div>
 
-            <div class="polyceph-step-card polyceph-pipeline-manager" style="margin-top: 20px;">
-                <div class="polyceph-step-header"
-                    style="display: flex; flex-direction: column; gap: 12px; border-bottom: none;">
-                    <!-- Row 1: Management Actions -->
-                    <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-                        <div style="display: flex; align-items: center; gap: 12px;">
-                            <i id="polyceph_new_pipeline_btn" class="fa-solid fa-plus" style="cursor: pointer;"
-                                title="Create New Pipeline"></i>
-                            <i id="polyceph_duplicate_pipeline_btn" class="fa-solid fa-copy" style="cursor: pointer;"
-                                title="Duplicate Current Pipeline"></i>
-                            <i id="polyceph_import_pipeline_btn" class="fa-solid fa-file-import"
-                                style="cursor: pointer;" title="Import Pipeline (JSON)"></i>
-                            <i id="polyceph_export_pipeline_btn" class="fa-solid fa-file-export"
-                                style="cursor: pointer;" title="Export Pipeline (JSON)"></i>
-
-                        </div>
-                        <i id="polyceph_lock_pipeline_btn" class="fa-solid fa-lock-open" style="cursor: pointer;"
-                            title="Lock/Unlock Pipeline Editing"></i>
-                        <div style="display: flex; align-items: center; gap: 12px;">
-                            <i id="polyceph_move_up_pipeline_btn" class="fa-solid fa-chevron-up"
-                                style="cursor: pointer;" title="Move Up in List"></i>
-                            <i id="polyceph_move_down_pipeline_btn" class="fa-solid fa-chevron-down"
-                                style="cursor: pointer;" title="Move Down in List"></i>
-                        </div>
-
-                        <i id="polyceph_del_pipeline_btn" class="fa-solid fa-trash"
-                            style="cursor: pointer; color: #ff4d4d;" title="Delete Current Pipeline"></i>
-                    </div>
-
-                    <!-- Row 2: Pipeline Selection -->
-                    <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
-                        <b style="white-space: nowrap; min-width: 120px;">Active Pipeline</b>
-                        <select id="polyceph_pipeline_selector" class="text_pole" style="flex: 1;"></select>
-                    </div>
-
-
-                    <!-- Row 3: Pipeline Identity -->
-                    <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
-                        <b style="white-space: nowrap; min-width: 120px;">Pipeline Name</b>
-                        <input type="text" id="polyceph_active_pipeline_name" class="text_pole"
-                            style="flex: 1; padding: 2px 5px;" placeholder="Pipeline Name..." />
-                    </div>
-                </div>
-            </div>
-
-
-            <div id="polyceph_steps_container" class="polyceph-step-list"></div>
+            <button id="polyceph_refresh_profiles" class="menu_button polyceph-field-container">
+                <i class="fa-solid fa-refresh"></i> Refresh Profiles
+            </button>
 
             <button id="polyceph_add_step_btn" class="menu_button">
-                <i class="fa-solid fa-plus"></i> Add Pipeline Step
+                <i class="fa-solid fa-plus"></i> Add Step (Sequential) to Pipeline
             </button>
+
+            <div id="polyceph_step_tabs_container" class="polyceph-step-tabs"></div>
+            <div id="polyceph_steps_container" class="polyceph-step-list"></div>
 
             <button id="polyceph_preview_prompts_btn" class="menu_button">
                 <i class="fa-solid fa-eye"></i> Preview Assembled Prompts

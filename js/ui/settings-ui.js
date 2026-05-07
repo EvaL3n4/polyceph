@@ -4,7 +4,9 @@ import { generateId } from '../utils.js';
 import { setLogLevel } from '../logger.js';
 import { updateChatSelectorOptions } from './chat-ui.js';
 import { getEl, bindToggle, renderNeoSlider, syncHiddenMessageVisibility, SELECTORS } from './ui-shared.js';
-import { updatePipelineEditorUI, bindStepEvents } from './settings/pipeline-editor.js';
+import { updatePipelineEditorUI, bindStepEvents, setActiveStepIndex, activeStepIndex } from './settings/pipeline-editor.js';
+
+
 import { getExtensionPath, getPopupModule } from '../compat-st.js';
 import { showPromptPreview } from './settings/prompt-preview.js';
 import { exportPipeline, importPipeline } from './settings/import-export.js';
@@ -280,6 +282,7 @@ export async function addSettingsUI() {
     bindToggle('polyceph_placeholders_toggle', 'polyceph_placeholders_content');
     bindToggle('polyceph_ui_settings_toggle', 'polyceph_ui_settings_content');
     bindToggle('polyceph_behavior_settings_toggle', 'polyceph_behavior_settings_content');
+    bindToggle('polyceph_pipeline_settings_toggle', 'polyceph_pipeline_settings_content');
 
     // Pipeline Steps
     getEl('polyceph_add_step_btn')?.addEventListener('click', () => {
@@ -288,13 +291,39 @@ export async function addSettingsUI() {
             id: 'step_' + generateId(),
             tasks: [{ id: 'task_' + generateId(), profile: '', preset: 'Current', template: '{{user_input}}' }]
         });
+        setActiveStepIndex(pipeline.steps.length - 1);
+
         saveSettings();
         updateUI();
     });
 
-    getEl('polyceph_preview_prompts_btn')?.addEventListener('click', async () => {
-        await showPromptPreview();
+    getEl('polyceph_preview_prompts_btn')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        const originalHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Processing...';
+
+        try {
+            const pipeline = getActivePipeline();
+            const currentStepIdx = activeStepIndex;
+            let targetIdx = 0;
+
+            if (pipeline && pipeline.steps[currentStepIdx]) {
+                for (let i = 0; i < currentStepIdx; i++) {
+                    targetIdx += pipeline.steps[i].tasks.length;
+                }
+            }
+
+            await showPromptPreview(targetIdx);
+        } catch (err) {
+            toastr.error('Failed to generate prompt preview.');
+            console.error(err);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        }
     });
+
 
     getEl('polyceph_refresh_profiles')?.addEventListener('click', async () => {
         await getAvailableProfiles();

@@ -3,7 +3,25 @@ import { isChatCompletionApi } from '../../compat-chat.js';
 import { getPresetSettings } from '../../compat-presets.js';
 import { autoResizeTextarea, generateId } from '../../utils.js';
 import { logger } from '../../logger.js';
-import { SELECTORS, getEl } from '../ui-shared.js';
+import { SELECTORS, getEl, CLASSES } from '../ui-shared.js';
+import { getPopupModule } from '../../compat-st.js';
+
+let Popup = null;
+(async () => {
+    const popupModule = await getPopupModule();
+    if (popupModule) Popup = popupModule.Popup;
+})();
+
+
+export let activeStepIndex = 0;
+let lastPipelineId = null;
+
+export function setActiveStepIndex(index) {
+
+    activeStepIndex = index;
+}
+
+
 
 /**
  * Generates HTML for the preset dropdown based on the selected profile's API.
@@ -131,8 +149,9 @@ export function renderTask(stepId, task, isLocked = false) {
             <div class="polyceph-node-header" style="display: flex; flex-direction: column; gap: 8px;">
                 <div class="polyceph-node-header-label-row">
                     <input type="text" class="polyceph-node-label-input text_pole" data-node-id="${task.id}" placeholder="Task Label..." value="${task.label || ''}" style="flex: 1; min-width: 100px; padding: 2px 5px;" ${disabled} />
-                    ${isLocked ? '' : `<i class="fa-solid fa-times polyceph-del-node" data-node-id="${task.id}" data-step-id="${stepId}"></i>`}
+                    ${isLocked ? '' : `<i class="fa-solid fa-trash polyceph-del-node" data-node-id="${task.id}" data-step-id="${stepId}" style="cursor: pointer; color: #ff4d4d;" title="Delete Task"></i>`}
                 </div>
+
                 <div class="polyceph-node-header-controls">
                     <select class="polyceph-profile-select text_pole" data-node-id="${task.id}" style="flex: 1; min-width: 150px;" ${disabled}>
                         ${profileOptions}
@@ -170,24 +189,82 @@ export function renderStep(step, index, isLocked = false) {
 
     return `
         <div class="polyceph-step-card ${isLocked ? 'polyceph-locked' : ''}" data-step-id="${step.id}">
-            <div class="polyceph-step-header" style="display: flex; flex-direction: column; gap: 10px;">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <b>Step ${index + 1} </b>
-                    <input type="text" class="polyceph-step-label-input text_pole" data-step-id="${step.id}" placeholder="Custom Label..." value="${step.label || ''}" style="flex: 1; max-width: 200px; padding: 2px 5px;" ${isLocked ? 'disabled' : ''} />
-                    ${isLocked ? '' : `<i class="fa-solid fa-trash polyceph-del-step" data-step-id="${step.id}" style="margin-left: auto;"></i>`}
-                </div>
+            <div class="polyceph-step-header" style="display: flex; align-items: center; gap: 10px; width: 100%; border-bottom: none; padding-bottom: 0;">
+                <b>Step ${index + 1} </b>
+                <input type="text" class="polyceph-step-label-input text_pole" data-step-id="${step.id}" placeholder="Custom Label..." value="${step.label || ''}" style="flex: 1; padding: 2px 5px;" ${isLocked ? 'disabled' : ''} />
+                ${isLocked ? '' : `<i class="fa-solid fa-trash polyceph-del-step" data-step-id="${step.id}" style="margin-left: auto; cursor: pointer; color: #ff4d4d;" title="Delete Step"></i>`}
             </div>
+
+            <div>
+                <div style="height: 1px; background: var(--black30a); width: 100%; margin-bottom: 5px;"></div>
+                <small style="color: var(--SmartThemeQuoteColor); font-weight: bold; text-transform: uppercase; letter-spacing: 1px; opacity: 0.8;">Tasks</small>
+            </div>
+
             <div class="polyceph-nodes-list">
                 ${tasksHtml}
             </div>
             ${isLocked ? '' : `
             <button class="menu_button polyceph-add-node-btn" data-step="${step.id}">
-                <i class="fa-solid fa-plus"></i> Add Profile Task
+                <i class="fa-solid fa-plus"></i> Add Task (Parallel) to Step 
             </button>
             `}
         </div>
     `;
 }
+
+/**
+ * Renders the HTML for a single tab.
+ */
+function renderTab(step, index, isActive) {
+    const label = step.label || `Step ${index + 1}`;
+    return `
+        <div class="polyceph-step-tab ${isActive ? 'active' : ''}" data-index="${index}" title="${label}">
+            <span style="max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${label}</span>
+        </div>
+    `;
+}
+
+/**
+ * Attaches drag-to-scroll and mousewheel events to the tab bar.
+ */
+function bindTabScrollEvents(tabContainer) {
+    if (!tabContainer) return;
+
+    let isDown = false;
+    let startX;
+    let scrollLeft;
+
+    tabContainer.addEventListener('mousedown', (e) => {
+        isDown = true;
+        tabContainer.classList.add('active');
+        startX = e.pageX - tabContainer.offsetLeft;
+        scrollLeft = tabContainer.scrollLeft;
+    });
+
+    tabContainer.addEventListener('mouseleave', () => {
+        isDown = false;
+    });
+
+    tabContainer.addEventListener('mouseup', () => {
+        isDown = false;
+    });
+
+    tabContainer.addEventListener('mousemove', (e) => {
+        if (!isDown) return;
+        e.preventDefault();
+        const x = e.pageX - tabContainer.offsetLeft;
+        const walk = (x - startX) * 2; // Scroll speed
+        tabContainer.scrollLeft = scrollLeft - walk;
+    });
+
+    tabContainer.addEventListener('wheel', (e) => {
+        if (e.deltaY !== 0) {
+            e.preventDefault();
+            tabContainer.scrollLeft += e.deltaY;
+        }
+    }, { passive: false });
+}
+
 
 /**
  * Updates the entire pipeline editor UI.
@@ -198,17 +275,60 @@ export function updatePipelineEditorUI() {
     const stepsContainer = getEl(SELECTORS.STEPS_CONTAINER);
 
     if (stepsContainer) {
-        stepsContainer.innerHTML = activePipeline.steps.map((s, i) => renderStep(s, i, isLocked)).join('');
+
+        // Reset active index if pipeline changed
+        if (lastPipelineId !== activePipeline.id) {
+            activeStepIndex = 0;
+            lastPipelineId = activePipeline.id;
+        }
+
+        // Ensure active index is within bounds
+        if (activeStepIndex >= activePipeline.steps.length) {
+            activeStepIndex = Math.max(0, activePipeline.steps.length - 1);
+        }
+
+        // Render Tabs
+        const tabContainer = getEl('polyceph_step_tabs_container');
+        if (tabContainer) {
+            tabContainer.innerHTML = activePipeline.steps.map((s, i) => renderTab(s, i, i === activeStepIndex)).join('');
+            bindTabScrollEvents(tabContainer);
+
+            // Bind click to tabs
+            tabContainer.querySelectorAll('.polyceph-step-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    activeStepIndex = parseInt(tab.getAttribute('data-index'));
+                    updatePipelineEditorUI();
+                });
+            });
+
+            // Scroll active tab into view
+            const activeTab = tabContainer.querySelector('.polyceph-step-tab.active');
+            if (activeTab) {
+                activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            }
+        }
+
+
+        // Render Steps
+        stepsContainer.innerHTML = activePipeline.steps.map((s, i) => {
+            const html = renderStep(s, i, isLocked);
+            // Add active class if it's the current step
+            if (i === activeStepIndex) {
+                return html.replace('polyceph-step-card', 'polyceph-step-card active');
+            }
+            return html;
+        }).join('');
 
         // Auto-resize all textareas after render
         setTimeout(() => {
-            stepsContainer.querySelectorAll('textarea').forEach(textarea => {
+            stepsContainer.querySelectorAll('.active textarea').forEach(textarea => {
                 autoResizeTextarea(textarea);
             });
         }, 150);
 
         bindStepEvents();
     }
+
 
     // Update pipeline selector
     const selector = getEl(SELECTORS.SETTINGS_SELECTOR);
@@ -343,17 +463,26 @@ export function bindStepEvents() {
 
     // Remove Node
     container.querySelectorAll('.polyceph-del-node').forEach(btn => {
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener('click', async (e) => {
             const stepId = e.currentTarget.getAttribute('data-step-id');
             const nodeId = e.currentTarget.getAttribute('data-node-id');
             const step = activePipeline.steps.find(s => s.id === stepId);
-            if (step) {
+            const task = step?.tasks.find(n => n.id === nodeId);
+
+            if (step && task) {
+                const confirmed = !Popup || await Popup.show.confirm(
+                    'Delete Task',
+                    `Are you sure you want to delete the task "${task.label || 'unnamed'}"?<br>This cannot be undone.`
+                );
+                if (!confirmed) return;
+
                 step.tasks = step.tasks.filter(n => n.id !== nodeId);
                 saveSettings();
                 updatePipelineEditorUI();
             }
         });
     });
+
 
     // Add Node
     container.querySelectorAll('.polyceph-add-node-btn').forEach(btn => {
@@ -400,7 +529,16 @@ export function bindStepEvents() {
             const stepId = e.target.getAttribute('data-step-id');
             const step = activePipeline.steps.find(s => s.id === stepId);
             if (step) step.label = e.target.value;
+
             saveSettings();
+
+            // Update tab text directly for performance
+            const tabContainer = getEl('polyceph_step_tabs_container');
+            const tab = tabContainer?.querySelector(`.polyceph-step-tab[data-index="${activeStepIndex}"] span`);
+            if (tab) {
+                tab.textContent = e.target.value || `Step ${activeStepIndex + 1}`;
+            }
+
         });
     });
 
@@ -481,14 +619,23 @@ export function bindStepEvents() {
     });
     // Remove Step
     container.querySelectorAll('.polyceph-del-step').forEach(btn => {
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener('click', async (e) => {
             const stepId = e.currentTarget.getAttribute('data-step-id');
             const idx = activePipeline.steps.findIndex(s => s.id === stepId);
-            if (idx !== -1) {
+            const step = activePipeline.steps[idx];
+
+            if (idx !== -1 && step) {
+                const confirmed = !Popup || await Popup.show.confirm(
+                    'Delete Step',
+                    `Are you sure you want to delete step ${idx + 1} ("${step.label || 'unnamed'}")?<br>This will delete all tasks within this step.`
+                );
+                if (!confirmed) return;
+
                 activePipeline.steps.splice(idx, 1);
                 saveSettings();
                 updatePipelineEditorUI();
             }
         });
     });
+
 }

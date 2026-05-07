@@ -90,11 +90,17 @@ export function bindToggle(btnId, contentId) {
     btn.addEventListener('click', () => {
         const icon = btn.querySelector('i');
         const isNowActive = content.classList.toggle(CLASSES.ACTIVE);
+        btn.classList.toggle(CLASSES.ACTIVE, isNowActive);
+        
         if (icon) {
-            icon.classList.toggle('fa-chevron-down', !isNowActive);
-            icon.classList.toggle('fa-chevron-up', isNowActive);
+            // Support both manual class swapping and CSS-driven rotation
+            if (icon.classList.contains('fa-chevron-up') || icon.classList.contains('fa-chevron-down')) {
+                icon.classList.toggle('fa-chevron-down', !isNowActive);
+                icon.classList.toggle('fa-chevron-up', isNowActive);
+            }
         }
     });
+
 }
 
 /**
