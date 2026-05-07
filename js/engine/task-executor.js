@@ -99,6 +99,7 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
             allowTools: node.allowTools !== false,
             skipSuccessRecursion: !!node.skipSuccessRecursion,
             hideSuccessResponse: !!node.hideSuccessResponse,
+            hideToolHistory: !!node.hideToolHistory,
         };
 
         // Allow orchestrator to inject a stream callback (for character message streaming)

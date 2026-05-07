@@ -113,9 +113,10 @@ export function isChatCompletionApi(apiOverride = null) {
  * @param {object[]} messages - Array of {role, content, invocations} message objects.
  * @param {object[]} [tools] - Optional tool definitions.
  * @param {object|string} [tool_choice] - Optional tool choice setting.
+ * @param {boolean} [noEmissions=false] - Whether to skip extension prompt injection events.
  * @returns {Promise<object>} The generated response data.
  */
-export async function generateViaCC(messages, tools = null, tool_choice = null) {
+export async function generateViaCC(messages, tools = null, tool_choice = null, noEmissions = false) {
     const context = SillyTavern.getContext();
     const api = context.mainApi;
 
@@ -147,8 +148,8 @@ export async function generateViaCC(messages, tools = null, tool_choice = null) 
         ? getChatCompletionModel(oai_settings)
         : (oai_settings?.openai_model || '');
 
-    // Emit CHAT_COMPLETION_PROMPT_READY
-    if (context.eventSource && context.eventTypes?.CHAT_COMPLETION_PROMPT_READY) {
+    // Emit CHAT_COMPLETION_PROMPT_READY (unless emissions are disabled)
+    if (!noEmissions && context.eventSource && context.eventTypes?.CHAT_COMPLETION_PROMPT_READY) {
         const eventData = { chat: messages, dryRun: false };
         await context.eventSource.emit(context.eventTypes.CHAT_COMPLETION_PROMPT_READY, eventData);
         messages = eventData.chat;
@@ -163,8 +164,8 @@ export async function generateViaCC(messages, tools = null, tool_choice = null) 
         generate_data.tool_choice = tool_choice || 'auto';
     }
 
-    // Emit CHAT_COMPLETION_SETTINGS_READY
-    if (context.eventSource && context.eventTypes?.CHAT_COMPLETION_SETTINGS_READY) {
+    // Emit CHAT_COMPLETION_SETTINGS_READY (unless emissions are disabled)
+    if (!noEmissions && context.eventSource && context.eventTypes?.CHAT_COMPLETION_SETTINGS_READY) {
         await context.eventSource.emit(context.eventTypes.CHAT_COMPLETION_SETTINGS_READY, generate_data);
     }
 
@@ -193,9 +194,10 @@ export async function generateViaCC(messages, tools = null, tool_choice = null) 
  * @param {object[]} [tools] - Optional tool definitions.
  * @param {string} [tool_choice] - Optional tool choice.
  * @param {string} [apiOverride] - Optional API override.
+ * @param {boolean} [noEmissions=false] - Whether to skip extension prompt injection events.
  * @returns {Promise<object|null>} Accumulated response data, or null if streaming unavailable.
  */
-export async function generateViaCCStreaming(messages, signal, onChunk, tools = null, tool_choice = null, apiOverride = null) {
+export async function generateViaCCStreaming(messages, signal, onChunk, tools = null, tool_choice = null, apiOverride = null, noEmissions = false) {
     const context = SillyTavern.getContext();
     let api = apiOverride || context.mainApi;
 
@@ -230,8 +232,8 @@ export async function generateViaCCStreaming(messages, signal, onChunk, tools = 
         ? getChatCompletionModel(oai_settings)
         : (oai_settings?.openai_model || '');
 
-    // Emit CHAT_COMPLETION_PROMPT_READY
-    if (context.eventSource && context.eventTypes?.CHAT_COMPLETION_PROMPT_READY) {
+    // Emit CHAT_COMPLETION_PROMPT_READY (unless emissions are disabled)
+    if (!noEmissions && context.eventSource && context.eventTypes?.CHAT_COMPLETION_PROMPT_READY) {
         const eventData = { chat: messages, dryRun: false };
         await context.eventSource.emit(context.eventTypes.CHAT_COMPLETION_PROMPT_READY, eventData);
         messages = eventData.chat;
@@ -249,8 +251,8 @@ export async function generateViaCCStreaming(messages, signal, onChunk, tools = 
         generate_data.tool_choice = tool_choice || 'auto';
     }
 
-    // Emit CHAT_COMPLETION_SETTINGS_READY
-    if (context.eventSource && context.eventTypes?.CHAT_COMPLETION_SETTINGS_READY) {
+    // Emit CHAT_COMPLETION_SETTINGS_READY (unless emissions are disabled)
+    if (!noEmissions && context.eventSource && context.eventTypes?.CHAT_COMPLETION_SETTINGS_READY) {
         await context.eventSource.emit(context.eventTypes.CHAT_COMPLETION_SETTINGS_READY, generate_data);
     }
 

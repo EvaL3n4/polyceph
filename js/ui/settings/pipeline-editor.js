@@ -62,6 +62,10 @@ function renderTaskOptionsBar(task, apiId, disabled) {
                 <input type="checkbox" class="polyceph-node-hide-success-checkbox" data-node-id="${task.id}" ${task.hideSuccessResponse ? 'checked' : ''} title="If checked, this task will return an empty string regardless of LLM output. Useful for background tool processors." ${disabled}>
                 <label style="font-size: 0.8em; cursor: pointer;">Hide Success Response</label>
             </div>
+            <div class="polyceph-node-option" style="display: flex; align-items: center; gap: 4px;">
+                <input type="checkbox" class="polyceph-node-hide-tool-history-checkbox" data-node-id="${task.id}" ${task.hideToolHistory ? 'checked' : ''} title="If checked, only the tool results are included in the output. If unchecked, the assistant's thoughts and tool calls are preserved." ${disabled}>
+                <label style="font-size: 0.8em; cursor: pointer;">Hide Tool History</label>
+            </div>
             ${isFunctionCallingDisabled ? `
                 <div class="polyceph-node-option" style="display: flex; align-items: center; gap: 4px; color: #ff4d4d; font-weight: bold;" title="Function calling is disabled in the selected preset for this task. This task will fail to execute tools.">
                     <i class="fa-solid fa-triangle-exclamation"></i>
@@ -370,6 +374,7 @@ export function bindStepEvents() {
                     allowTools: false,
                     hideSuccessResponse: false,
                     skipSuccessRecursion: false,
+                    hideToolHistory: false,
                     streaming: true
                 });
                 saveSettings();
@@ -460,6 +465,16 @@ export function bindStepEvents() {
             for (const step of activePipeline.steps) {
                 const task = step.tasks.find(n => n.id === nodeId);
                 if (task) { task.hideSuccessResponse = e.target.checked; break; }
+            }
+            saveSettings();
+        });
+    });
+    container.querySelectorAll('.polyceph-node-hide-tool-history-checkbox').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+            const nodeId = e.target.getAttribute('data-node-id');
+            for (const step of activePipeline.steps) {
+                const task = step.tasks.find(n => n.id === nodeId);
+                if (task) { task.hideToolHistory = e.target.checked; break; }
             }
             saveSettings();
         });

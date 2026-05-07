@@ -65,7 +65,7 @@ export function parseOutputTags(rawOutput, taskId, profileDisplayName, isThinkin
  */
 export function parsePromptToMessages(text, api = '') {
     const messages = [];
-    const roleRegex = /\[\[ROLE:(system|user|assistant)\]\]([\s\S]*?)\[\[\/ROLE\]\]/gi;
+    const roleRegex = /\[\[ROLE:(system|user|assistant|tool)(?::([^\]]+))?\]\]([\s\S]*?)\[\[\/ROLE\]\]/gi;
     let lastIndex = 0;
     let match;
     let hasRoleTags = false;
@@ -78,7 +78,35 @@ export function parsePromptToMessages(text, api = '') {
             hasOrphanedContent = true;
             messages.push({ role: 'system', content: precedingText });
         }
-        messages.push({ role: match[1].toLowerCase(), content: match[2].trim() });
+
+        const role = match[1].toLowerCase();
+        const toolCallId = match[2];
+        let content = match[3].trim();
+
+        const msg = { role, content };
+        if (role === 'tool' && toolCallId) {
+            msg.tool_call_id = toolCallId;
+        }
+
+        // Extract and remove [[INVOCATIONS:...]] tags
+        const invocationRegex = /\[\[INVOCATIONS:([\s\S]*?)\]\]/gi;
+        const invocations = [];
+        content = content.replace(invocationRegex, (m, json) => {
+            try {
+                const parsed = JSON.parse(json);
+                if (Array.isArray(parsed)) invocations.push(...parsed);
+            } catch (e) {
+                logger.warn('Failed to parse [[INVOCATIONS]] tag in prompt:', e);
+            }
+            return '';
+        }).trim();
+
+        if (invocations.length > 0) {
+            msg.tool_calls = invocations;
+        }
+        msg.content = content;
+
+        messages.push(msg);
         lastIndex = roleRegex.lastIndex;
     }
 
