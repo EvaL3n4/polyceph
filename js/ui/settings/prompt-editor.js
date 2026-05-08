@@ -9,6 +9,9 @@ import { ROLES, SPECIAL_MACROS, INTERNAL_TAGS } from '../../engine/syntax-defini
 // Global registry to share editor metadata with popups
 window.polycephEditorRegistry = window.polycephEditorRegistry || new Map();
 
+// Global list of active editors to support bulk toggles
+window.polycephActiveEditors = window.polycephActiveEditors || new Set();
+
 /**
  * Official CodeMirror overlayMode helper (bundled to ensure availability)
  */
@@ -59,6 +62,29 @@ const overlayMode = function(base, overlay, combine) {
 };
 
 /**
+ * Toggles line numbers for all registered Polyceph editors
+ */
+function toggleAllLineNumbers(show) {
+    localStorage.setItem('polyceph-show-line-numbers', show ? 'true' : 'false');
+    window.polycephActiveEditors.forEach(cm => {
+        // Only toggle regular settings editors
+        if (cm._polycephType === 'regular') {
+            // Skip if the editor was destroyed
+            if (!cm.getWrapperElement().parentElement) {
+                window.polycephActiveEditors.delete(cm);
+                return;
+            }
+            cm.setOption('lineNumbers', show);
+        }
+    });
+    
+    // Update all toggle icons
+    document.querySelectorAll('.polyceph-line-toggle').forEach(btn => {
+        btn.style.opacity = show ? "1" : "0.4";
+    });
+}
+
+/**
  * Creates a CodeMirror editor for a prompt textarea
  * @param {HTMLTextAreaElement} textarea The textarea to replace
  * @param {Function} onUpdate Callback for value changes
@@ -78,6 +104,7 @@ export async function createPromptEditor(textarea, onUpdate, taskLabels = [], ex
     // Prevent double initialization
     if (textarea._cm) {
         textarea._cm.toTextArea();
+        window.polycephActiveEditors.delete(textarea._cm);
     }
 
     // Register labels globally for maximized editor lookup
@@ -85,9 +112,16 @@ export async function createPromptEditor(textarea, onUpdate, taskLabels = [], ex
         window.polycephEditorRegistry.set(textarea.id, taskLabels);
     }
 
+    const isMaximized = extraClasses.includes('polyceph-maximized-editor');
+    const isPreview = textarea.classList.contains('polyceph-preview-cm');
+    const isRegular = !isMaximized && !isPreview;
+
+    // Regular editors follow the toggle, others stay on
+    const showLineNumbers = isRegular ? (localStorage.getItem('polyceph-show-line-numbers') !== 'false') : true;
+
     const cm = CodeMirror.fromTextArea(textarea, {
         mode: 'markdown',
-        lineNumbers: true,
+        lineNumbers: showLineNumbers,
         lineWrapping: true,
         scrollbarStyle: 'native',
         viewportMargin: Infinity,
@@ -99,7 +133,10 @@ export async function createPromptEditor(textarea, onUpdate, taskLabels = [], ex
         }
     });
 
+    cm._polycephType = isRegular ? 'regular' : (isMaximized ? 'maximized' : 'preview');
     textarea._cm = cm;
+    window.polycephActiveEditors.add(cm);
+    
     const wrapper = cm.getWrapperElement();
     wrapper.classList.add('polyceph-editor');
     extraClasses.forEach(cls => wrapper.classList.add(cls));
@@ -208,9 +245,27 @@ export async function createPromptEditor(textarea, onUpdate, taskLabels = [], ex
     CodeMirror.defineMode(modeName, () => overlayMode(baseMode, polyOverlay, true));
     cm.setOption("mode", modeName);
 
-    // Handle Maximize button synchronization
+    // Handle Maximize and Line Toggle buttons
     const container = textarea.closest('.polyceph-textarea-container');
     const maximizeBtn = container?.querySelector('.editor_maximize');
+    
+    // Inject Line Toggle Button if not already present (and not a maximized/preview editor)
+    if (container && isRegular && !container.querySelector('.polyceph-line-toggle')) {
+        const toggleBtn = document.createElement('i');
+        toggleBtn.className = 'polyceph-line-toggle fa-solid fa-list-ol sttt--enabled interactable';
+        toggleBtn.title = 'Toggle Line Numbers';
+        toggleBtn.style.opacity = showLineNumbers ? "1" : "0.4";
+        
+        toggleBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const newState = localStorage.getItem('polyceph-show-line-numbers') === 'false';
+            toggleAllLineNumbers(newState);
+        });
+        
+        container.appendChild(toggleBtn);
+    }
+
     if (maximizeBtn) {
         maximizeBtn.style.zIndex = "10";
         maximizeBtn.addEventListener('mousedown', () => {
@@ -233,14 +288,19 @@ export async function createPromptEditor(textarea, onUpdate, taskLabels = [], ex
     });
     observer.observe(wrapper);
 
-    // Sync CM -> Textarea
+    // Sync CM -> Textarea (Debounced to prevent lag during rapid typing)
     let isSyncing = false;
+    let debounceTimer;
     cm.on('change', () => {
         if (isSyncing || cm.getOption('readOnly')) return;
-        isSyncing = true;
-        textarea.value = cm.getValue();
-        if (typeof onUpdate === 'function') onUpdate(textarea.value);
-        isSyncing = false;
+        
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            isSyncing = true;
+            textarea.value = cm.getValue();
+            if (typeof onUpdate === 'function') onUpdate(textarea.value);
+            isSyncing = false;
+        }, 500); // 500ms debounce
     });
 
     const refresh = () => cm.refresh();

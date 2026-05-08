@@ -204,19 +204,29 @@
     width: 100%;
 }
 
-.polyceph-textarea-container .editor_maximize {
+.polyceph-textarea-container .editor_maximize,
+.polyceph-textarea-container .polyceph-line-toggle {
     position: absolute;
     top: -17px;
-    right: 0px;
     opacity: 0.6;
     transition: opacity 0.2s;
     background: var(--black70a);
     padding: 4px;
     border-radius: 4px;
     z-index: 10;
+    cursor: pointer;
 }
 
-.polyceph-textarea-container .editor_maximize:hover {
+.polyceph-textarea-container .editor_maximize {
+    right: 0px;
+}
+
+.polyceph-textarea-container .polyceph-line-toggle {
+    left: 0px;
+}
+
+.polyceph-textarea-container .editor_maximize:hover,
+.polyceph-textarea-container .polyceph-line-toggle:hover {
     opacity: 1;
 }
 
