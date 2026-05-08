@@ -22,7 +22,6 @@
     background: var(--black50a);
 }
 
-
 .polyceph-settings-section-content {
     padding: 10px;
     display: none;
@@ -159,8 +158,6 @@
     width: 100%;
 }
 
-
-
 .polyceph-management-label {
     white-space: nowrap;
     min-width: 120px;
@@ -193,10 +190,8 @@
 
 .polyceph-locked input,
 
-
 .polyceph-locked select,
 .polyceph-locked textarea {
     cursor: not-allowed;
     background-color: var(--black30a) !important;
 }
-

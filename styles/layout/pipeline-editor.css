@@ -31,7 +31,6 @@
     background: var(--black50a);
 }
 
-
 .polyceph-placeholders-content {
     padding: 8px;
     font-size: 1em;
@@ -92,7 +91,6 @@
     opacity: 1;
     font-weight: bold;
 }
-
 
 .polyceph-step-list {
     display: flex;
@@ -161,7 +159,6 @@
 .polyceph-node-header-label-row>i.fa-trash {
     font-size: 0.9rem;
 }
-
 
 .polyceph-node-header-controls {
     display: flex;

@@ -66,7 +66,6 @@ export function stopPipeline() {
     }
 }
 
-
 export async function startPipeline(text, generateSwipesForBatchId, triggeringUserMesId = -1) {
     try {
         logger.info('Starting pipeline for text:', text.substring(0, 50) + '...');
@@ -175,13 +174,13 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
         // 1. Immediate UI Cleanup
         await removeTypingIndicator();
         forceHideStopButton();
-        
+
         // Give UI a moment to settle
         await new Promise(r => setTimeout(r, 100));
 
         // 2. Restore the user's original session state
         await restoreSessionState();
-        
+
         currentPipelineAbortController = null;
 
         // 3. Final Event Emulation & Mutex Release

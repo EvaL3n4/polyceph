@@ -145,8 +145,6 @@ export function createPipelineSelector() {
     };
     document.addEventListener('click', closeDropdown);
 
-
-
     container.appendChild(icon);
     container.appendChild(label);
     container.appendChild(dropdown);

@@ -12,7 +12,6 @@ let Popup = null;
     if (popupModule) Popup = popupModule.Popup;
 })();
 
-
 export let activeStepIndex = 0;
 let lastPipelineId = null;
 
@@ -20,8 +19,6 @@ export function setActiveStepIndex(index) {
 
     activeStepIndex = index;
 }
-
-
 
 /**
  * Generates HTML for the preset dropdown based on the selected profile's API.
@@ -102,15 +99,8 @@ function renderTaskOptionsBar(task, apiId, disabled) {
                 <label style="font-size: 0.8em; cursor: pointer;">Anti-Loop</label>
             </div>
         `;
-    } else if (isCC) {
-        // Fallback for CC tasks that are internal
-        html = `
-            <div class="polyceph-node-option" style="display: flex; align-items: center; gap: 4px;">
-                <input type="checkbox" class="polyceph-node-antiloop-checkbox" data-node-id="${task.id}" ${task.antiLoop !== false ? 'checked' : ''} title="Abort generation if the model starts looping" ${disabled}>
-                <label style="font-size: 0.8em; cursor: pointer;">Anti-Loop</label>
-            </div>
-        `;
     }
+
 
     if (!html) return '';
 
@@ -164,11 +154,12 @@ export function renderTask(stepId, task, isLocked = false) {
                     <div style="display: flex; align-items: center; gap: 4px;">
                         <label>Task Type</label>
                         <select class="polyceph-node-output-type text_pole" data-step-id="${stepId}" data-node-id="${task.id}" ${disabled}>
-                            <option value="internal" ${task.outputType === 'internal' ? 'selected' : ''}>Internal (Hidden)</option>
-                            <option value="thinking" ${task.outputType === 'thinking' ? 'selected' : ''}>Reasoning</option>
                             <option value="character" ${task.outputType === 'character' ? 'selected' : ''}>Character Message</option>
+                            <option value="thinking" ${task.outputType === 'thinking' ? 'selected' : ''}>Reasoning</option>
                             ${isCC ? `<option value="tool" ${task.outputType === 'tool' ? 'selected' : ''}>Tool Processor</option>` : ''}
+                            <option value="internal" ${task.outputType === 'internal' ? 'selected' : ''}>Internal (Hidden)</option>
                         </select>
+
                     </div>
                 </div>
                 ${optionsBarHtml}
@@ -265,7 +256,6 @@ function bindTabScrollEvents(tabContainer) {
     }, { passive: false });
 }
 
-
 /**
  * Updates the entire pipeline editor UI.
  */
@@ -308,7 +298,6 @@ export function updatePipelineEditorUI() {
             }
         }
 
-
         // Render Steps
         stepsContainer.innerHTML = activePipeline.steps.map((s, i) => {
             const html = renderStep(s, i, isLocked);
@@ -328,7 +317,6 @@ export function updatePipelineEditorUI() {
 
         bindStepEvents();
     }
-
 
     // Update pipeline selector
     const selector = getEl(SELECTORS.SETTINGS_SELECTOR);
@@ -406,7 +394,6 @@ export function updatePipelineEditorUI() {
     });
 }
 
-
 /**
  * Binds event listeners to the step and task elements.
  */
@@ -483,7 +470,6 @@ export function bindStepEvents() {
         });
     });
 
-
     // Add Node
     container.querySelectorAll('.polyceph-add-node-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -492,12 +478,12 @@ export function bindStepEvents() {
             if (step) {
                 step.tasks.push({
                     id: 'task_' + generateId(),
-                    profile: 'none',
+                    profile: 'current',
                     preset: 'Current',
                     template: '{{user_input}}',
-                    outputType: 'internal',
-                    persist: false,
-                    isCharacter: false,
+                    outputType: 'character',
+                    persist: true,
+                    isCharacter: true,
                     stripThink: true,
                     antiLoop: true,
                     allowTools: false,
@@ -506,6 +492,7 @@ export function bindStepEvents() {
                     hideToolHistory: false,
                     streaming: true
                 });
+
                 saveSettings();
                 updatePipelineEditorUI();
             }

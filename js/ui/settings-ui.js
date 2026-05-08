@@ -1,18 +1,17 @@
 import { settings, saveSettings, availableProfiles, availablePresetsByApi, clearProfileState, getAvailableProfiles, getActivePipeline, createPipeline, duplicatePipeline, togglePipelineLock, movePipelineUp, movePipelineDown, addImportedPipeline, deletePipeline, refreshPresets } from '../state.js';
 import { MODULE_NAME, VERSION } from '../constants.js';
 import { generateId } from '../utils.js';
-import { setLogLevel } from '../logger.js';
+import { setLogLevel, logger } from '../logger.js';
+
 import { updateChatSelectorOptions } from './chat-ui.js';
 import { getEl, bindToggle, renderNeoSlider, syncHiddenMessageVisibility, SELECTORS } from './ui-shared.js';
 import { updatePipelineEditorUI, bindStepEvents, setActiveStepIndex, activeStepIndex } from './settings/pipeline-editor.js';
-
 
 import { getExtensionPath, getPopupModule } from '../compat-st.js';
 import { showPromptPreview } from './settings/prompt-preview.js';
 import { exportPipeline, importPipeline } from './settings/import-export.js';
 
 let Popup = null;
-
 
 /**
  * Updates the entire settings UI.
@@ -266,7 +265,6 @@ export async function addSettingsUI() {
         }
     });
 
-
     getEl(SELECTORS.NAME_INPUT)?.addEventListener('input', (e) => {
         const pipeline = getActivePipeline();
         if (pipeline) {
@@ -324,7 +322,6 @@ export async function addSettingsUI() {
         }
     });
 
-
     getEl('polyceph_refresh_profiles')?.addEventListener('click', async () => {
         await getAvailableProfiles();
         refreshPresets();
@@ -340,8 +337,6 @@ export async function addSettingsUI() {
             logger.debug('ST Chat Completion settings ready, refreshing Polyceph UI...');
             updateUI();
         });
-        context.eventSource.on(context.eventTypes.SETTINGS_UPDATED, () => {
-            updateUI();
-        });
     }
 }
+

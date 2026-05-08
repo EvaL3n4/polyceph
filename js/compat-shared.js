@@ -328,7 +328,6 @@ export async function getMaxPromptTokens(overrideResponseLength = null) {
     return contextTokens - responseTokens;
 }
 
-
 /**
  * Counts the number of tokens in a given text or message array using ST's tokenizer.
  *

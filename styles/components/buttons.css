@@ -82,7 +82,6 @@
     transition: all 0.2s ease;
 }
 
-
 .polyceph-stop-button:hover {
     background: #ff4444;
     color: white;
@@ -115,7 +114,6 @@
     border-color: var(--SmartThemeQuoteColor);
     font-weight: bold;
 }
-
 
 /* Settings Action Buttons */
 #polyceph_preview_prompts_btn {

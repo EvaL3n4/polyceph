@@ -16,7 +16,7 @@ export function forceHideStopButton() {
 
     if (stStopBtn) stStopBtn.style.display = 'none';
     if (polyStopBtn) polyStopBtn.style.display = 'none';
-    
+
     if (stSendBut) {
         stSendBut.style.display = '';
         stSendBut.style.opacity = '1';
@@ -25,7 +25,6 @@ export function forceHideStopButton() {
     }
 
     document.body.classList.remove('polyceph-pipeline-active');
-
 
     if (typeof context.activateSendButtons === 'function') {
         context.activateSendButtons();

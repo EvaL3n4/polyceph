@@ -98,8 +98,6 @@ export function clearProfileState() {
     _capturedProfileId = null;
 }
 
-
-
 /**
  * Pipeline Management
  */
@@ -168,9 +166,6 @@ export function movePipelineDown(id) {
     return false;
 }
 
-
-
-
 export function deletePipeline(id) {
     if (settings.pipelines.length <= 1) return false;
     const index = settings.pipelines.findIndex(p => p.id === id);
@@ -197,7 +192,6 @@ export function addImportedPipeline(pipelineData) {
     saveSettings();
     return newPipeline;
 }
-
 
 /**
  * Fetch available connection profiles from ST.

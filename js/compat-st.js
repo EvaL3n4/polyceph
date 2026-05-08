@@ -15,13 +15,13 @@ import { logger } from './logger.js';
 async function tryImportST(fileName) {
     const basePath = getExtensionPath();
     const segments = basePath.split('/').filter(s => s.length > 0);
-    
+
     // To reach SillyTavern root from js/ folder:
     // segments.length + 1 levels up.
     // e.g. 'scripts/extensions/polyceph' (3) + 'js' (1) = 4 levels to root
     const levelsToRoot = segments.length + 1;
     const rootDots = '../'.repeat(levelsToRoot);
-    
+
     // To reach 'scripts/' folder:
     // levelsToRoot - 1
     const scriptsDots = '../'.repeat(levelsToRoot - 1);
@@ -31,7 +31,6 @@ async function tryImportST(fileName) {
         `${rootDots}scripts/${fileName}`,
         `/scripts/${fileName}` // Absolute fallback
     ];
-
 
     const errors = [];
     for (const path of paths) {
@@ -110,7 +109,6 @@ export async function getPopupModule() {
     return await tryImportST('popup.js');
 }
 
-
 /**
  * Imports SillyTavern's main script.js for createRawPrompt and other utilities.
  */
@@ -124,7 +122,6 @@ export async function getScriptModule() {
         `${rootDots}script.js`,
         `/script.js`
     ];
-
 
     const errors = [];
     for (const path of paths) {
@@ -149,7 +146,7 @@ export async function getScriptModule() {
 export function getExtensionPath() {
     // import.meta.url for this file is at [base]/js/compat-st.js
     const metaUrl = import.meta.url;
-    
+
     // Find the 'polyceph' segment and everything before it
     const match = metaUrl.match(/.*scripts\/extensions\/.*polyceph/);
     if (match) {
@@ -166,7 +163,7 @@ export function getExtensionPath() {
             return 'scripts/extensions/polyceph';
         }
     }
-    
+
     // Default fallback
     return 'scripts/extensions/polyceph';
 }

@@ -87,7 +87,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
         const stCCSettings = context.chatCompletionSettings || {};
         const stRecurseLimit = stCCSettings.tool_call_recurse_limit;
         const toolReasoningMode = stCCSettings.tool_reasoning_mode || 'disabled';
-        
+
         logger.debug(`Tool Reasoning Mode (Interleaved Thinking) in current preset: ${toolReasoningMode}`);
 
         let depth = 0;
@@ -182,8 +182,9 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
 
                     // Forward to caller's stream handler
                     if (onStream) {
-                        await onStream({ text: chunk.text, done: chunk.done });
+                        await onStream({ text: chunk.text, reasoning: chunk.reasoning, done: chunk.done });
                     }
+
                 };
 
                 const streamingPromise = generateViaCCStreaming(messages, signal, streamingChunkHandler, tools, tool_choice, api, false);
@@ -223,6 +224,9 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                 break;
             }
 
+            const assistantMessage = responseData?.choices?.[0]?.message;
+            const turnReasoning = assistantMessage?.reasoning_content || assistantMessage?.reasoning || '';
+
             logger.debug(`Turn ${depth} response:`, responseData);
 
             // Extract tool calls from response
@@ -245,9 +249,9 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                     tool_calls: toolCalls
                 };
 
-                // Only include reasoning metadata if interleaved thinking is enabled
+                // Only include reasoning metadata in context if interleaved thinking is enabled
                 if (toolReasoningMode !== 'disabled') {
-                    assistantHistoryItem.reasoning_content = assistantMessage?.reasoning_content || assistantMessage?.reasoning || '';
+                    assistantHistoryItem.reasoning_content = turnReasoning;
                     assistantHistoryItem.signature = assistantMessage?.signature || '';
                     assistantHistoryItem.toolSignatures = assistantMessage?.toolSignatures || {};
                 }
@@ -319,6 +323,11 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                 } else {
                     finalResponse = String(rawText);
                 }
+
+                // Inject API reasoning if present (append at end as requested)
+                if (turnReasoning && !finalResponse.includes('<think>')) {
+                    finalResponse += `\n\n<think>\n${turnReasoning}\n</think>`;
+                }
             }
             break;
         }
@@ -340,7 +349,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
 
         // Reconstruct output from taskMessages to ensure we only include Polyceph's own turns (no injections)
         const newMessages = taskMessages;
-        
+
         if (options.hideToolHistory) {
             // Only send the "success object" (last turn's results or final response)
             if (options.skipSuccessRecursion) {
@@ -360,9 +369,10 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                     const role = m.role;
                     const roleSuffix = (role === 'tool' && m.tool_call_id) ? `:${m.tool_call_id}` : '';
                     let content = m.content || '';
-                    if (role === 'assistant' && m.reasoning_content) {
-                        content += `\n<think>\n${m.reasoning_content}\n</think>`;
+                    if (role === 'assistant' && m.reasoning_content && !content.includes('<think>')) {
+                        content += `\n\n<think>\n${m.reasoning_content}\n</think>`;
                     }
+
                     if (m.tool_calls && m.tool_calls.length > 0) {
                         content += `\n[[INVOCATIONS:${JSON.stringify(m.tool_calls)}]]`;
                     }

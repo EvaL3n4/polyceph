@@ -135,7 +135,7 @@ export function renderPolycephTyping(messageElement, chatMsg) {
         `).join('');
         $indicator.find('.polyceph-active-tasks-list').html(tasksHtml || '<div class="polyceph-active-task-label">Preparing...</div>');
         $indicator.find('.polyceph-stop-button').show();
-        
+
         if (!isSticky) {
             scrollToBottomIfNear();
         }
@@ -170,7 +170,6 @@ export function renderPolycephThoughts() {
             $(messageElement).find('.polyceph-typing-indicator').remove();
             messageElement.removeAttribute('polyceph_typing');
         }
-
 
         // 2. Handle Hidden Background Messages
         if ((chatMsg.extra && chatMsg.extra.polyceph_hidden) || chatMsg.name === 'Background') {
