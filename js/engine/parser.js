@@ -15,8 +15,9 @@ export function parseOutputTags(rawOutput, taskId, profileDisplayName, isThinkin
         if (content) hiddenBackgrounds.push(content);
     }
 
-    // Interleaved parsing for think/ramble and text
-    const tokenRegex = /(<think>[\s\S]*?<\/think>|<ramble>[\s\S]*?<\/ramble>)/gi;
+    // Interleaved parsing for think/ramble, tool calls, and text
+    const tokenRegex = /(<think>[\s\S]*?<\/think>|<ramble>[\s\S]*?<\/ramble>|<tool_call[\s\S]*?<\/tool_call>)/gi;
+
     const segments = rawOutput.split(tokenRegex);
 
     let cleanParts = [];
@@ -36,7 +37,22 @@ export function parseOutputTags(rawOutput, taskId, profileDisplayName, isThinkin
                 thoughts.push({ title: `Rambling`, content, isSilent: true, profile: profileDisplayName });
                 cleanParts.push(content);
             }
+        } else if (segment.toLowerCase().startsWith('<tool_call')) {
+            const nameMatch = segment.match(/name="([^"]+)"/i);
+            const argsMatch = segment.match(/args='([^']+)'/i);
+            const name = nameMatch ? nameMatch[1] : 'Unknown Tool';
+            const args = argsMatch ? argsMatch[1] : '';
+            const response = segment.replace(/<tool_call[\s\S]*?>/i, '').replace(/<\/tool_call>/i, '').trim();
+
+            thoughts.push({
+                title: `Tool: ${name}`,
+                content: { args, response },
+                type: 'tool',
+                isSilent: true,
+                profile: profileDisplayName
+            });
         } else {
+
             // Regular text (remove backgrounds from it)
             const content = segment.replace(backgroundRegex, '').trim();
             if (content) {

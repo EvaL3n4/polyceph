@@ -360,8 +360,20 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
             }
             // Fallback to role-tagged final response
             if (finalResponse) {
-                return `[[ROLE:assistant]]\n${finalResponse}\n[[/ROLE]]`;
+                let output = `[[ROLE:assistant]]\n${finalResponse}`;
+                // Inject all tool calls from this task into the final assistant message for visualization
+                for (const m of newMessages) {
+                    if (m.role === 'assistant' && m.tool_calls) {
+                        for (const tc of m.tool_calls) {
+                            const resultMsg = newMessages.find(rm => rm.role === 'tool' && rm.tool_call_id === tc.id);
+                            const result = resultMsg ? resultMsg.content : '(No result found)';
+                            output += `\n\n<tool_call name="${tc.function.name}" args='${tc.function.arguments}'>\n${result}\n</tool_call>`;
+                        }
+                    }
+                }
+                return output + `\n[[/ROLE]]`;
             }
+
         } else {
             // Reconstruct full turn history with role tags
             if (newMessages.length > 0) {
@@ -373,12 +385,19 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                         content += `\n\n<think>\n${m.reasoning_content}\n</think>`;
                     }
 
-                    if (m.tool_calls && m.tool_calls.length > 0) {
+                    if (role === 'assistant' && m.tool_calls && m.tool_calls.length > 0) {
+                        // Inject tool calls for UI visualization
+                        for (const tc of m.tool_calls) {
+                            const resultMsg = newMessages.find(rm => rm.role === 'tool' && rm.tool_call_id === tc.id);
+                            const result = resultMsg ? resultMsg.content : '(No result found)';
+                            content += `\n\n<tool_call name="${tc.function.name}" args='${tc.function.arguments}'>\n${result}\n</tool_call>`;
+                        }
                         content += `\n[[INVOCATIONS:${JSON.stringify(m.tool_calls)}]]`;
                     }
                     return `[[ROLE:${role}${roleSuffix}]]\n${content.trim()}\n[[/ROLE]]`;
                 }).join('\n\n');
             }
+
         }
 
         if (finalResponse !== undefined && finalResponse !== null) return finalResponse;

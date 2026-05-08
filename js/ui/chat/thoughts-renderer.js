@@ -4,28 +4,320 @@ import { scrollToBottom, scrollToBottomIfNear } from '../ui-shared.js';
 import { settings } from '../../state.js';
 
 /**
+ * Tries to parse internal data formats like JSON, YAML, or XML.
+ * Returns { data, format }
+ */
+function tryParseInternalData(text) {
+    if (typeof text !== 'string') return { data: text, format: null };
+    const trimmed = text.trim();
+
+    // 1. Try JSON
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        try {
+            return { data: JSON.parse(trimmed), format: 'JSON' };
+        } catch (e) {}
+    }
+
+    // 2. Try XML
+    if (trimmed.startsWith('<') && trimmed.endsWith('>')) {
+        try {
+            const data = parseInternalXml(trimmed);
+            if (data && Object.keys(data).length > 0) return { data, format: 'XML' };
+        } catch (e) {}
+    }
+
+    // 3. Try YAML (Robust indentation-aware)
+    try {
+        const data = parseInternalYaml(trimmed);
+        if (data && Object.keys(data).length > 0) {
+            // Check if it's actually just a string (one key with no value and no nesting)
+            const keys = Object.keys(data);
+            if (keys.length === 1 && data[keys[0]] === null && !trimmed.includes(': ')) {
+                return { data: text, format: null };
+            }
+            return { data, format: 'YAML' };
+        }
+    } catch (e) {}
+
+    return { data: text, format: null };
+}
+
+/**
+ * Robust YAML parser adapted for internal use.
+ */
+function parseInternalYaml(yamlString) {
+    const lines = yamlString.split('\n');
+    const result = {};
+    const path = [];
+    let currentIndent = -1;
+
+    let hasActualKV = false;
+
+    for (let line of lines) {
+        const rawLine = line;
+        line = line.trimEnd();
+        if (line === '' || line.trim().startsWith('#')) continue;
+
+        const indent = rawLine.search(/\S|$/);
+        const trimmed = line.trim();
+        const isListItem = trimmed.startsWith('- ');
+        const kvSep = line.indexOf(': ');
+
+        // Adjust path based on indentation
+        if (indent > currentIndent) {
+            path.push('');
+        } else if (indent < currentIndent) {
+            // Find level based on indentation (assuming 2 spaces)
+            const level = Math.max(0, Math.floor(indent / 2));
+            path.length = level + 1;
+        }
+        currentIndent = indent;
+
+        if (isListItem) {
+            hasActualKV = true;
+            const value = trimmed.slice(2).trim();
+            const parent = getInternalPath(result, path.slice(0, -1));
+            if (!Array.isArray(parent)) {
+                setInternalPath(result, path.slice(0, -1), []);
+            }
+            const arr = getInternalPath(result, path.slice(0, -1));
+            arr.push(parseInternalYamlValue(value));
+        } else if (trimmed.endsWith(':')) {
+            const key = trimmed.slice(0, -1).trim();
+            path[path.length - 1] = key;
+            setInternalPath(result, path, {});
+            hasActualKV = true;
+        } else if (kvSep !== -1) {
+            const key = line.slice(0, kvSep).trim();
+            const value = line.slice(kvSep + 2).trim();
+            path[path.length - 1] = key;
+            setInternalPath(result, path, parseInternalYamlValue(value));
+            hasActualKV = true;
+        } else {
+            // Just a key or a string?
+            const key = trimmed;
+            path[path.length - 1] = key;
+            setInternalPath(result, path, null);
+        }
+    }
+
+    return hasActualKV ? result : null;
+}
+
+function parseInternalYamlValue(value) {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    if (value === 'null' || value === '~' || value === '') return null;
+    if (!isNaN(value) && value !== '') return Number(value);
+    if (value.startsWith('"') && value.endsWith('"')) return value.slice(1, -1);
+    if (value.startsWith("'") && value.endsWith("'")) return value.slice(1, -1);
+    return value;
+}
+
+function setInternalPath(obj, path, value) {
+    let current = obj;
+    for (let i = 0; i < path.length - 1; i++) {
+        const segment = path[i];
+        if (!current[segment] || typeof current[segment] !== 'object') current[segment] = {};
+        current = current[segment];
+    }
+    current[path[path.length - 1]] = value;
+}
+
+function getInternalPath(obj, path) {
+    let current = obj;
+    for (const segment of path) {
+        if (!current || typeof current !== 'object') return undefined;
+        current = current[segment];
+    }
+    return current;
+}
+
+function parseInternalXml(xmlString) {
+    try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(xmlString, 'text/xml');
+        if (doc.querySelector('parsererror')) return null;
+        
+        const nodeToObj = (node) => {
+            const result = {};
+            const children = node.childNodes;
+            let hasElements = false;
+            for (let i = 0; i < children.length; i++) {
+                const child = children[i];
+                if (child.nodeType !== 1) continue;
+                hasElements = true;
+                const name = child.tagName;
+                const value = child.childNodes.length === 1 && child.childNodes[0].nodeType === 3 
+                    ? child.childNodes[0].textContent.trim() 
+                    : nodeToObj(child);
+                
+                if (result[name] !== undefined) {
+                    if (!Array.isArray(result[name])) result[name] = [result[name]];
+                    result[name].push(value);
+                } else {
+                    result[name] = value;
+                }
+            }
+            return hasElements ? result : node.textContent.trim();
+        };
+        return nodeToObj(doc.documentElement);
+    } catch (e) { return null; }
+}
+
+
+/**
+ * Renders a JSON-like object into a clean, nested UI structure.
+ */
+function renderJsonObject(data, isRoot = false) {
+    if (data === null || data === undefined) return '<span class="polyceph-json-null">null</span>';
+
+    if (typeof data !== 'object') {
+        const str = String(data);
+        if (typeof data === 'boolean') return `<span class="polyceph-json-boolean">${str}</span>`;
+        if (typeof data === 'number') return `<span class="polyceph-json-number">${str}</span>`;
+        return `<span class="polyceph-json-string">${str}</span>`;
+    }
+
+    if (Array.isArray(data)) {
+        if (data.length === 0) return '<span class="polyceph-json-empty">(empty)</span>';
+        return `
+            <div class="polyceph-json-array">
+                ${data.map(item => {
+                    const parsed = tryParseInternalData(item);
+                    return `
+                        <div class="polyceph-json-item-box">
+                            ${parsed.format ? `<div class="polyceph-json-item-header"><span class="polyceph-json-format-mini">${parsed.format}</span></div>` : ''}
+                            <div class="polyceph-json-item-content">${renderJsonObject(parsed.data, false)}</div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    }
+
+
+    const keys = Object.keys(data);
+    if (keys.length === 0) return '<span class="polyceph-json-empty">(empty)</span>';
+
+    // Extract status-related fields for a compact header ONLY at the root of a tool section
+    const statusKeys = ['status', 'success', 'ok', 'error'];
+    const headerFields = isRoot ? keys.filter(k => statusKeys.includes(k.toLowerCase())) : [];
+    const bodyFields = keys.filter(k => !headerFields.includes(k));
+
+    let headerHtml = '';
+    if (headerFields.length > 0) {
+        headerHtml = `
+            <div class="polyceph-json-status-bar">
+                ${headerFields.map(k => {
+                    const val = data[k];
+                    const kLower = k.toLowerCase();
+                    const isErrorField = kLower === 'error';
+                    
+                    let type = 'neutral';
+                    if (!isErrorField) {
+                        const isOk = (val === true || String(val).toLowerCase() === 'ok' || String(val).toLowerCase() === 'success' || String(val).toLowerCase() === 'true');
+                        type = isOk ? 'ok' : 'error';
+                    } else {
+                        const isError = (val === true || (typeof val === 'string' && val.trim() !== '' && val !== 'false' && val !== '[]' && val !== 'none'));
+                        type = isError ? 'error' : 'ok';
+                    }
+
+                    const icon = type === 'ok' ? 'fa-check-circle' : 'fa-circle-xmark';
+                    let displayVal = val;
+                    if (Array.isArray(val) && val.length === 0) displayVal = 'none';
+
+                    return `
+                        <div class="polyceph-json-status-pill polyceph-status-${type}">
+                            <span class="polyceph-status-key">${k.toUpperCase()}</span>
+                            <span class="polyceph-status-val"><i class="fa-solid ${icon}"></i> ${displayVal}</span>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    }
+
+    const bodyHtml = bodyFields.map(key => {
+        const parsed = tryParseInternalData(data[key]);
+        const isSimple = (typeof parsed.data !== 'object' || parsed.data === null || (Array.isArray(parsed.data) && parsed.data.length === 0));
+        const rowClass = isSimple ? 'polyceph-json-field-horizontal' : 'polyceph-json-field-vertical';
+
+        return `
+            <div class="polyceph-json-field-box ${rowClass}">
+                <div class="polyceph-json-key-container">
+                    <span class="polyceph-json-key">${key}</span>
+                    ${parsed.format ? `<span class="polyceph-json-format-mini">${parsed.format}</span>` : ''}
+                </div>
+                <div class="polyceph-json-value">${renderJsonObject(parsed.data, false)}</div>
+            </div>
+        `;
+    }).join('');
+
+    return `
+        <div class="polyceph-json-object">
+            ${headerHtml}
+            <div class="polyceph-json-body">${bodyHtml}</div>
+        </div>
+    `;
+}
+
+
+
+
+/**
  * Generates HTML for a single reasoning thought block.
  */
 export function generateSingleThoughtHTML(t) {
-    let contentHtml = t.content;
-    const stContext = SillyTavern.getContext();
-    if (typeof stContext.messageFormatting === 'function') {
-        contentHtml = stContext.messageFormatting(contentHtml, 'Polyceph', false, false);
+    let contentHtml = '';
+    let formatLabel = '';
+
+    if (t.type === 'tool') {
+        const argsParsed = tryParseInternalData(t.content.args);
+        const responseParsed = tryParseInternalData(t.content.response);
+        
+        formatLabel = responseParsed.format || argsParsed.format || 'DATA';
+
+        contentHtml = `
+            <div class="polyceph-tool-details">
+                <div class="polyceph-tool-section">
+                    <div class="polyceph-tool-section-header">Arguments</div>
+                    <div class="polyceph-tool-args-container">${renderJsonObject(argsParsed.data, true)}</div>
+                </div>
+                <div class="polyceph-tool-section">
+                    <div class="polyceph-tool-section-header">Response</div>
+                    <div class="polyceph-tool-response-container">${renderJsonObject(responseParsed.data, true)}</div>
+                </div>
+            </div>
+        `;
     } else {
-        contentHtml = contentHtml.replace(/\n/g, '<br>');
+        contentHtml = t.content;
+        const stContext = SillyTavern.getContext();
+        if (typeof stContext.messageFormatting === 'function') {
+            contentHtml = stContext.messageFormatting(contentHtml, 'Polyceph', false, false);
+        } else {
+            contentHtml = contentHtml.replace(/\n/g, '<br>');
+        }
     }
 
     const openClass = t.isSilent ? '' : 'polyceph-item-open';
-    const silentClass = t.isSilent ? 'polyceph-silent-thought' : '';
+    const silentClass = (t.isSilent || t.type === 'tool') ? 'polyceph-silent-thought' : '';
+    const toolClass = t.type === 'tool' ? 'polyceph-tool-thought' : '';
 
-    return `<div class="polyceph-generated-thought ${openClass} ${silentClass}">
+    return `<div class="polyceph-generated-thought ${openClass} ${silentClass} ${toolClass}">
         <div class="polyceph-generated-thought-name" style="cursor:pointer;" onclick="this.parentElement.classList.toggle('polyceph-item-open');">
             <span class="polyceph-item-toggle-icon">▶</span> ${t.title}
-            ${t.profile ? `<span class="polyceph-item-metadata">${t.profile}</span>` : ''}
+            <div class="polyceph-item-metadata-group">
+                ${formatLabel ? `<span class="polyceph-item-format-tag">${formatLabel}</span>` : ''}
+                ${t.profile ? `<span class="polyceph-item-metadata">${t.profile}</span>` : ''}
+            </div>
         </div>
         <div class="polyceph-generated-thought-content">${contentHtml}</div>
     </div>`;
 }
+
+
+
 
 /**
  * Generates the full HTML container for a list of thoughts.
