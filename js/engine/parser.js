@@ -1,5 +1,6 @@
 import { logger } from '../logger.js';
 import { decodeInvocations } from '../macros/utils.js';
+import { ROLES } from './syntax-definitions.js';
 
 /**
  * Parses raw LLM output to extract special tags like <think>, <ramble>, and <background>.
@@ -120,17 +121,18 @@ export function parseOutputTags(rawOutput, taskId, profileDisplayName, isThinkin
  * Use [[role?]] for permissive mode.
  *
  * @param {string} text - The raw prompt text.
- * @param {string} api - The target API (e.g. 'openai').
+ * @param {string} api - @deprecated
  * @param {string} defaultRole - The role to assign to text outside explicit tags (default: 'system').
  * @returns {object[]} Array of {role, content, name?, tool_call_id?} message objects.
  */
 export function parsePromptToMessages(text, api = '', defaultRole = 'system') {
     const messages = [];
     
+    const rolePattern = ROLES.join('|');
     // Combined regex for start tags, end tags, and shorthands
     // Group 1: Optional escape backslash
     // Group 2: Role name, Group 3: Optional Name or tool_call_id, Group 4: Permissive flag (?)
-    const tagRegex = /(\\)?(?:\[\[(?:ROLE:)?(system|user|assistant|tool)(?::([^\]?]+))?(\?)?\]\]|\[\[\/(?:system|user|assistant|tool|ROLE)?\]\]|\[\[\/\]\])/gi;
+    const tagRegex = new RegExp(`(\\\\)?(?:\\[\\[(?:ROLE:)?(${rolePattern})(?::([^\\]?]+))?(\\?)?\\]\\]|\\[\\[\\/(?:${rolePattern}|ROLE)?\\]\\]|\\[\\[\\/\\]\\])`, 'gi');
 
     let lastIndex = 0;
     let match;

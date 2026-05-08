@@ -5,6 +5,7 @@ import { autoResizeTextarea, generateId } from '../../utils.js';
 import { logger } from '../../logger.js';
 import { SELECTORS, getEl, CLASSES } from '../ui-shared.js';
 import { getPopupModule } from '../../compat-st.js';
+import { createPromptEditor } from './prompt-editor.js';
 
 let Popup = null;
 (async () => {
@@ -308,9 +309,21 @@ export function updatePipelineEditorUI() {
             return html;
         }).join('');
 
-        // Auto-resize all textareas after render
+        // Auto-resize and initialize CodeMirror for all textareas after render
         setTimeout(() => {
-            stepsContainer.querySelectorAll('.active textarea').forEach(textarea => {
+            stepsContainer.querySelectorAll('.active textarea.polyceph-node-template').forEach(textarea => {
+                const stepId = textarea.getAttribute('data-step');
+                const nodeId = textarea.getAttribute('data-node');
+                createPromptEditor(textarea, (val) => {
+                    const step = activePipeline.steps.find(s => s.id === stepId);
+                    const task = step?.tasks.find(n => n.id === nodeId);
+                    if (task) {
+                        task.template = val;
+                        saveSettings();
+                    }
+                });
+            });
+            stepsContainer.querySelectorAll('.active textarea:not(.polyceph-node-template)').forEach(textarea => {
                 autoResizeTextarea(textarea);
             });
         }, 150);

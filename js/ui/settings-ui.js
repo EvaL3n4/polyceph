@@ -11,6 +11,7 @@ import { getExtensionPath, getPopupModule } from '../compat-st.js';
 import { showPromptPreview } from './settings/prompt-preview.js';
 import { exportPipeline, importPipeline } from './settings/import-export.js';
 import { renderPolycephThoughts } from './ui.js';
+import { createPromptEditor } from './settings/prompt-editor.js';
 
 let Popup = null;
 
@@ -202,8 +203,8 @@ export async function addSettingsUI() {
         if (SillyTavern.getContext().eventSource) SillyTavern.getContext().eventSource.emit('polyceph-settings-changed');
     });
 
-    getEl('polyceph_prompt_input')?.addEventListener('input', (e) => {
-        settings.polycephPrompt = e.target.value;
+    createPromptEditor(getEl('polyceph_prompt_input'), (val) => {
+        settings.polycephPrompt = val;
         saveSettings();
     });
 
