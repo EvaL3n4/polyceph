@@ -25,14 +25,18 @@ export function weaveInjections(messages, extensionPrompts) {
 
     const finalMessages = [];
 
+    logger.debug(`weaveInjections: Processing ${injections.length} injections for ${messages.length} messages.`);
+
     // 1. BEFORE_PROMPT (Position 2 in ST) - Top of everything
     injections.filter(inj => inj.position === 2).forEach(inj => {
+        logger.debug(`weaveInjections: Placing BEFORE_PROMPT injection ${inj.id} at top.`);
         finalMessages.push({ mes: inj.value, role: inj.role, is_injection: true });
     });
 
     // 2. Chat History with IN_CHAT (Position 1 in ST) @ Depth
     // High-depth injections (>= messages length) go to the top of the history block
     injections.filter(inj => inj.position === 1 && inj.depth >= messages.length).forEach(inj => {
+        logger.debug(`weaveInjections: Placing high-depth IN_CHAT injection ${inj.id} (depth ${inj.depth}) at top of history (messages len: ${messages.length}).`);
         finalMessages.push({ mes: inj.value, role: inj.role, is_injection: true });
     });
 
@@ -44,12 +48,14 @@ export function weaveInjections(messages, extensionPrompts) {
 
         const depthFromBottom = messages.length - 1 - i;
         injections.filter(inj => inj.position === 1 && inj.depth === depthFromBottom).forEach(inj => {
+            logger.debug(`weaveInjections: Placing IN_CHAT injection ${inj.id} at depth ${inj.depth} (after message ${i}).`);
             finalMessages.push({ mes: inj.value, role: inj.role, is_injection: true });
         });
     }
 
     // 3. IN_PROMPT (Position 0 in ST) - Bottom of everything
     injections.filter(inj => inj.position === 0).forEach(inj => {
+        logger.debug(`weaveInjections: Placing IN_PROMPT injection ${inj.id} at bottom.`);
         finalMessages.push({ mes: inj.value, role: inj.role, is_injection: true });
     });
 
@@ -180,6 +186,7 @@ export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = 
             const lastN = parseInt(options.last);
             if (!isNaN(lastN)) {
                 trimmedMessages = filteredMessages.slice(-lastN);
+                logger.debug(`resolveChatHistory: User requested last:${lastN}. Trimmed from ${filteredMessages.length} to ${trimmedMessages.length}.`);
             }
         }
 
@@ -198,10 +205,15 @@ export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = 
             const t = await countTokens(mContent);
             const overhead = 30; // Estimated formatting overhead (Role markers, Names, separators)
 
-            if (currentTokens + t + overhead > usableBudget) break;
+            if (currentTokens + t + overhead > usableBudget) {
+                logger.debug(`resolveChatHistory: Budget reached (${currentTokens} + ${t} + ${overhead} > ${usableBudget}). Truncating history.`);
+                break;
+            }
             finalSource.unshift(m);
             currentTokens += t + overhead;
         }
+
+        logger.debug(`resolveChatHistory: Final source size: ${finalSource.length} messages.`);
 
         // 4. Map and Weave
         const finalMessages = weaveInjections(finalSource, injectionPrompts);

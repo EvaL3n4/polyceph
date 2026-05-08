@@ -224,7 +224,10 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
         for (const entry of promptOrder) {
             if (!entry.enabled) continue;
             const content = await resolveIdentifier(entry.identifier, trimmedChat);
-            if (content.trim()) allPrompts.push(content.trim());
+            if (content.trim()) {
+                logger.debug(`resolveCCMacros: Resolved ${entry.identifier} (len: ${content.length}).`);
+                allPrompts.push(content.trim());
+            }
         }
 
         logger.debug(`CC Macro Resolution - Budget: ${historyBudget}, Overhead: ${shadowTokens}, Context: ${maxContext}`);
