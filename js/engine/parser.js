@@ -114,100 +114,127 @@ export function parseOutputTags(rawOutput, taskId, profileDisplayName, isThinkin
 }
 
 /**
- * Parses a prompt string with [[ROLE:name]] tags into a SillyTavern message array.
- * Validates tag structure and warns about content outside role tags.
+ * Parses a prompt string with [[user]], [[system]], [[assistant]], [[tool]] tags into a SillyTavern message array.
+ * Supports both divider style (lasts until next tag) and enclosure style (ends with [[/]]).
+ * Manual tags are forcing by default (ignore internal role tags in macros).
+ * Use [[role?]] for permissive mode.
+ *
+ * @param {string} text - The raw prompt text.
+ * @param {string} api - The target API (e.g. 'openai').
+ * @param {string} defaultRole - The role to assign to text outside explicit tags (default: 'system').
+ * @returns {object[]} Array of {role, content, name?, tool_call_id?} message objects.
  */
-export function parsePromptToMessages(text, api = '') {
+export function parsePromptToMessages(text, api = '', defaultRole = 'system') {
     const messages = [];
-    const roleRegex = /\[\[ROLE:(system|user|assistant|tool)(?::([^\]]+))?\]\]([\s\S]*?)\[\[\/ROLE\]\]/gi;
+    
+    // Combined regex for start tags, end tags, and shorthands
+    // Group 1: Optional escape backslash
+    // Group 2: Role name, Group 3: Optional Name or tool_call_id, Group 4: Permissive flag (?)
+    const tagRegex = /(\\)?(?:\[\[(?:ROLE:)?(system|user|assistant|tool)(?::([^\]?]+))?(\?)?\]\]|\[\[\/(?:system|user|assistant|tool|ROLE)?\]\]|\[\[\/\]\])/gi;
+
     let lastIndex = 0;
     let match;
-    let hasRoleTags = false;
-    let hasOrphanedContent = false;
+    
+    let currentRole = defaultRole;
+    let currentName = null;
+    let isForced = false;
+    
+    const appendToMessages = (content) => {
+        if (!content || !content.trim()) return;
+        
+        // Cleanup escape backslashes
+        const cleanContent = content.replace(/\\\[\[/g, '[[').trim();
+        if (!cleanContent) return;
 
-    while ((match = roleRegex.exec(text)) !== null) {
-        hasRoleTags = true;
-        const precedingText = text.substring(lastIndex, match.index).trim();
-        if (precedingText) {
-            hasOrphanedContent = true;
-            messages.push({ role: 'system', content: precedingText });
+        const role = currentRole;
+        const msg = { role, content: cleanContent };
+        if (role === 'tool' && currentName) msg.tool_call_id = currentName;
+        else if (currentName) msg.name = currentName;
+
+        const lastMsg = messages[messages.length - 1];
+        if (lastMsg && lastMsg.role === msg.role && (lastMsg.name === msg.name || (!lastMsg.name && !msg.name)) && msg.role !== 'tool') {
+            lastMsg.content += '\n\n' + msg.content;
+        } else {
+            messages.push(msg);
+        }
+    };
+
+    while ((match = tagRegex.exec(text)) !== null) {
+        const isEscaped = !!match[1];
+        
+        if (isEscaped) {
+            // If escaped, we don't treat it as a tag. 
+            // We just keep going, letting the next loop (or the end) handle it as text.
+            continue;
         }
 
-        const role = match[1].toLowerCase();
-        const toolCallId = match[2];
-        let content = match[3].trim();
+        const precedingText = text.substring(lastIndex, match.index);
+        const isEndTag = match[0].startsWith('[[/');
+        const isEngineTag = match[0].includes('ROLE:');
+        const role = match[2]?.toLowerCase();
+        const permissive = match[4] === '?';
 
-        const msg = { role, content };
-        if (role === 'tool' && toolCallId) {
-            msg.tool_call_id = toolCallId;
+        if (isForced) {
+            // In forced mode, we ignore engine-style [[ROLE:...]] tags 
+            // but we still honor manual shorthands [[user]] and terminators [[/]]
+            if (isEndTag || (role && !isEngineTag)) {
+                appendToMessages(precedingText);
+                
+                if (isEndTag) {
+                    currentRole = defaultRole;
+                    currentName = null;
+                    isForced = false;
+                } else {
+                    currentRole = role;
+                    currentName = match[3] || null;
+                    isForced = !permissive;
+                }
+                lastIndex = tagRegex.lastIndex;
+            } else {
+                // Ignore engine tag, keep accumulating
+                continue;
+            }
+        } else {
+            // Permissive mode or default mode: process tags normally
+            if (precedingText) appendToMessages(precedingText);
+
+            if (isEndTag) {
+                currentRole = defaultRole;
+                currentName = null;
+                isForced = false;
+            } else if (role) {
+                currentRole = role;
+                currentName = match[3] || null;
+                isForced = !permissive;
+            }
+            lastIndex = tagRegex.lastIndex;
         }
+    }
 
-        // Extract and remove [[INVOCATIONS:...]] tags
-        const invocationRegex = /\[\[INVOCATIONS:([\s\S]*?)\]\]/gi;
-        const invocations = [];
-        content = content.replace(invocationRegex, (m, hex) => {
+    const remainingText = text.substring(lastIndex);
+    if (remainingText) {
+        appendToMessages(remainingText);
+    }
+
+    if (messages.length === 0) {
+        return [{ role: defaultRole, content: text.trim() }];
+    }
+
+    // Second pass: Process [[INVOCATIONS:...]] tags in the content of each message
+    const invocationRegex = /\[\[INVOCATIONS:([\s\S]*?)\]\]/gi;
+
+    for (const msg of messages) {
+        let invocations = [];
+        msg.content = msg.content.replace(invocationRegex, (m, hex) => {
             const parsed = decodeInvocations(hex);
             if (parsed && Array.isArray(parsed)) invocations.push(...parsed);
             return '';
         }).trim();
 
         if (invocations.length > 0) {
-            msg.tool_calls = invocations;
-        }
-        msg.content = content;
-
-        messages.push(msg);
-        lastIndex = roleRegex.lastIndex;
-    }
-
-    const remainingText = text.substring(lastIndex).trim();
-    if (remainingText && hasRoleTags) {
-        hasOrphanedContent = true;
-        messages.push({ role: 'system', content: remainingText });
-    } else if (remainingText) {
-        messages.push({ role: 'system', content: remainingText });
-    }
-
-    if (messages.length === 0) {
-        return [{ role: 'system', content: text.trim() }];
-    }
-
-    // Validation: check for content outside role tags (only for Chat Completion)
-    if (hasOrphanedContent && remainingText.trim().length > 0 && api === 'openai') {
-        logger.debug("Prompt contains implicit 'system' content outside [[ROLE:...]] tags.");
-    }
-
-    // Validation: check for malformed tags that the regex didn't match
-    if (hasRoleTags) {
-        const openCount = (text.match(/\[\[ROLE:/gi) || []).length;
-        const closeCount = (text.match(/\[\[\/ROLE\]\]/gi) || []).length;
-        if (openCount !== closeCount) {
-            logger.warn(`Mismatched role tags: ${openCount} opening vs ${closeCount} closing. Some content may be incorrectly assigned.`);
+            msg.tool_calls = (msg.tool_calls || []).concat(invocations);
         }
     }
 
-    const mergedMessages = [];
-    const invocationRegex = /\[\[INVOCATIONS:([\s\S]*?)\]\]/gi;
-
-    for (const msg of messages) {
-        // Extract invocations from content
-        let invocations = null;
-        msg.content = msg.content.replace(invocationRegex, (match, hex) => {
-            invocations = decodeInvocations(hex);
-            return ""; // Remove tag from content
-        }).trim();
-
-        const lastMsg = mergedMessages[mergedMessages.length - 1];
-        if (lastMsg && lastMsg.role === msg.role && msg.role !== 'tool') {
-            lastMsg.content += '\n\n' + msg.content;
-            // Merge invocations if both exist
-            if (invocations) {
-                lastMsg.invocations = (lastMsg.invocations || []).concat(invocations);
-            }
-        } else {
-            if (invocations) msg.invocations = invocations;
-            mergedMessages.push(msg);
-        }
-    }
-    return mergedMessages;
+    return messages;
 }

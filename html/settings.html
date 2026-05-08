@@ -35,10 +35,11 @@
                         <label for="polyceph_show_reasoning_checkbox" class="polyceph-pointer">Show Polyceph Reasoning
                             Blocks</label>
                     </div>
-                    
+
                     <div class="polyceph-settings-row">
                         <input type="checkbox" id="polyceph_show_only_last_recursion_checkbox">
-                        <label for="polyceph_show_only_last_recursion_checkbox" class="polyceph-pointer">Only show last recursion of tool calls</label>
+                        <label for="polyceph_show_only_last_recursion_checkbox" class="polyceph-pointer">Only show last
+                            recursion of tool calls</label>
                     </div>
 
                     <div class="polyceph-settings-row">
@@ -244,6 +245,19 @@
                             <li><code>&lt;ramble&gt;...&lt;/ramble&gt;</code> - Renders as a reasoning card.</li>
                             <li><code>&lt;background&gt;...&lt;/background&gt;</code> - Renders as a hidden background
                                 message.</li>
+                        </ul>
+                    </div>
+                    <div class="polyceph-info-section">
+                        <b class="polyceph-info-header">Prompt Structuring (Role Tags)</b>
+                        <ul class="polyceph-info-list">
+                            <li><code>[[system]]</code>, <code>[[user]]</code>, <code>[[assistant]]</code> - Dividers
+                                for multi-message prompts.</li>
+                            <li><b>Forced Blocks</b>: Manual <code>[[role]]</code> tags strip internal role tags from
+                                macros like <code>{{user_input}}</code> and <code>{{chat_history}}</code>.</li>
+                            <li><b>Permissive</b>: Use <code>[[role?]]</code> to allow internal role tags within macros
+                                to switch roles normally.</li>
+                            <li><code>[[/]]</code> - Ends the block and returns to task default.</li>
+                            <li><code>[[role:name]]</code> can be used for named tags.</li>
                         </ul>
                     </div>
                 </div>
