@@ -30,10 +30,31 @@ function initMutexTracker() {
     if (context.eventSource) {
         context.eventSource.on(generationMutexEvents.MUTEX_CAPTURED, (data) => {
             currentMutexHolder = data?.extension_name || 'unknown';
+            updateWaitingTaskLabel();
         });
         context.eventSource.on(generationMutexEvents.MUTEX_RELEASED, () => {
             currentMutexHolder = null;
+            updateWaitingTaskLabel();
         });
+    }
+}
+
+/**
+ * Surgically updates the "Waiting for Extensions" label in the typing indicator.
+ */
+function updateWaitingTaskLabel() {
+    const stContext = SillyTavern.getContext();
+    const typingIdx = stContext.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
+    const typingMsg = typingIdx !== -1 ? stContext.chat[typingIdx] : null;
+
+    if (typingMsg && typingMsg.extra.polyceph_active_tasks) {
+        const waitingTask = typingMsg.extra.polyceph_active_tasks.find(t => t.id === 'waiting');
+        if (waitingTask) {
+            waitingTask.label = currentMutexHolder 
+                ? `Waiting for Extensions (${currentMutexHolder})...` 
+                : 'Waiting for Extensions...';
+            updateTypingIndicator();
+        }
     }
 }
 initMutexTracker();
@@ -131,7 +152,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
                     id: 'waiting',
                     step: 1,
                     totalSteps: 1,
-                    label: 'Waiting for Extensions...',
+                    label: currentMutexHolder ? `Waiting for Extensions (${currentMutexHolder})...` : 'Waiting for Extensions...',
                     profile: 'System'
                 });
                 updateTypingIndicator();
@@ -147,6 +168,13 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
 
             // Recapture mutex AFTER core events for the actual pipeline execution.
             logger.debug('Recapturing mutex for pipeline execution...');
+
+            // Remove waiting status
+            if (typingMsg && typingMsg.extra.polyceph_active_tasks) {
+                typingMsg.extra.polyceph_active_tasks = typingMsg.extra.polyceph_active_tasks.filter(t => t.id !== 'waiting');
+                updateTypingIndicator();
+            }
+
             await stContext.eventSource.emit(generationMutexEvents.MUTEX_CAPTURED, { extension_name: MODULE_NAME });
 
             logger.debug(`Mutex recaptured. signal.aborted = ${signal.aborted}`);
