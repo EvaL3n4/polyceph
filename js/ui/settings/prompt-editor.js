@@ -9,9 +9,9 @@ console.log('[Polyceph] prompt-editor.js module script execution start');
  * @param {HTMLTextAreaElement} textarea 
  * @param {Function} onUpdate 
  */
-export async function createPromptEditor(textarea, onUpdate) {
+export async function createPromptEditor(textarea, onUpdate, taskLabels = []) {
     if (!textarea) return null;
-    console.log('[Polyceph] createPromptEditor called for:', textarea.id);
+    console.log(`[Polyceph] createPromptEditor called for: ${textarea.id} with ${taskLabels.length} labels`);
 
     try {
         await ensureCodeMirror();
@@ -56,6 +56,7 @@ export async function createPromptEditor(textarea, onUpdate) {
     }
 
     textarea._cm = cm;
+    cm.getWrapperElement().classList.add('polyceph-editor');
 
     const rolePattern = ROLES.join('|');
     const specialMacrosPattern = SPECIAL_MACROS.join('|');
@@ -112,55 +113,106 @@ export async function createPromptEditor(textarea, onUpdate) {
 
     const baseMode = CodeMirror.getMode(cm.options, "markdown");
     const polyOverlay = {
-        startState: () => ({ currentRole: null }),
-        copyState: (state) => ({ ...state }),
+        startState: () => ({ 
+            manualRole: null, 
+            engineRole: null, 
+            isPermissive: false,
+            baseState: CodeMirror.startState(baseMode)
+        }),
+        copyState: (state) => ({ 
+            manualRole: state.manualRole, 
+            engineRole: state.engineRole, 
+            isPermissive: state.isPermissive,
+            baseState: CodeMirror.copyState(baseMode, state.baseState)
+        }),
         token: function (stream, state) {
-            // Background class to carry through
-            const bgClass = state.currentRole ? ` poly-content-${state.currentRole}` : "";
+            // Background classes to carry through
+            let bgClass = "";
+            if (state.manualRole) {
+                bgClass += ` poly-content-${state.manualRole}`;
+                if (!state.isPermissive) {
+                    bgClass += " poly-content-forced";
+                }
+            }
+            if (state.engineRole) {
+                bgClass += ` poly-content-engine-${state.engineRole}`;
+            }
 
-            // Role Tags
+            // 1. Role Tags
             if (stream.match(/\\\[\[/)) {
                 stream.match(/[^\]]+\]\]/); 
                 return "poly-escaped" + bgClass;
             }
 
             if (stream.match('[[', false)) {
-                const roleMatch = stream.match(new RegExp(`\\[\\[(?:ROLE:)?(${rolePattern})(?::([^\\]?]+))?(\\?)?\\]\\]`, 'i'));
-                if (roleMatch) {
-                    state.currentRole = roleMatch[1].toLowerCase();
-                    return `poly-tag-${state.currentRole}${bgClass}`;
+                // Forced Role Tags (e.g. [[system]])
+                const forcedRoleMatch = stream.match(new RegExp(`\\[\\[(${rolePattern})(?::([^\\]?]+))?(\\?)?\\]\\]`, 'i'));
+                if (forcedRoleMatch) {
+                    state.manualRole = forcedRoleMatch[1].toLowerCase();
+                    state.isPermissive = !!forcedRoleMatch[3];
+                    state.engineRole = null; 
+                    return `poly-tag-${state.manualRole}${bgClass}`;
+                }
+
+                // Internal Engine Tags (e.g. [[ROLE:user]])
+                const internalRoleMatch = stream.match(new RegExp(`\\[\\[ROLE:(${rolePattern})(?::([^\\]?]+))?(\\?)?\\]\\]`, 'i'));
+                if (internalRoleMatch) {
+                    const tagRole = internalRoleMatch[1].toLowerCase();
+                    if (state.isPermissive || !state.manualRole) {
+                        state.engineRole = tagRole;
+                        return `poly-tag-internal poly-tag-engine-${state.engineRole}${bgClass}`;
+                    }
+                    return `poly-tag-internal poly-tag-engine-${tagRole}${bgClass}`;
                 }
                 
-                const closeMatch = stream.match(new RegExp(`\\[\\[\\/(?:${rolePattern}|ROLE)?\\]\\]`, 'i')) || stream.match(/\[\[\/\]\]/);
-                if (closeMatch) {
-                    const className = state.currentRole ? `poly-tag-${state.currentRole}-close` : "poly-tag-close";
-                    state.currentRole = null;
+                // Closing Tags
+                const forcedClose = stream.match(/\[\[\/\]\]/);
+                if (forcedClose) {
+                    const className = state.manualRole ? `poly-tag-${state.manualRole}-close` : "poly-tag-close";
+                    state.manualRole = null;
+                    state.engineRole = null;
+                    state.isPermissive = false;
                     return className;
                 }
-            }
 
-            // Macros
-            if (stream.match('{{', false)) {
-                const macroMatch = stream.match(/{{([^}|]+)(\|[^}]*)?}}/);
-                if (macroMatch) {
-                    const macroName = macroMatch[1].trim().toLowerCase();
-                    const cls = SPECIAL_MACROS.includes(macroName) ? "poly-macro-special" : "poly-macro";
-                    return cls + bgClass;
+                const internalClose = stream.match(new RegExp(`\\[\\[\\/(?:${rolePattern}|ROLE)\\]\\]`, 'i'));
+                if (internalClose) {
+                    const engineRoleClass = state.engineRole ? `poly-tag-engine-${state.engineRole}` : "poly-tag-engine-close";
+                    const className = `poly-tag-internal poly-tag-internal-close ${engineRoleClass}`;
+                    state.engineRole = null;
+                    return className + bgClass;
                 }
             }
 
-            if (stream.match(/<\/?(think|ramble|background)>/i)) return "poly-thinking" + bgClass;
-            if (stream.match(/<\/?\w+[^>]*>/)) return "poly-angle-tag" + bgClass;
+            // 2. Thinking Blocks (Gold / Italic)
+            if (stream.match('<thinking>', true)) return "poly-thinking" + bgClass;
+            if (stream.match('</thinking>', true)) return "poly-thinking" + bgClass;
 
-            // If inside a role block, provide the background class
-            const tokenClass = state.currentRole ? `poly-content-${state.currentRole}` : null;
-            
-            // Advance
-            stream.next();
-            while (!stream.eol() && !stream.match(/\[\[|{{|<\/?\w+/, false)) {
-                stream.next();
+            // 3. Special Macro Tokens ({{world_info}} etc)
+            if (stream.match(/\{\{(?:world_info|chat_history|user_input|last_message|description|persona|scenario|post_history|input|thought|extracted_thought|output_token_budget)\}\}/, true)) {
+                return "poly-macro-special" + bgClass;
             }
-            return tokenClass;
+
+            // 4. Standard Macros ({{task_label}} or other generic ST macros)
+            const macroMatch = stream.match(/\{\{/, false);
+            if (macroMatch) {
+                const labelPattern = taskLabels.length > 0 ? taskLabels.join('|') : '____NEVER_MATCH____';
+                const taskMacro = stream.match(new RegExp(`\\{\\{(?:${labelPattern})\\}\\}`, 'i'));
+                
+                // Task Macros get the special vibrant color
+                if (taskMacro) return "poly-macro-special" + bgClass;
+
+                // Standard ST macros get the secondary macro color
+                stream.match(/\{\{.*?\}\}/);
+                return "poly-macro" + bgClass;
+            }
+
+            // 5. Angle Tags (Generic XML-like tags like <info>)
+            if (stream.match(/<[^>]+>/, true)) return "poly-angle-tag" + bgClass;
+
+            // 6. Base Markdown Highlighting (Fallthrough)
+            const baseToken = baseMode.token(stream, state.baseState);
+            return (baseToken ? baseToken + bgClass : (bgClass ? bgClass.trim() : null));
         }
     };
 

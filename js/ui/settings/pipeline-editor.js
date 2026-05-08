@@ -311,6 +311,15 @@ export function updatePipelineEditorUI() {
 
         // Auto-resize and initialize CodeMirror for all textareas after render
         setTimeout(() => {
+            // Collect all task and step labels for highlighting
+            const allLabels = [];
+            activePipeline.steps.forEach(step => {
+                if (step.label) allLabels.push(step.label.trim());
+                step.tasks.forEach(task => {
+                    if (task.label) allLabels.push(task.label.trim());
+                });
+            });
+
             stepsContainer.querySelectorAll('.active textarea.polyceph-node-template').forEach(textarea => {
                 const stepId = textarea.getAttribute('data-step');
                 const nodeId = textarea.getAttribute('data-node');
@@ -321,7 +330,7 @@ export function updatePipelineEditorUI() {
                         task.template = val;
                         saveSettings();
                     }
-                });
+                }, allLabels);
             });
             stepsContainer.querySelectorAll('.active textarea:not(.polyceph-node-template)').forEach(textarea => {
                 autoResizeTextarea(textarea);

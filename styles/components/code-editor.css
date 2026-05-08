@@ -1,6 +1,28 @@
-/* CodeMirror Editor Integration */
+/* Polyceph CodeMirror Isolation and Syntax Highlighting */
 
-.CodeMirror {
+/* 1. Base Markdown Normalization */
+.polyceph-editor .cm-bracket,
+.polyceph-editor .cm-formatting-list,
+.polyceph-editor .cm-link,
+.polyceph-editor .cm-variable-2,
+.polyceph-editor .cm-variable-3,
+.polyceph-editor .cm-keyword,
+.polyceph-editor .cm-tag,
+.polyceph-editor .cm-quote,
+.polyceph-editor .cm-header,
+.polyceph-editor .cm-comment,
+.polyceph-editor .cm-hr,
+.polyceph-editor .cm-strong,
+.polyceph-editor .cm-em {
+    color: inherit !important;
+    text-decoration: none !important;
+    border-bottom: none !important;
+    font-weight: normal !important;
+    font-style: normal !important;
+}
+
+/* 2. Core Editor Container */
+.polyceph-editor.CodeMirror {
     height: auto !important;
     min-height: 120px;
     max-height: 64dvh;
@@ -16,157 +38,170 @@
     transition: border-color 0.2s, background-color 0.2s;
 }
 
-.CodeMirror-focused {
+.polyceph-editor.CodeMirror-focused {
     border-color: var(--SmartThemeEmColor) !important;
     background: rgba(0, 0, 0, 0.4) !important;
 }
 
-.CodeMirror.CodeMirror-readonly {
-    background: rgba(0, 0, 0, 0.2) !important;
-    opacity: 0.8;
-    cursor: not-allowed;
+.polyceph-editor .CodeMirror-scroll {
+    min-height: 120px;
+    max-height: 64dvh;
+    overflow: auto !important;
 }
 
-.CodeMirror-gutters {
+.polyceph-editor .CodeMirror-gutters {
     background: rgba(0, 0, 0, 0.5) !important;
     border-right: 1px solid var(--SmartThemeQuoteColor) !important;
     min-width: 35px;
+    pointer-events: none;
 }
 
-.CodeMirror-linenumber {
+.polyceph-editor .CodeMirror-linenumber {
     color: var(--SmartThemeQuoteColor) !important;
     opacity: 0.6;
-    padding: 0 5px !important;
+    padding: 0 10px !important;
 }
 
-.CodeMirror-cursor {
-    border-left: 2px solid var(--SmartThemeBodyColor) !important;
-}
-
-/* Fix overlapping text by ensuring proper padding from the gutter */
-.CodeMirror-lines {
-    padding: 10px 0 !important;
-}
-
-.CodeMirror pre.CodeMirror-line {
-    padding: 0 12px 0 8px !important;
-}
-
-/* Polyceph Highlighting Tokens */
-
-/* Role Tags - High Priority Colors */
-.cm-poly-tag-system {
+/* 3. Manual Syntax Highlighting (High Priority) */
+.polyceph-editor .cm-poly-tag-system {
     color: #ff9d00 !important;
     font-weight: bold !important;
-    opacity: 1 !important;
 }
 
-.cm-poly-tag-user {
+.polyceph-editor .cm-poly-tag-user {
     color: #00d4ff !important;
     font-weight: bold !important;
-    opacity: 1 !important;
 }
 
-.cm-poly-tag-assistant {
+.polyceph-editor .cm-poly-tag-assistant {
     color: #a066ff !important;
     font-weight: bold !important;
-    opacity: 1 !important;
 }
 
-.cm-poly-tag-tool {
+.polyceph-editor .cm-poly-tag-tool {
     color: #00ff9d !important;
     font-weight: bold !important;
-    opacity: 1 !important;
 }
 
-/* Closing Tags */
-.cm-poly-tag-system-close {
+.polyceph-editor .cm-poly-tag-system-close {
     color: #ff9d00 !important;
     opacity: 0.5 !important;
 }
 
-.cm-poly-tag-user-close {
+.polyceph-editor .cm-poly-tag-user-close {
     color: #00d4ff !important;
     opacity: 0.5 !important;
 }
 
-.cm-poly-tag-assistant-close {
+.polyceph-editor .cm-poly-tag-assistant-close {
     color: #a066ff !important;
     opacity: 0.5 !important;
 }
 
-.cm-poly-tag-tool-close {
+.polyceph-editor .cm-poly-tag-tool-close {
     color: #00ff9d !important;
     opacity: 0.5 !important;
 }
 
-.cm-poly-tag-close {
-    opacity: 0.5 !important;
+.polyceph-editor .cm-poly-content-system {
+    background-color: rgba(255, 157, 0, 0.06) !important;
 }
 
-/* Thinking & Tags - Higher Specificity to override Markdown .cm-tag */
-.CodeMirror span.cm-poly-thinking,
-.CodeMirror span.cm-poly-angle-tag {
-    color: var(--SmartThemeEmColor) !important;
-    font-family: var(--mono-font-family, monospace) !important;
-    opacity: 1 !important;
+.polyceph-editor .cm-poly-content-user {
+    background-color: rgba(0, 212, 255, 0.06) !important;
 }
 
-/* Macros - High Specificity */
-.CodeMirror span.cm-poly-macro {
+.polyceph-editor .cm-poly-content-assistant {
+    background-color: rgba(160, 102, 255, 0.06) !important;
+}
+
+.polyceph-editor .cm-poly-content-tool {
+    background-color: rgba(0, 255, 157, 0.06) !important;
+}
+
+/* Internal Tags - Independent Colors (Baseline) */
+.polyceph-editor .cm-poly-tag-internal {
+    opacity: 0.6 !important;
+    font-style: italic !important;
+}
+
+.polyceph-editor .cm-poly-tag-engine-system {
+    color: #ff9d00 !important;
+}
+
+.polyceph-editor .cm-poly-tag-engine-user {
+    color: #00d4ff !important;
+}
+
+.polyceph-editor .cm-poly-tag-engine-assistant {
+    color: #a066ff !important;
+}
+
+.polyceph-editor .cm-poly-tag-engine-tool {
+    color: #00ff9d !important;
+}
+
+/* 
+   Conditional Overrides: 
+   If a manual role is FORCED (no ?), we only need to show that 
+   internal engine markers are being "disabled" or ignored.
+   Regular text and macros should keep their original colors.
+*/
+
+/* Engine roles inside a FORCED block should look "disabled" (Grey) */
+.polyceph-editor .cm-poly-content-forced[class*="cm-poly-tag-engine-"] {
+    color: var(--greyLight) !important;
+    opacity: 0.4 !important;
+}
+
+/* Internal Content Backgrounds (Subtle) */
+.polyceph-editor .cm-poly-content-engine-system {
+    background-color: rgba(255, 157, 0, 0.08) !important;
+}
+
+.polyceph-editor .cm-poly-content-engine-user {
+    background-color: rgba(0, 212, 255, 0.08) !important;
+}
+
+.polyceph-editor .cm-poly-content-engine-assistant {
+    background-color: rgba(160, 102, 255, 0.08) !important;
+}
+
+.polyceph-editor .cm-poly-content-engine-tool {
+    background-color: rgba(0, 255, 157, 0.08) !important;
+}
+
+/* 5. Shared UI Tokens */
+.polyceph-editor .cm-poly-macro {
     color: var(--SmartThemeQuoteColor) !important;
-    font-weight: bold !important;
 }
 
-.CodeMirror span.cm-poly-macro-special {
+.polyceph-editor .cm-poly-macro-special {
     color: var(--SmartThemeUnderlineColor) !important;
     font-weight: bold !important;
 }
 
-/* Role Context Backgrounds - Simplified to catch combined classes */
-[class*="cm-poly-content-system"] { background-color: rgba(255, 157, 0, 0.06) !important; }
-[class*="cm-poly-content-user"] { background-color: rgba(0, 212, 255, 0.06) !important; }
-[class*="cm-poly-content-assistant"] { background-color: rgba(160, 102, 255, 0.06) !important; }
-[class*="cm-poly-content-tool"] { background-color: rgba(0, 255, 157, 0.06) !important; }
-
-/* Universal Bracket Override for Polyceph Tags */
-.CodeMirror pre.CodeMirror-line span[class*="cm-poly-tag"] {
-    opacity: 1 !important;
+.polyceph-editor .cm-poly-thinking {
+    color: var(--gold) !important;
+    font-style: italic;
+    opacity: 0.8;
 }
 
-.CodeMirror .cm-variable-2,
-.CodeMirror .cm-variable-3,
-.CodeMirror .cm-keyword,
-.CodeMirror .cm-quote,
-.CodeMirror .cm-tag,
-.CodeMirror .cm-bracket,
-.CodeMirror .cm-formatting-list {
-    color: var(--SmartThemeBodyColor) !important;
+.polyceph-editor .cm-poly-angle-tag {
+    color: var(--SmartThemeEmColor) !important;
+    font-weight: bold !important;
 }
 
-.CodeMirror .cm-strong,
-.CodeMirror .cm-em {
-    color: inherit !important;
+.polyceph-editor .cm-poly-escaped {
+    color: var(--greyLight) !important;
+    opacity: 0.4;
 }
 
-.cm-poly-escaped {
-    color: var(--SmartThemeBodyColor) !important;
-    opacity: 0.7 !important;
+.polyceph-editor .CodeMirror-line {
+    text-align: left !important;
 }
 
-/* Ensure editor grows with content but respects max-height */
-.CodeMirror-scroll {
-    max-height: 64dvh;
-    overflow-y: auto !important;
-    overflow-x: auto !important;
-}
-
-/* Support for the "Maximized" state if ST applies it */
-.polyceph-prompt-textarea.maximized+.CodeMirror {
-    position: fixed;
-    top: 10%;
-    left: 10%;
-    width: 80%;
-    height: 80% !important;
-    z-index: 10000;
+.polyceph-editor span[class*="cm-poly-tag"] {
+    text-decoration: none !important;
+    border-bottom: none !important;
 }
