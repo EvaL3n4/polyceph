@@ -12,7 +12,7 @@ import { parseOutputTags, parsePromptToMessages } from './engine/parser.js';
 import { captureSessionState, restoreSessionState } from './engine/state-manager.js';
 import { finalizePipelineTeardown } from './engine/teardown.js';
 import { executePipelineSteps } from './engine/orchestrator.js';
-import { generateQuietly } from './engine/generator.js';
+import { generateQuietly } from './engine/generator/generator.js';
 
 // Re-exports for backward compatibility with index.js and other files
 export { forceHideStopButton, startTypingIndicator, removeTypingIndicator, updateTypingIndicator, clearOrphanedIndicators };

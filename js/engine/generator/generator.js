@@ -1,0 +1,178 @@
+import { logger } from '../../logger.js';
+import { DEFAULT_TOOL_RECURSION_LIMIT } from '../../constants.js';
+import { settings } from '../../state.js';
+import { waitForApiReady } from '../../utils.js';
+import { parsePromptToMessages } from '../parser.js';
+import { executeToolCallsParallel } from '../tool-handler.js';
+
+import { validateTokenBudget } from './token-budget.js';
+import { getToolManager, registerTools } from './services/tool-service.js';
+import { executeGeneration } from './api-client.js';
+import { extractResponseDetails, extractRawText } from './extractors/response-extractor.js';
+import { cleanMessage } from './message-cleaner.js';
+import { reconstructOutput } from './formatters/output-formatter.js';
+
+/**
+ * Executes a generation request through the SillyTavern API in "quiet" mode.
+ */
+export async function generateQuietly(profileName, prompt, api = '', signal = null, options = {}) {
+    if (!profileName || profileName === 'none') {
+        logger.debug('Template-only task detected (No LLM). Returning expanded template.');
+        return prompt;
+    }
+
+    await waitForApiReady(3000);
+
+    if (signal && signal.aborted) throw new Error('Aborted');
+
+    const outputType = options.outputType || 'internal';
+    const allowTools = options.allowTools !== false;
+    const forceNoStreaming = outputType === 'tool';
+    const useStreaming = !forceNoStreaming && (options.streaming !== undefined ? options.streaming : (settings.enableStreaming !== false));
+    const antiLoop = options.antiLoop !== undefined ? options.antiLoop : true;
+    const loopThreshold = options.loopThreshold || settings.loopDetectionThreshold || 3;
+    const onStream = options.onStream || null;
+
+    try {
+        const context = SillyTavern.getContext();
+
+        // 1. Token limit check
+        await validateTokenBudget(prompt);
+
+        // 2. Initialize Tool Calling Support
+        const ToolManager = await getToolManager(allowTools);
+        const stCCSettings = context.chatCompletionSettings || {};
+        const stRecurseLimit = stCCSettings.tool_call_recurse_limit;
+        const toolReasoningMode = stCCSettings.tool_reasoning_mode || 'disabled';
+
+        logger.debug(`Tool Reasoning Mode (Interleaved Thinking) in current preset: ${toolReasoningMode}`);
+
+        let depth = 0;
+        const maxDepth = stRecurseLimit !== undefined ? Number(stRecurseLimit) : (settings.toolRecursionLimit !== undefined ? settings.toolRecursionLimit : DEFAULT_TOOL_RECURSION_LIMIT);
+        
+        let finalResponse = "";
+        let anyToolError = false;
+        const messages = [...parsePromptToMessages(prompt, api)];
+        const taskMessages = [];
+
+        // 3. Main Tool Recursion Loop
+        while (depth < maxDepth) {
+            depth++;
+            logger.info(`Starting tool recursion depth ${depth}/${maxDepth}`);
+
+            if (signal && signal.aborted) throw new Error('Aborted');
+
+            // --- Tool Registration ---
+            let tools = null;
+            let tool_choice = null;
+            if (allowTools && ToolManager && typeof ToolManager.isToolCallingSupported === 'function' && ToolManager.isToolCallingSupported()) {
+                const registration = await registerTools(ToolManager, api, messages);
+                tools = registration.tools;
+                tool_choice = registration.tool_choice;
+                if (tools && tools.length > 0) logger.debug('Tools to be sent:', tools);
+            }
+
+            // --- API Call Execution ---
+            const responseData = await executeGeneration(messages, tools, tool_choice, api, signal, {
+                useStreaming, antiLoop, loopThreshold, onStream, depth
+            });
+
+            if (!responseData) {
+                logger.warn(`Turn ${depth} returned no data.`);
+                finalResponse = "(Generation returned empty)";
+                break;
+            }
+
+            // --- Response Processing ---
+            const { reasoning: turnReasoning, toolCalls } = extractResponseDetails(responseData);
+            logger.debug(`Turn ${depth} response:`, responseData);
+            if (turnReasoning) logger.debug(`Turn ${depth} reasoning found: ${turnReasoning.length} chars.`);
+
+            // API Error Checks
+            if (responseData.choices?.[0]?.finish_reason === 'error') {
+                const errorDetail = responseData.choices[0].native_finish_reason || 'Unknown API Error';
+                throw new Error(`API returned an error: ${errorDetail}`);
+            }
+
+            // --- Tool Execution Branch ---
+            if (toolCalls && toolCalls.length > 0 && ToolManager) {
+                logger.debug(`Tool calls detected (depth ${depth}):`, toolCalls);
+
+                const assistantMessage = responseData?.choices?.[0]?.message;
+                const assistantHistoryItem = {
+                    role: 'assistant',
+                    content: assistantMessage?.content || '',
+                    tool_calls: toolCalls
+                };
+
+                if (toolReasoningMode !== 'disabled') {
+                    assistantHistoryItem.reasoning_content = turnReasoning;
+                    assistantHistoryItem.signature = assistantMessage?.signature || '';
+                    assistantHistoryItem.toolSignatures = assistantMessage?.toolSignatures || {};
+                }
+
+                messages.push(assistantHistoryItem);
+                taskMessages.push(assistantHistoryItem);
+
+                const { results, hasErrors } = await executeToolCallsParallel(ToolManager, toolCalls);
+                if (hasErrors) anyToolError = true;
+
+                if (results && Array.isArray(results)) {
+                    messages.push(...results);
+                    taskMessages.push(...results);
+                }
+
+                depth++;
+                logger.info(`Continuing generation loop: ${toolCalls.length} tool calls executed, Turn ${depth} follows.`);
+
+                if (options.skipSuccessRecursion && !hasErrors) {
+                    logger.info('skipSuccessRecursion is true and tools succeeded. Ending task early.');
+                    break;
+                }
+                continue;
+            }
+
+            // --- Final Response Branch ---
+            const rawText = extractRawText(responseData, api);
+            finalResponse = cleanMessage(rawText);
+
+            // Inject API reasoning if present and not already handled by <think> tags
+            if (turnReasoning && !finalResponse.includes('<think>')) {
+                finalResponse += `\n\n<think>\n${turnReasoning}\n</think>`;
+            }
+            break;
+        }
+
+        logger.debug('Generation loop finished. Final Response length:', finalResponse?.length || 0);
+
+        // --- Post-Generation Logic ---
+        if (anyToolError && outputType === 'tool') {
+            logger.warn('Tool execution encountered errors in a Tool Processor task. Proceeding to reconstruct history for UI visibility.');
+        }
+
+        return reconstructOutput(taskMessages, finalResponse, options);
+
+    } catch (err) {
+        if (err.message === 'Aborted' || err.message === 'Loop detected') throw err;
+
+        let errorDetail = err.message || 'Unknown error';
+        if (err.response) {
+            try {
+                const parsed = typeof err.response === 'string' ? JSON.parse(err.response) : err.response;
+                errorDetail = parsed.error?.message || parsed.message || JSON.stringify(parsed);
+            } catch (e) {
+                errorDetail = String(err.response);
+            }
+        }
+
+        logger.error('Generation failed:', errorDetail, err);
+        
+        if (taskMessages.length > 0) {
+            logger.warn('Reconstructing partial history after generation failure.');
+            const partialResponse = `(Error: ${errorDetail})`;
+            return reconstructOutput(taskMessages, partialResponse, options);
+        } else {
+            throw new Error(errorDetail);
+        }
+    }
+}

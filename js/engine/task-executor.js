@@ -4,7 +4,7 @@ import { expandPrompt } from '../macros/macros.js';
 import { getCurrentPresetName, applyPreset, restorePresetState, getCapturedPresetName } from '../compat-presets.js';
 import { updateTypingIndicator } from './ui-utils.js';
 import { parseOutputTags } from './parser.js';
-import { generateQuietly } from './generator.js';
+import { generateQuietly } from './generator/generator.js';
 
 /**
  * Executes a single task, including prompt expansion, generation, and retry logic.
