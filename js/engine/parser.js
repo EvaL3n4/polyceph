@@ -69,8 +69,8 @@ export function parseOutputTags(rawOutput, taskId, profileDisplayName, isThinkin
                     cleanParts.push(content);
                 }
             } else if (segment.toLowerCase().startsWith('<tool_call')) {
-                const nameMatch = segment.match(/name="([^"]+)"/i);
-                const argsMatch = segment.match(/args='([^']+)'/i);
+                const nameMatch = segment.match(/name="([\s\S]+?)"/i);
+                const argsMatch = segment.match(/args='([\s\S]+)'\s*>/i);
                 const name = nameMatch ? nameMatch[1] : 'Unknown Tool';
                 const args = argsMatch ? argsMatch[1] : '';
                 const response = segment.replace(/<tool_call[\s\S]*?>/i, '').replace(/<\/tool_call>/i, '').trim();
@@ -83,6 +83,12 @@ export function parseOutputTags(rawOutput, taskId, profileDisplayName, isThinkin
                     profile: profileDisplayName,
                     turnIndex: recursionIndex
                 });
+
+                // Include tool results in clean output for use in macros and task chaining
+                if (response) {
+                    cleanParts.push(response);
+                    persistentParts.push(response);
+                }
             } else {
                 // Regular text (remove backgrounds and invocations)
                 const content = segment.replace(backgroundRegex, '').replace(invocationRegex, '').trim();
