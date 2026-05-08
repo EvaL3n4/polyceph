@@ -1,4 +1,5 @@
 import { logger } from '../logger.js';
+import { encodeInvocations } from '../macros/utils.js';
 import { DEFAULT_TOOL_RECURSION_LIMIT } from '../constants.js';
 import { settings, getCapturedPresetName } from '../state.js';
 import { waitForApiReady } from '../utils.js';
@@ -150,7 +151,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                 tool_choice = generateData.tool_choice;
 
                 if (tools && tools.length > 0) {
-                    logger.debug('Tools to be sent:', JSON.stringify(tools, null, 2));
+                    logger.debug('Tools to be sent:', tools);
                 }
             }
 
@@ -162,60 +163,84 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                 loopDetector = new LoopDetector(loopThreshold);
             }
 
-            let responseData;
+            let responseData = null;
+            let apiAttempt = 0;
+            const maxApiRetries = settings.maxToolRetries || 0;
             const timeoutMs = settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 60000;
 
-            if (canStream) {
-                // ========== STREAMING PATH ==========
-                logger.debug('Using streaming generation path.');
+            while (apiAttempt <= maxApiRetries) {
+                try {
+                    if (canStream) {
+                        // ========== STREAMING PATH ==========
+                        logger.debug(`Using streaming generation path (attempt ${apiAttempt + 1}/${maxApiRetries + 1}).`);
 
-                const streamingChunkHandler = async (chunk) => {
-                    // Feed loop detector
-                    if (loopDetector && !chunk.done) {
-                        loopDetector.feed(chunk.text.slice(loopDetector.getFullText().length));
-                        if (loopDetector.isLooping()) {
-                            const info = loopDetector.getLoopInfo();
-                            logger.warn(`Loop detected during streaming: "${info.pattern}" (${info.repetitions}× at period ${info.patternLength})`);
-                            throw new Error('Loop detected');
+                        const streamingChunkHandler = async (chunk) => {
+                            // Feed loop detector
+                            if (loopDetector && !chunk.done) {
+                                loopDetector.feed(chunk.text.slice(loopDetector.getFullText().length));
+                                if (loopDetector.isLooping()) {
+                                    const info = loopDetector.getLoopInfo();
+                                    logger.warn(`Loop detected during streaming: "${info.pattern}" (${info.repetitions}× at period ${info.patternLength})`);
+                                    throw new Error('Loop detected');
+                                }
+                            }
+
+                            // Forward to caller's stream handler
+                            if (onStream) {
+                                await onStream({ text: chunk.text, reasoning: chunk.reasoning, done: chunk.done });
+                            }
+                        };
+
+                        const streamingPromise = generateViaCCStreaming(messages, signal, streamingChunkHandler, tools, tool_choice, api, false);
+
+                        // Build race array for timeout + abort
+                        const raceArr = [streamingPromise];
+
+                        if (timeoutMs > 0) {
+                            raceArr.push(new Promise((_, reject) => setTimeout(() => reject(new Error('Generation Timeout')), timeoutMs)));
                         }
+
+                        const abortPromise = signal ? new Promise((_, reject) => {
+                            if (signal.aborted) reject(new Error('Aborted'));
+                            signal.addEventListener('abort', () => reject(new Error('Aborted')), { once: true });
+                        }) : null;
+                        if (abortPromise) raceArr.push(abortPromise);
+
+                        const streamResult = await Promise.race(raceArr);
+
+                        if (streamResult === null) {
+                            // Streaming unavailable — fallback to non-streaming in next retry/loop pass
+                            logger.info('Streaming returned null (unavailable). Falling back to non-streaming.');
+                            responseData = await _generateNonStreaming(messages, tools, tool_choice, signal, timeoutMs, false);
+                        } else {
+                            logger.debug('Streaming path successfully returned result object.');
+                            responseData = streamResult;
+                        }
+                    } else {
+                        // ========== NON-STREAMING PATH ==========
+                        logger.debug(`Streaming disabled or unsupported (attempt ${apiAttempt + 1}/${maxApiRetries + 1}). Using non-streaming generation path.`);
+                        responseData = await _generateNonStreaming(messages, tools, tool_choice, signal, timeoutMs, false);
                     }
 
-                    // Forward to caller's stream handler
-                    if (onStream) {
-                        await onStream({ text: chunk.text, reasoning: chunk.reasoning, done: chunk.done });
+                    // If we got a response, check for errors
+                    if (responseData?.error) {
+                        const err = responseData.error;
+                        throw new Error(err.message || JSON.stringify(err));
                     }
 
-                };
+                    // If we got here, we have a valid response (or at least not an API error)
+                    break;
 
-                const streamingPromise = generateViaCCStreaming(messages, signal, streamingChunkHandler, tools, tool_choice, api, false);
+                } catch (err) {
+                    if (err.message === 'Aborted' || err.message === 'Loop detected') throw err;
 
-                // Build race array for timeout + abort
-                const raceArr = [streamingPromise];
+                    apiAttempt++;
+                    if (apiAttempt > maxApiRetries) throw err;
 
-                if (timeoutMs > 0) {
-                    raceArr.push(new Promise((_, reject) => setTimeout(() => reject(new Error('Generation Timeout')), timeoutMs)));
+                    const delay = settings.retryDelayMs || 2000;
+                    logger.warn(`API Turn ${depth} failed (attempt ${apiAttempt}/${maxApiRetries + 1}). Retrying in ${delay}ms...`, err);
+                    await new Promise(r => setTimeout(r, delay));
                 }
-
-                const abortPromise = signal ? new Promise((_, reject) => {
-                    if (signal.aborted) reject(new Error('Aborted'));
-                    signal.addEventListener('abort', () => reject(new Error('Aborted')), { once: true });
-                }) : null;
-                if (abortPromise) raceArr.push(abortPromise);
-
-                const streamResult = await Promise.race(raceArr);
-
-                if (streamResult === null) {
-                    // Streaming unavailable — fallback to non-streaming in next loop pass
-                    logger.info('Streaming returned null (unavailable). Falling back to non-streaming.');
-                    responseData = await _generateNonStreaming(messages, tools, tool_choice, signal, timeoutMs, false);
-                } else {
-                    logger.debug('Streaming path successfully returned result object.');
-                    responseData = streamResult;
-                }
-            } else {
-                // ========== NON-STREAMING PATH ==========
-                logger.debug(`Streaming disabled or unsupported for API: ${api}. Using non-streaming generation path.`);
-                responseData = await _generateNonStreaming(messages, tools, tool_choice, signal, timeoutMs, false);
             }
 
             if (!responseData) {
@@ -225,14 +250,33 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
             }
 
             const assistantMessage = responseData?.choices?.[0]?.message;
-            const turnReasoning = assistantMessage?.reasoning_content || assistantMessage?.reasoning || '';
+            let turnReasoning = assistantMessage?.reasoning_content || assistantMessage?.reasoning || '';
+            
+            // Extract from reasoning_details if present (common in OpenRouter/Gemini)
+            if (!turnReasoning && Array.isArray(assistantMessage?.reasoning_details)) {
+                turnReasoning = assistantMessage.reasoning_details
+                    .map(rd => rd.reasoning || rd.text || rd.data || '')
+                    .join('\n');
+            } else if (!turnReasoning && Array.isArray(responseData?.reasoning_details)) {
+                 turnReasoning = responseData.reasoning_details
+                    .map(rd => rd.reasoning || rd.text || rd.data || '')
+                    .join('\n');
+            }
 
             logger.debug(`Turn ${depth} response:`, responseData);
 
             // Extract tool calls from response
             const toolCalls = extractToolCalls(responseData);
+            
+            if (turnReasoning) {
+                logger.debug(`Turn ${depth} reasoning found: ${turnReasoning.length} chars.`);
+            }
 
-            // Check for API-level errors in choices
+            // Check for API-level errors (top level or in choices)
+            if (responseData?.error) {
+                const err = responseData.error;
+                throw new Error(err.message || JSON.stringify(err));
+            }
             if (responseData.choices?.[0]?.finish_reason === 'error') {
                 const errorDetail = responseData.choices[0].native_finish_reason || 'Unknown API Error';
                 throw new Error(`API returned an error: ${errorDetail}`);
@@ -338,8 +382,8 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
         // If tools were enabled and any failed, and we are in a strict mode, abort.
         // For now, we'll log it. If outputType is 'tool', success is critical.
         if (anyToolError && outputType === 'tool') {
-            logger.warn('Tool execution encountered errors in a Tool Processor task.');
-            return "(Error during tool execution)";
+            logger.warn('Tool execution encountered errors in a Tool Processor task. Proceeding to reconstruct history for UI visibility.');
+            // Don't return early; let it fall through to reconstruct the history so thoughts are visible.
         }
 
         // If success response is hidden, return empty string
@@ -360,7 +404,21 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
             }
             // Fallback to role-tagged final response
             if (finalResponse) {
-                let output = `[[ROLE:assistant]]\n${finalResponse}`;
+                // Collect all reasoning from the task to show in the UI
+                let accumulatedReasoning = '';
+                for (const m of newMessages) {
+                    if (m.role === 'assistant' && m.reasoning_content) {
+                        accumulatedReasoning += (accumulatedReasoning ? '\n' : '') + m.reasoning_content;
+                    }
+                }
+
+                let output = `[[ROLE:assistant]]\n`;
+                if (accumulatedReasoning && !finalResponse.includes('<think>')) {
+                    logger.debug(`Wrapping ${accumulatedReasoning.length} chars of accumulated reasoning in <think> tags.`);
+                    output += `<think>\n${accumulatedReasoning}\n</think>\n\n`;
+                }
+                output += finalResponse;
+
                 // Inject all tool calls from this task into the final assistant message for visualization
                 for (const m of newMessages) {
                     if (m.role === 'assistant' && m.tool_calls) {
@@ -392,7 +450,9 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                             const result = resultMsg ? resultMsg.content : '(No result found)';
                             content += `\n\n<tool_call name="${tc.function.name}" args='${tc.function.arguments}'>\n${result}\n</tool_call>`;
                         }
-                        content += `\n[[INVOCATIONS:${JSON.stringify(m.tool_calls)}]]`;
+                        if (m.tool_calls && Array.isArray(m.tool_calls)) {
+                            content += `\n[[INVOCATIONS:${encodeInvocations(m.tool_calls)}]]`;
+                        }
                     }
                     return `[[ROLE:${role}${roleSuffix}]]\n${content.trim()}\n[[/ROLE]]`;
                 }).join('\n\n');
@@ -414,13 +474,90 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                 const parsed = typeof err.response === 'string' ? JSON.parse(err.response) : err.response;
                 errorDetail = parsed.error?.message || parsed.message || JSON.stringify(parsed);
             } catch (e) {
-                errorDetail = err.response;
+                errorDetail = String(err.response);
             }
         }
 
         logger.error('Generation failed:', errorDetail, err);
-        throw new Error(errorDetail);
+        
+        // If we have some history, return it so thoughts are visible, but prepend the error
+        if (taskMessages.length > 0) {
+            logger.warn('Reconstructing partial history after generation failure.');
+            finalResponse = `(Error: ${errorDetail})`;
+            // Fall through to the final return logic below (outside the try/catch)
+        } else {
+            throw new Error(errorDetail);
+        }
     }
+
+    // --- Final Output Reconstruction (Shared by success and partial failure) ---
+    const newMessages = taskMessages;
+
+    if (options.hideToolHistory) {
+        // Only send the "success object" (last turn's results or final response)
+        // Check if we had errors (either tool errors or the final API error)
+        const hasAnyError = anyToolError || (finalResponse && finalResponse.includes('(Error:'));
+        
+        if (options.skipSuccessRecursion) {
+            const lastToolResults = newMessages.filter(m => m.role === 'tool');
+            if (lastToolResults.length > 0) {
+                return lastToolResults.map(res => `[[ROLE:tool:${res.tool_call_id}]]\n${res.content}\n[[/ROLE]]`).join('\n\n');
+            }
+        }
+        
+        // Fallback to role-tagged final response
+        let accumulatedReasoning = '';
+        for (const m of newMessages) {
+            if (m.role === 'assistant' && m.reasoning_content) {
+                accumulatedReasoning += (accumulatedReasoning ? '\n' : '') + m.reasoning_content;
+            }
+        }
+
+        let output = `[[ROLE:assistant]]\n`;
+        if (accumulatedReasoning && (!finalResponse || !finalResponse.includes('<think>'))) {
+            output += `<think>\n${accumulatedReasoning}\n</think>\n\n`;
+        }
+        output += (finalResponse || "(No response)");
+
+        // Inject all tool calls
+        for (const m of newMessages) {
+            if (m.role === 'assistant' && m.tool_calls) {
+                for (const tc of m.tool_calls) {
+                    const resultMsg = newMessages.find(rm => rm.role === 'tool' && rm.tool_call_id === tc.id);
+                    const result = resultMsg ? resultMsg.content : '(No result found)';
+                    output += `\n\n<tool_call name="${tc.function.name}" args='${tc.function.arguments}'>\n${result}\n</tool_call>`;
+                }
+            }
+        }
+        return output + `\n[[/ROLE]]`;
+    } else {
+        // Reconstruct full turn history
+        if (newMessages.length > 0) {
+            return newMessages.map(m => {
+                const role = m.role;
+                const roleSuffix = (role === 'tool' && m.tool_call_id) ? `:${m.tool_call_id}` : '';
+                let content = m.content || '';
+                if (role === 'assistant' && m.reasoning_content && !content.includes('<think>')) {
+                    content += `\n\n<think>\n${m.reasoning_content}\n</think>`;
+                }
+
+                if (role === 'assistant' && m.tool_calls && m.tool_calls.length > 0) {
+                    for (const tc of m.tool_calls) {
+                        const resultMsg = newMessages.find(rm => rm.role === 'tool' && rm.tool_call_id === tc.id);
+                        const result = resultMsg ? resultMsg.content : '(No result found)';
+                        content += `\n\n<tool_call name="${tc.function.name}" args='${tc.function.arguments}'>\n${result}\n</tool_call>`;
+                    }
+                    if (m.tool_calls && Array.isArray(m.tool_calls)) {
+                        content += `\n[[INVOCATIONS:${encodeInvocations(m.tool_calls)}]]`;
+                    }
+                }
+                return `[[ROLE:${role}${roleSuffix}]]\n${content.trim()}\n[[/ROLE]]`;
+            }).join('\n\n') + (finalResponse && finalResponse.includes('(Error:') ? `\n\n[[ROLE:system]]\n${finalResponse}\n[[/ROLE]]` : '');
+        }
+    }
+
+    if (finalResponse !== undefined && finalResponse !== null) return finalResponse;
+    return "(Generation returned empty)";
 }
 
 /**

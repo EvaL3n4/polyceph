@@ -1,4 +1,5 @@
 import { logger } from './utils.js';
+import { encodeInvocations } from './utils.js';
 import { countTokens, getMaxPromptTokens } from '../compat-shared.js';
 
 /**
@@ -233,7 +234,7 @@ export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = 
 
             let encodedInvocations = '';
             if (m.extra?.tool_invocations && Array.isArray(m.extra.tool_invocations)) {
-                encodedInvocations = `\n[[INVOCATIONS:${JSON.stringify(m.extra.tool_invocations)}]]`;
+                encodedInvocations = `\n[[INVOCATIONS:${encodeInvocations(m.extra.tool_invocations)}]]`;
             }
 
             if (isCC) {

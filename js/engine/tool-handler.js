@@ -57,15 +57,35 @@ export function extractToolCalls(data) {
  */
 function isToolOutputError(output) {
     if (!output) return false;
+    if (output instanceof Error) return true;
     let data = output;
+
     if (typeof output === 'string') {
         const trimmed = output.trim();
+        const lower = trimmed.toLowerCase();
+
+        // 1. Direct string error markers
+        if (lower.startsWith('error:') ||
+            lower.startsWith('failure:') ||
+            lower.startsWith('exception:')) {
+            return true;
+        }
+
+        // 2. Try JSON parsing if it looks like an object/array
         if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
-            try { data = JSON.parse(trimmed); } catch (e) { return false; }
+            try {
+                data = JSON.parse(trimmed);
+            } catch (e) {
+                // If it fails to parse, it's just a regular string which we already checked for error markers
+                return false;
+            }
         } else {
+            // It's a plain string that didn't match our error markers
             return false;
         }
     }
+
+    // 3. Object/Array analysis
     if (typeof data !== 'object' || data === null || Array.isArray(data)) return false;
 
     const statusKeys = ['status', 'success', 'ok', 'error', 'errors'];
@@ -106,10 +126,15 @@ export async function executeToolCallsParallel(ToolManager, toolCalls) {
         const id = tc.id;
 
         try {
-            logger.info(`[Tool] Executing: ${name}`, { id, parameters });
+            const paramType = typeof parameters;
+            logger.info(`[Tool] Executing: ${name}`, { id, paramType });
+            if (paramType === 'string') {
+                logger.debug(`[Tool] Raw arguments for ${name}:`, parameters.substring(0, 200) + (parameters.length > 200 ? '...' : ''));
+            }
+
             const output = await ToolManager.invokeFunctionTool(name, parameters);
-            
-            logger.debug(`[Tool] Result for ${name} (${id}):`, output);
+
+            logger.debug(`[Tool] Result for ${name} (${id}):`, typeof output === 'object' ? JSON.stringify(output).substring(0, 200) : String(output).substring(0, 200));
 
             // Check for logical errors in the output to control recursion
             if (isToolOutputError(output)) {
@@ -118,11 +143,16 @@ export async function executeToolCallsParallel(ToolManager, toolCalls) {
             }
 
             // Return tool role message
+            let content = typeof output === 'string' ? output : JSON.stringify(output);
+            if (output instanceof Error) {
+                content = output.toString();
+            }
+
             return {
                 role: 'tool',
                 tool_call_id: id,
                 name: name,
-                content: typeof output === 'string' ? output : JSON.stringify(output)
+                content
             };
         } catch (err) {
             logger.error(`[Tool] Failed to execute ${name} (${id}):`, err);

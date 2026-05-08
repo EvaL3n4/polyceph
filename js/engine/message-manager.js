@@ -74,6 +74,7 @@ export async function handleCharacterOutput(content, thoughts, charIndex, node, 
     };
     if (thoughts && thoughts.length > 0) {
         extraData.polyceph_thoughts = thoughts;
+        logger.debug(`Attaching ${thoughts.length} thoughts to character message extraData.`);
     }
 
     if (generateSwipesForBatchId && charIndex < batchCharMessages.length) {

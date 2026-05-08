@@ -1,4 +1,5 @@
 import { logger } from '../logger.js';
+import { decodeInvocations } from '../macros/utils.js';
 
 /**
  * Parses raw LLM output to extract special tags like <think>, <ramble>, and <background>.
@@ -6,66 +7,97 @@ import { logger } from '../logger.js';
 export function parseOutputTags(rawOutput, taskId, profileDisplayName, isThinkingTask) {
     const thoughts = [];
     const hiddenBackgrounds = [];
-
-    // Extract backgrounds first (always extracted)
-    const backgroundRegex = /<background>([\s\S]*?)<\/background>/gi;
-    let bgMatch;
-    while ((bgMatch = backgroundRegex.exec(rawOutput)) !== null) {
-        const content = bgMatch[1].trim();
-        if (content) hiddenBackgrounds.push(content);
-    }
-
-    // Interleaved parsing for think/ramble, tool calls, and text
-    const tokenRegex = /(<think>[\s\S]*?<\/think>|<ramble>[\s\S]*?<\/ramble>|<tool_call[\s\S]*?<\/tool_call>)/gi;
-
-    const segments = rawOutput.split(tokenRegex);
-
     let cleanParts = [];
     let persistentParts = [];
 
-    segments.forEach(segment => {
-        if (!segment) return;
+    // 1. Detect if we have role-tagged turn history (recursion)
+    const roleRegex = /\[\[ROLE:(system|user|assistant|tool)(?::([^\]]+))?\]\]([\s\S]*?)\[\[\/ROLE\]\]/gi;
+    const turns = [];
+    let match;
+    let lastIndex = 0;
 
-        if (segment.toLowerCase().startsWith('<think>')) {
-            const content = segment.replace(/<\/?think>/gi, '').trim();
-            if (content) {
-                thoughts.push({ title: `Thinking`, content, isSilent: true, profile: profileDisplayName });
-            }
-        } else if (segment.toLowerCase().startsWith('<ramble>')) {
-            const content = segment.replace(/<\/?ramble>/gi, '').trim();
-            if (content) {
-                thoughts.push({ title: `Rambling`, content, isSilent: true, profile: profileDisplayName });
-                cleanParts.push(content);
-            }
-        } else if (segment.toLowerCase().startsWith('<tool_call')) {
-            const nameMatch = segment.match(/name="([^"]+)"/i);
-            const argsMatch = segment.match(/args='([^']+)'/i);
-            const name = nameMatch ? nameMatch[1] : 'Unknown Tool';
-            const args = argsMatch ? argsMatch[1] : '';
-            const response = segment.replace(/<tool_call[\s\S]*?>/i, '').replace(/<\/tool_call>/i, '').trim();
+    while ((match = roleRegex.exec(rawOutput)) !== null) {
+        turns.push({
+            role: match[1],
+            id: match[2] || null,
+            content: match[3].trim()
+        });
+        lastIndex = roleRegex.lastIndex;
+    }
 
-            thoughts.push({
-                title: `Tool: ${name}`,
-                content: { args, response },
-                type: 'tool',
-                isSilent: true,
-                profile: profileDisplayName
-            });
-        } else {
+    // If no role tags found, treat the whole thing as one assistant turn
+    if (turns.length === 0) {
+        turns.push({ role: 'assistant', id: null, content: rawOutput.trim() });
+    }
 
-            // Regular text (remove backgrounds from it)
-            const content = segment.replace(backgroundRegex, '').trim();
-            if (content) {
-                cleanParts.push(content);
-                persistentParts.push(content);
+    // 2. Process each turn
+    let recursionIndex = 0;
+    for (const turn of turns) {
+        if (turn.role === 'assistant') recursionIndex++;
 
-                // If it's a "Thinking" task, everything goes into the thoughts list in order
-                if (isThinkingTask) {
-                    thoughts.push({ title: taskId || `Task Output`, content, isSilent: false, profile: profileDisplayName });
+        const turnLabel = turn.role === 'assistant' ? `Recursion ${recursionIndex}` : 'Turn';
+        const turnContent = turn.content;
+
+        // 2a. Skip tool results in thoughts (they are already interleaved in assistant turns)
+        if (turn.role === 'tool') continue;
+
+        // Extract backgrounds (always extracted globally)
+        const backgroundRegex = /<background>([\s\S]*?)<\/background>/gi;
+        const invocationRegex = /\[\[INVOCATIONS:([\s\S]*?)\]\]/gi;
+        let bgMatch;
+        while ((bgMatch = backgroundRegex.exec(turnContent)) !== null) {
+            const content = bgMatch[1].trim();
+            if (content) hiddenBackgrounds.push(content);
+        }
+
+        // Interleaved parsing for think/ramble, tool calls, and text
+        const tokenRegex = /(<think>[\s\S]*?<\/think>|<ramble>[\s\S]*?<\/ramble>|<tool_call[\s\S]*?<\/tool_call>)/gi;
+        const segments = turnContent.split(tokenRegex);
+
+        segments.forEach(segment => {
+            if (!segment) return;
+
+            if (segment.toLowerCase().startsWith('<think>')) {
+                const content = segment.replace(/<\/?think>/gi, '').trim();
+                if (content) {
+                    thoughts.push({ title: `Thinking (${turnLabel})`, content, isSilent: true, profile: profileDisplayName, turnIndex: recursionIndex });
+                }
+            } else if (segment.toLowerCase().startsWith('<ramble>')) {
+                const content = segment.replace(/<\/?ramble>/gi, '').trim();
+                if (content) {
+                    thoughts.push({ title: `Rambling (${turnLabel})`, content, isSilent: true, profile: profileDisplayName, turnIndex: recursionIndex });
+                    cleanParts.push(content);
+                }
+            } else if (segment.toLowerCase().startsWith('<tool_call')) {
+                const nameMatch = segment.match(/name="([^"]+)"/i);
+                const argsMatch = segment.match(/args='([^']+)'/i);
+                const name = nameMatch ? nameMatch[1] : 'Unknown Tool';
+                const args = argsMatch ? argsMatch[1] : '';
+                const response = segment.replace(/<tool_call[\s\S]*?>/i, '').replace(/<\/tool_call>/i, '').trim();
+
+                thoughts.push({
+                    title: `Tool: ${name}`,
+                    content: { args, response },
+                    type: 'tool',
+                    isSilent: true,
+                    profile: profileDisplayName,
+                    turnIndex: recursionIndex
+                });
+            } else {
+                // Regular text (remove backgrounds and invocations)
+                const content = segment.replace(backgroundRegex, '').replace(invocationRegex, '').trim();
+                if (content) {
+                    cleanParts.push(content);
+                    persistentParts.push(content);
+
+                    // If it's a "Thinking" task, or if we have multiple turns, add to thoughts list
+                    if (isThinkingTask || turns.length > 1) {
+                        thoughts.push({ title: turnLabel, content, isSilent: false, profile: profileDisplayName, turnIndex: recursionIndex });
+                    }
                 }
             }
-        }
-    });
+        });
+    }
 
     return {
         cleanOutput: cleanParts.join('\n\n').trim(),
@@ -107,13 +139,9 @@ export function parsePromptToMessages(text, api = '') {
         // Extract and remove [[INVOCATIONS:...]] tags
         const invocationRegex = /\[\[INVOCATIONS:([\s\S]*?)\]\]/gi;
         const invocations = [];
-        content = content.replace(invocationRegex, (m, json) => {
-            try {
-                const parsed = JSON.parse(json);
-                if (Array.isArray(parsed)) invocations.push(...parsed);
-            } catch (e) {
-                logger.warn('Failed to parse [[INVOCATIONS]] tag in prompt:', e);
-            }
+        content = content.replace(invocationRegex, (m, hex) => {
+            const parsed = decodeInvocations(hex);
+            if (parsed && Array.isArray(parsed)) invocations.push(...parsed);
             return '';
         }).trim();
 
@@ -158,17 +186,13 @@ export function parsePromptToMessages(text, api = '') {
     for (const msg of messages) {
         // Extract invocations from content
         let invocations = null;
-        msg.content = msg.content.replace(invocationRegex, (match, json) => {
-            try {
-                invocations = JSON.parse(json);
-            } catch (e) {
-                logger.warn("Failed to parse encoded invocations:", e);
-            }
+        msg.content = msg.content.replace(invocationRegex, (match, hex) => {
+            invocations = decodeInvocations(hex);
             return ""; // Remove tag from content
         }).trim();
 
         const lastMsg = mergedMessages[mergedMessages.length - 1];
-        if (lastMsg && lastMsg.role === msg.role) {
+        if (lastMsg && lastMsg.role === msg.role && msg.role !== 'tool') {
             lastMsg.content += '\n\n' + msg.content;
             // Merge invocations if both exist
             if (invocations) {

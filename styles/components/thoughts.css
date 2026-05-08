@@ -103,6 +103,7 @@ body.polyceph-show-reasoning .polyceph-thoughts {
     border-radius: 5px;
     padding: 8px;
     border-left: 4px solid var(--SmartThemeQuoteColor, #888);
+    margin-bottom: 2px;
 }
 
 .polyceph-silent-thought .polyceph-generated-thought-content {

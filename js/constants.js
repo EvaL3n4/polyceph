@@ -7,6 +7,7 @@ export const defaultSettings = {
     delayMs: 250,
     generationTimeoutMs: 60000,
     maxRetries: 3,
+    maxToolRetries: 3,
     retryDelayMs: 2000,
     loopDetectionThreshold: 3,
     activePipelineId: 'default',

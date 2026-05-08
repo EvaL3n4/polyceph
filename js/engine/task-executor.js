@@ -121,6 +121,7 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
 
                 if (!isEmpty) {
                     parsedResult = parseOutputTags(rawRes, node.label || `Task ${taskIdIndx}`, profileDisplayName, node.persist && !node.isCharacter);
+                    logger.debug(`Task ${node.id} ("${node.label || 'Step'}") parsed: ${parsedResult.thoughts.length} thoughts, ${parsedResult.hiddenBackgrounds.length} backgrounds, ${parsedResult.cleanOutput.length} chars text.`);
                     break;
                 }
 

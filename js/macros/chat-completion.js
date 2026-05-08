@@ -1,5 +1,5 @@
 import { countTokens, getMaxContextTokens, getMaxResponseTokens, getWorldInfoForChat } from '../compat-shared.js';
-import { logger, wrapRole } from './utils.js';
+import { logger, wrapRole, encodeInvocations } from './utils.js';
 import { weaveInjections } from './history.js';
 
 import { getOpenAIModule, getChatCompletionModule, getMessagesModule } from '../compat-st.js';
@@ -135,7 +135,7 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
 
                         let encodedInvocations = '';
                         if (!m.is_injection && m.extra?.tool_invocations && Array.isArray(m.extra.tool_invocations)) {
-                            encodedInvocations = `\n[[INVOCATIONS:${JSON.stringify(m.extra.tool_invocations)}]]`;
+                            encodedInvocations = `\n[[INVOCATIONS:${encodeInvocations(m.extra.tool_invocations)}]]`;
                         }
 
                         return `[[ROLE:${mRole}]]\n${m.mes || ''}${encodedInvocations}\n[[/ROLE]]`;

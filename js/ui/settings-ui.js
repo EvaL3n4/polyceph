@@ -58,6 +58,7 @@ function syncSettingsToUI() {
     injectSlider('polyceph_generation_timeout_container', 'Model Timeout (ms)', 'polyceph_generation_timeout', settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 60000, 0, 300000, 1000);
     injectSlider('polyceph_max_retries_container', 'Max Retries', 'polyceph_max_retries', settings.maxRetries !== undefined ? settings.maxRetries : 3, 0, 10, 1);
     injectSlider('polyceph_retry_delay_container', 'Retry Delay (ms)', 'polyceph_retry_delay', settings.retryDelayMs !== undefined ? settings.retryDelayMs : 2000, 0, 10000, 100);
+    injectSlider('polyceph_max_tool_retries_container', 'Tool Call Retries', 'polyceph_max_tool_retries', settings.maxToolRetries !== undefined ? settings.maxToolRetries : 2, 0, 10, 1);
     injectSlider('polyceph_loop_threshold_container', 'Streaming Loop Detection Threshold', 'polyceph_loop_threshold', settings.loopDetectionThreshold !== undefined ? settings.loopDetectionThreshold : 3, 1, 10, 1);
 
     setValue('polyceph_prompt_input', settings.polycephPrompt || '');
@@ -125,6 +126,7 @@ export async function addSettingsUI() {
     bindSlider('polyceph_generation_timeout', 'generationTimeoutMs');
     bindSlider('polyceph_max_retries', 'maxRetries');
     bindSlider('polyceph_retry_delay', 'retryDelayMs');
+    bindSlider('polyceph_max_tool_retries', 'maxToolRetries');
     bindSlider('polyceph_loop_threshold', 'loopDetectionThreshold');
 
     // Global settings toggles

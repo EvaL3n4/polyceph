@@ -52,6 +52,22 @@ function parseInternalYaml(yamlString) {
     let currentIndent = -1;
 
     let hasActualKV = false;
+    const trimmedYaml = yamlString.trim();
+
+    // Support for inline compact JSON/YAML (unquoted keys)
+    if (trimmedYaml.startsWith('{') && trimmedYaml.endsWith('}')) {
+        try {
+            // Relaxed JSON parse: Quote unquoted keys
+            const quoted = trimmedYaml.replace(/([{,]\s*)([a-zA-Z0-9_]+)(\s*:)/g, '$1"$2"$3');
+            const data = JSON.parse(quoted);
+            if (data && typeof data === 'object') return data;
+        } catch (e) {}
+    }
+
+    // Safety: If it's a single line and contains commas, it's likely just a string (e.g. "Atmosphere: Sterile, high-tech, and focused")
+    // BUT if it starts with { or [, it's likely compact JSON/YAML data, so we allow it.
+    const isWrapped = (yamlString.startsWith('{') && yamlString.endsWith('}')) || (yamlString.startsWith('[') && yamlString.endsWith(']'));
+    if (!yamlString.includes('\n') && yamlString.includes(',') && !isWrapped) return null;
 
     for (let line of lines) {
         const rawLine = line;
@@ -62,6 +78,13 @@ function parseInternalYaml(yamlString) {
         const trimmed = line.trim();
         const isListItem = trimmed.startsWith('- ');
         const kvSep = line.indexOf(': ');
+
+        // A valid KV separator must be followed by a space or end of line
+        const isValidKV = kvSep !== -1 && (kvSep === line.length - 1 || line[kvSep + 1] === ' ');
+
+        if (isValidKV) {
+            hasActualKV = true;
+        }
 
         // Adjust path based on indentation
         if (indent > currentIndent) {
@@ -74,7 +97,6 @@ function parseInternalYaml(yamlString) {
         currentIndent = indent;
 
         if (isListItem) {
-            hasActualKV = true;
             const value = trimmed.slice(2).trim();
             const parent = getInternalPath(result, path.slice(0, -1));
             if (!Array.isArray(parent)) {
@@ -86,13 +108,11 @@ function parseInternalYaml(yamlString) {
             const key = trimmed.slice(0, -1).trim();
             path[path.length - 1] = key;
             setInternalPath(result, path, {});
-            hasActualKV = true;
-        } else if (kvSep !== -1) {
+        } else if (isValidKV) {
             const key = line.slice(0, kvSep).trim();
             const value = line.slice(kvSep + 2).trim();
             path[path.length - 1] = key;
             setInternalPath(result, path, parseInternalYamlValue(value));
-            hasActualKV = true;
         } else {
             // Just a key or a string?
             const key = trimmed;
@@ -269,8 +289,9 @@ function renderJsonObject(data, isRoot = false) {
  * Generates HTML for a single reasoning thought block.
  */
 export function generateSingleThoughtHTML(t) {
-    let contentHtml = '';
-    let formatLabel = '';
+    try {
+        let contentHtml = '';
+        let formatLabel = '';
 
     if (t.type === 'tool') {
         const argsParsed = tryParseInternalData(t.content.args);
@@ -292,6 +313,23 @@ export function generateSingleThoughtHTML(t) {
         `;
     } else {
         contentHtml = t.content;
+
+        // Base64 decoding for encoded reasoning (e.g., Gemini on OpenRouter)
+        if (t.title.toLowerCase().includes('thinking') && /^[A-Za-z0-9+/=]+$/.test(contentHtml) && contentHtml.length > 16) {
+            try {
+                const decoded = atob(contentHtml);
+                // Check if it looks like UTF-8/Readable text
+                if (/^[\x20-\x7E\s\u00A0-\uFFFF]*$/.test(decoded)) {
+                    contentHtml = decoded;
+                } else {
+                    // It's likely an encrypted signature or binary blob
+                    contentHtml = `<span class="polyceph-encrypted-tag">[Encrypted Reasoning (google-gemini-v1)]</span>`;
+                }
+            } catch (e) {
+                // Not actually base64 or failed to decode, keep original
+            }
+        }
+
         const stContext = SillyTavern.getContext();
         if (typeof stContext.messageFormatting === 'function') {
             contentHtml = stContext.messageFormatting(contentHtml, 'Polyceph', false, false);
@@ -304,16 +342,23 @@ export function generateSingleThoughtHTML(t) {
     const silentClass = (t.isSilent || t.type === 'tool') ? 'polyceph-silent-thought' : '';
     const toolClass = t.type === 'tool' ? 'polyceph-tool-thought' : '';
 
-    return `<div class="polyceph-generated-thought ${openClass} ${silentClass} ${toolClass}">
-        <div class="polyceph-generated-thought-name" style="cursor:pointer;" onclick="this.parentElement.classList.toggle('polyceph-item-open');">
-            <span class="polyceph-item-toggle-icon">▶</span> ${t.title}
-            <div class="polyceph-item-metadata-group">
-                ${formatLabel ? `<span class="polyceph-item-format-tag">${formatLabel}</span>` : ''}
-                ${t.profile ? `<span class="polyceph-item-metadata">${t.profile}</span>` : ''}
+        return `<div class="polyceph-generated-thought ${openClass} ${silentClass} ${toolClass}">
+            <div class="polyceph-generated-thought-name" style="cursor:pointer;" onclick="this.parentElement.classList.toggle('polyceph-item-open');">
+                <span class="polyceph-item-toggle-icon">▶</span> ${t.title}
+                <div class="polyceph-item-metadata-group">
+                    ${formatLabel ? `<span class="polyceph-item-format-tag">${formatLabel}</span>` : ''}
+                    ${t.profile ? `<span class="polyceph-item-metadata">${t.profile}</span>` : ''}
+                </div>
             </div>
-        </div>
-        <div class="polyceph-generated-thought-content">${contentHtml}</div>
-    </div>`;
+            <div class="polyceph-generated-thought-content">${contentHtml}</div>
+        </div>`;
+    } catch (err) {
+        logger.error('Failed to generate HTML for thought:', t, err);
+        return `<div class="polyceph-generated-thought polyceph-item-open polyceph-status-error" style="border: 1px solid var(--red);">
+            <div class="polyceph-generated-thought-name">⚠️ Error rendering thought: ${t.title}</div>
+            <div class="polyceph-generated-thought-content">${err.message}</div>
+        </div>`;
+    }
 }
 
 
@@ -327,7 +372,25 @@ export function generateThoughtsHTML(thoughtsArray, pipelineName) {
 
     const thoughtsId = `polyceph_thoughts_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    const htmlBlocks = thoughtsArray.map(t => generateSingleThoughtHTML(t)).join('\n<div class="polyceph-thought-separator"></div>\n');
+    logger.debug(`Generating thoughts HTML for ${thoughtsArray.length} items. ID: ${thoughtsId}`);
+
+    let htmlBlocks = '';
+    for (let i = 0; i < thoughtsArray.length; i++) {
+        const current = thoughtsArray[i];
+        const next = thoughtsArray[i + 1];
+
+        htmlBlocks += generateSingleThoughtHTML(current);
+
+        // Only add separator if the next thought is in a DIFFERENT recursion/turn
+        if (next && current.turnIndex !== next.turnIndex) {
+            htmlBlocks += '\n<div class="polyceph-thought-separator"></div>\n';
+        }
+    }
+
+    if (!htmlBlocks) {
+        logger.warn('generateThoughtsHTML produced empty block list despite non-empty thoughtsArray.');
+        return '';
+    }
 
     return `<div id="${thoughtsId}" class="polyceph-thoughts">
         <div class="polyceph-thoughts-details">
@@ -501,7 +564,9 @@ export function renderPolycephThoughts() {
         const existingThoughtsId = messageElement.getAttribute('polyceph_thoughts_id');
         const thoughtsExistInDOM = existingThoughtsId && document.getElementById(existingThoughtsId);
 
-        if (lastRenderedSwipe === currentSwipeId && thoughtsExistInDOM) return;
+        if (lastRenderedSwipe === currentSwipeId && thoughtsExistInDOM) {
+            return;
+        }
 
         let thoughts = null;
         let pipelineName = null;
@@ -521,7 +586,14 @@ export function renderPolycephThoughts() {
 
         messageElement.setAttribute('polyceph_thoughts_swipe', currentSwipeId);
 
-        if (!thoughts || thoughts.length === 0) return;
+        if (!thoughts || thoughts.length === 0) {
+            if (chatMsg.extra?.polyceph_thoughts || swipeEntry?.extra?.polyceph_thoughts) {
+                logger.warn(`Message ${mesId} has thoughts metadata but they are empty/null.`, { thoughts });
+            }
+            return;
+        }
+
+        logger.debug(`Rendering thoughts for message ${mesId}. Count: ${thoughts.length}`);
 
         const thoughtsHtml = generateThoughtsHTML(thoughts, pipelineName);
         const $thoughtsContainer = $(thoughtsHtml);
