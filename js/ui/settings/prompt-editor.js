@@ -159,6 +159,7 @@ export async function createPromptEditor(textarea, onUpdate, taskLabels = [], ex
             baseState: CodeMirror.copyState(baseMode, state.baseState)
         }),
         token: function (stream, state) {
+            const startPos = stream.pos;
             let bgClass = "";
             if (state.manualRole) {
                 bgClass += ` poly-content-${state.manualRole}`;
@@ -166,19 +167,25 @@ export async function createPromptEditor(textarea, onUpdate, taskLabels = [], ex
             }
             if (state.engineRole) bgClass += ` poly-content-engine-${state.engineRole}`;
 
-            // 1. Role Tags
+            const finalize = (tokenType) => {
+                if (stream.pos === startPos) stream.next();
+                return tokenType;
+            };
+
+            // 1. Escaped Tags
             if (stream.match(/\\\[\[/)) {
                 stream.match(/[^\]]+\]\]/); 
-                return "poly-escaped" + bgClass;
+                return finalize("poly-escaped" + bgClass);
             }
 
+            // 2. Role Tags
             if (stream.match('[[', false)) {
                 const forcedRoleMatch = stream.match(new RegExp(`\\[\\[(${rolePattern})(?::([^\\]?]+))?(\\?)?\\]\\]`, 'i'));
                 if (forcedRoleMatch) {
                     state.manualRole = forcedRoleMatch[1].toLowerCase();
                     state.isPermissive = !!forcedRoleMatch[3];
                     state.engineRole = null; 
-                    return `poly-tag-${state.manualRole}${bgClass}`;
+                    return finalize(`poly-tag-${state.manualRole}${bgClass}`);
                 }
 
                 const internalRoleMatch = stream.match(new RegExp(`\\[\\[ROLE:(${rolePattern})(?::([^\\]?]+))?(\\?)?\\]\\]`, 'i'));
@@ -186,9 +193,9 @@ export async function createPromptEditor(textarea, onUpdate, taskLabels = [], ex
                     const tagRole = internalRoleMatch[1].toLowerCase();
                     if (state.isPermissive || !state.manualRole) {
                         state.engineRole = tagRole;
-                        return `poly-tag-internal poly-tag-engine-${state.engineRole}${bgClass}`;
+                        return finalize(`poly-tag-internal poly-tag-engine-${state.engineRole}${bgClass}`);
                     }
-                    return `poly-tag-internal poly-tag-engine-${tagRole}${bgClass}`;
+                    return finalize(`poly-tag-internal poly-tag-engine-${tagRole}${bgClass}`);
                 }
                 
                 const forcedClose = stream.match(/\[\[\/\]\]/);
@@ -197,7 +204,7 @@ export async function createPromptEditor(textarea, onUpdate, taskLabels = [], ex
                     state.manualRole = null;
                     state.engineRole = null;
                     state.isPermissive = false;
-                    return className;
+                    return finalize(className);
                 }
 
                 const internalClose = stream.match(new RegExp(`\\[\\[\\/(?:${rolePattern}|ROLE)\\]\\]`, 'i'));
@@ -205,39 +212,42 @@ export async function createPromptEditor(textarea, onUpdate, taskLabels = [], ex
                     const engineRoleClass = state.engineRole ? `poly-tag-engine-${state.engineRole}` : "poly-tag-engine-close";
                     const className = `poly-tag-internal poly-tag-internal-close ${engineRoleClass}`;
                     state.engineRole = null;
-                    return className + bgClass;
+                    return finalize(className + bgClass);
                 }
+                
+                // If we're here, it was [[ but not a valid tag.
+                return finalize(bgClass ? bgClass.trim() : null);
             }
 
-            // 2. Thinking Blocks
-            if (stream.match(/<\/?thinking>/, true)) return "poly-thinking" + bgClass;
+            // 3. Thinking Blocks
+            if (stream.match(/<\/?thinking>/, true)) return finalize("poly-thinking" + bgClass);
 
-            // 3. Special Macro Tokens
+            // 4. Special Macro Tokens (with optional parameters like :5)
             const specialMacrosPattern = SPECIAL_MACROS.join('|');
-            if (stream.match(new RegExp(`\\{\\{(?:${specialMacrosPattern})\\}\\}`), true)) {
-                return "poly-macro-special" + bgClass;
+            if (stream.match(new RegExp(`\\{\\{(?:${specialMacrosPattern})(?::[^\\]}]+)?\\}\\}`, 'i'), true)) {
+                return finalize("poly-macro-special" + bgClass);
             }
 
-            // 4. Standard Macros
-            const macroMatch = stream.match(/\{\{/, false);
-            if (macroMatch) {
+            // 5. Standard Macros (Custom Task Labels)
+            if (stream.match(/\{\{/, false)) {
                 const labelPattern = labels.length > 0 ? labels.join('|') : '____NEVER_MATCH____';
                 const taskMacro = stream.match(new RegExp(`\\{\\{(?:${labelPattern})\\}\\}`, 'i'));
-                if (taskMacro) return "poly-macro-special" + bgClass;
+                if (taskMacro) return finalize("poly-macro-special" + bgClass);
 
-                stream.match(/\{\{.*?\}\}/);
-                return "poly-macro" + bgClass;
+                const genericMacro = stream.match(/\{\{.*?\}\}/);
+                if (genericMacro) return finalize("poly-macro" + bgClass);
+                
+                return finalize(bgClass ? bgClass.trim() : null);
             }
 
-            // 5. Angle Tags
+            // 6. Angle Tags
             const internalTagsPattern = INTERNAL_TAGS.join('|');
             if (stream.match(new RegExp(`<\\/?(?:${internalTagsPattern})>`, 'i'))) {
-                return "poly-angle-tag" + bgClass;
+                return finalize("poly-angle-tag" + bgClass);
             }
 
-            // If no match, advance by 1 character to avoid "failed to advance stream"
-            stream.next();
-            return bgClass ? bgClass.trim() : null;
+            // Final Fallback: Always advance at least one character
+            return finalize(bgClass ? bgClass.trim() : null);
         }
     };
 

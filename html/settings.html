@@ -267,9 +267,24 @@
                 <i class="fa-solid fa-refresh"></i> Refresh Profiles
             </button>
 
-            <button id="polyceph_add_step_btn" class="menu_button">
-                <i class="fa-solid fa-plus"></i> Add Step (Sequential) to Pipeline
-            </button>
+            <div class="polyceph-divider-container">
+                <div class="polyceph-divider-line"></div>
+                <small class="polyceph-section-heading">Steps (Sequential)</small>
+            </div>
+
+            <div class="polyceph-step-card polyceph-step-manager mt-1">
+                <div class="polyceph-management-actions">
+                    <div class="polyceph-management-row">
+                        <i id="polyceph_add_step_btn" class="fa-solid fa-plus polyceph-pointer" title="Add Step"></i>
+                        <i id="polyceph_duplicate_step_btn" class="fa-solid fa-copy polyceph-pointer" title="Duplicate Active Step"></i>
+                    </div>
+                    <div class="polyceph-management-row">
+                        <i id="polyceph_move_left_step_btn" class="fa-solid fa-chevron-left polyceph-pointer" title="Move Left"></i>
+                        <i id="polyceph_move_right_step_btn" class="fa-solid fa-chevron-right polyceph-pointer" title="Move Right"></i>
+                    </div>
+                    <i id="polyceph_del_step_btn" class="fa-solid fa-trash polyceph-pointer polyceph-text-red" title="Delete Active Step"></i>
+                </div>
+            </div>
 
             <div id="polyceph_step_tabs_container" class="polyceph-step-tabs"></div>
             <div id="polyceph_steps_container" class="polyceph-step-list"></div>
