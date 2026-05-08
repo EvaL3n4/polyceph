@@ -68,13 +68,13 @@ function isToolOutputError(output) {
     }
     if (typeof data !== 'object' || data === null || Array.isArray(data)) return false;
 
-    const statusKeys = ['status', 'success', 'ok', 'error'];
+    const statusKeys = ['status', 'success', 'ok', 'error', 'errors'];
     const keys = Object.keys(data);
     for (const key of keys) {
         const kLower = key.toLowerCase();
         if (statusKeys.includes(kLower)) {
             const val = data[key];
-            if (kLower === 'error') {
+            if (kLower === 'error' || kLower === 'errors') {
                 // Error field: true, non-empty string, or non-empty list is an error
                 if (val === true || (typeof val === 'string' && val.trim() !== '' && val !== 'false' && val !== '[]' && val !== 'none')) return true;
                 if (Array.isArray(val) && val.length > 0) return true;

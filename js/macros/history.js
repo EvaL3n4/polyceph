@@ -31,27 +31,26 @@ export function weaveInjections(messages, extensionPrompts) {
     });
 
     // 2. Chat History with IN_CHAT (Position 1 in ST) @ Depth
-    // In SillyTavern, depth 0 is the most recent message.
+    // High-depth injections (>= messages length) go to the top of the history block
+    injections.filter(inj => inj.position === 1 && inj.depth >= messages.length).forEach(inj => {
+        finalMessages.push({ mes: inj.value, role: inj.role, is_injection: true });
+    });
+
+    // In SillyTavern, depth 0 is AFTER the most recent message.
+    // Depth 1 is BETWEEN the last and second-to-last.
     for (let i = 0; i < messages.length; i++) {
         const msg = messages[i];
-        const depthFromBottom = messages.length - 1 - i;
+        finalMessages.push({ ...msg, is_injection: false });
 
-        // In-Chat Injections go BEFORE the message at that depth (closer to top)
+        const depthFromBottom = messages.length - 1 - i;
         injections.filter(inj => inj.position === 1 && inj.depth === depthFromBottom).forEach(inj => {
             finalMessages.push({ mes: inj.value, role: inj.role, is_injection: true });
         });
-
-        finalMessages.push({ ...msg, is_injection: false });
     }
 
     // 3. IN_PROMPT (Position 0 in ST) - Bottom of everything
     injections.filter(inj => inj.position === 0).forEach(inj => {
         finalMessages.push({ mes: inj.value, role: inj.role, is_injection: true });
-    });
-
-    // 4. Handle depths beyond chat length
-    injections.filter(inj => inj.position === 1 && inj.depth >= messages.length).forEach(inj => {
-        finalMessages.unshift({ mes: inj.value, role: inj.role, is_injection: true });
     });
 
     return finalMessages;
@@ -234,14 +233,14 @@ export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = 
         });
 
         const resolvedHistory = history.join('\n\n');
-        
+
         // 6. Prepend truncation notice if messages were removed
         const removedCount = cleanChat.length - finalSource.length;
         let finalResult = resolvedHistory;
         if (removedCount > 0) {
             const notice = `(... ${removedCount} Previous Messages.)`;
-            const formattedNotice = isCC ? 
-                `[[ROLE:system]]\n${notice}\n[[/ROLE]]` : 
+            const formattedNotice = isCC ?
+                `[[ROLE:system]]\n${notice}\n[[/ROLE]]` :
                 `### Notice:\n${notice}`;
             finalResult = `${formattedNotice}\n\n${resolvedHistory}`;
         }
