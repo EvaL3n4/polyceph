@@ -1,4 +1,5 @@
 import { logger } from '../../../../logger.js';
+import { settings } from '../../../../state.js';
 import { generateSingleThoughtHTML } from './single-thought.js';
 
 /**
@@ -7,14 +8,33 @@ import { generateSingleThoughtHTML } from './single-thought.js';
 export function generateThoughtsHTML(thoughtsArray, pipelineName) {
     if (!thoughtsArray || thoughtsArray.length === 0) return '';
 
+    // 1. Filtering logic for 'showOnlyLastRecursion'
+    let displayThoughts = thoughtsArray;
+    if (settings.showOnlyLastRecursion) {
+        console.log('[Polyceph] showOnlyLastRecursion is ENABLED. Filtering thoughtsArray...', { originalLength: thoughtsArray.length });
+        const tasks = new Map();
+        // Group by taskId and find max turnIndex for each
+        for (const t of thoughtsArray) {
+            const taskId = t.taskId || 'default';
+            if (!tasks.has(taskId) || t.turnIndex > tasks.get(taskId).maxTurn) {
+                tasks.set(taskId, { maxTurn: t.turnIndex });
+            }
+        }
+        // Filter to keep only the last turn for each task
+        displayThoughts = thoughtsArray.filter(t => {
+            const taskId = t.taskId || 'default';
+            return t.turnIndex === tasks.get(taskId).maxTurn;
+        });
+    }
+
     const thoughtsId = `polyceph_thoughts_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    logger.debug(`Generating thoughts HTML for ${thoughtsArray.length} items. ID: ${thoughtsId}`);
+    logger.debug(`Generating thoughts HTML for ${displayThoughts.length} items (original: ${thoughtsArray.length}). ID: ${thoughtsId}`);
 
     let htmlBlocks = '';
-    for (let i = 0; i < thoughtsArray.length; i++) {
-        const current = thoughtsArray[i];
-        const next = thoughtsArray[i + 1];
+    for (let i = 0; i < displayThoughts.length; i++) {
+        const current = displayThoughts[i];
+        const next = displayThoughts[i + 1];
 
         htmlBlocks += generateSingleThoughtHTML(current);
 

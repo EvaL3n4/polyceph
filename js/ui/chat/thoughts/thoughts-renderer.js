@@ -10,7 +10,8 @@ export { renderPolycephTyping, generateThoughtsHTML, generateSingleThoughtHTML }
 /**
  * Main loop to render thoughts and backgrounds for all messages in the chat.
  */
-export function renderPolycephThoughts() {
+export function renderPolycephThoughts(force = false) {
+    if (force) console.log('[Polyceph] Force rerender of thoughts triggered.');
     const context = SillyTavern.getContext();
     if (!context || !context.chat) return;
 
@@ -74,7 +75,7 @@ export function renderPolycephThoughts() {
         const existingThoughtsId = messageElement.getAttribute('polyceph_thoughts_id');
         const thoughtsExistInDOM = existingThoughtsId && document.getElementById(existingThoughtsId);
 
-        if (lastRenderedSwipe === currentSwipeId && thoughtsExistInDOM) {
+        if (!force && lastRenderedSwipe === currentSwipeId && thoughtsExistInDOM) {
             return;
         }
 

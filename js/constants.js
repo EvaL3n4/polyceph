@@ -1,5 +1,5 @@
 export const MODULE_NAME = 'polyceph';
-export const VERSION = '0.9.1';
+export const VERSION = '0.9.2';
 export const PIPELINE_DATA_VERSION = '1.0.0';
 export const DEFAULT_TOOL_RECURSION_LIMIT = 5; //fallback
 
@@ -18,6 +18,7 @@ export const defaultSettings = {
     compactSelectorMode: false,
     showHiddenMessages: false,
     showReasoning: true,
+    showOnlyLastRecursion: false,
     stickyTypingIndicator: false,
     restore_after_run: true,
     emulateCoreEvents: true,

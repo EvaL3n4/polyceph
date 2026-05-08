@@ -10,6 +10,7 @@ import { updatePipelineEditorUI, bindStepEvents, setActiveStepIndex, activeStepI
 import { getExtensionPath, getPopupModule } from '../compat-st.js';
 import { showPromptPreview } from './settings/prompt-preview.js';
 import { exportPipeline, importPipeline } from './settings/import-export.js';
+import { renderPolycephThoughts } from './ui.js';
 
 let Popup = null;
 
@@ -38,6 +39,7 @@ function syncSettingsToUI() {
     setChecked('polyceph_show_icon_checkbox', settings.showPipelineIcon !== false);
     setChecked('polyceph_compact_selector_checkbox', settings.compactSelectorMode);
     setChecked('polyceph_show_reasoning_checkbox', settings.showReasoning !== false);
+    setChecked('polyceph_show_only_last_recursion_checkbox', settings.showOnlyLastRecursion);
     setChecked('polyceph_sticky_typing_checkbox', settings.stickyTypingIndicator);
     setChecked('polyceph_show_hidden_checkbox', settings.showHiddenMessages);
 
@@ -140,6 +142,12 @@ export async function addSettingsUI() {
         settings.showReasoning = e.target.checked;
         syncHiddenMessageVisibility();
         saveSettings();
+    });
+
+    getEl('polyceph_show_only_last_recursion_checkbox')?.addEventListener('change', (e) => {
+        settings.showOnlyLastRecursion = e.target.checked;
+        saveSettings();
+        renderPolycephThoughts(true);
     });
 
     getEl('polyceph_sticky_typing_checkbox')?.addEventListener('change', (e) => {

@@ -199,7 +199,9 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                         resultsByIndex[nodeIndex] = `[${taskHeader}]\n${cleanOutput}`;
                     }
 
-                    accumulatedThoughts.push(...thoughts);
+                    // Tag thoughts with the current taskId for accurate filtering in the UI
+                    const decoratedThoughts = thoughts.map(t => ({ ...t, taskId: node.id }));
+                    accumulatedThoughts.push(...decoratedThoughts);
                     logger.debug(`Task ${node.id} finished. Added ${thoughts.length} thoughts. Total accumulated: ${accumulatedThoughts.length}`);
 
                     // 4. Handle Backgrounds (Sequential access to the counter is fine here as it's within a single task's result processing)
