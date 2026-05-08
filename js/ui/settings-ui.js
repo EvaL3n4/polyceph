@@ -5,7 +5,7 @@ import { setLogLevel, logger } from '../logger.js';
 
 import { updateChatSelectorOptions } from './chat-ui.js';
 import { getEl, bindToggle, renderNeoSlider, syncHiddenMessageVisibility, SELECTORS } from './ui-shared.js';
-import { updatePipelineEditorUI, bindStepEvents, setActiveStepIndex, activeStepIndex } from './settings/pipeline-editor.js';
+import { updatePipelineEditorUI, bindStepEvents, setActiveStepIndex, activeStepIndex } from './settings/pipeline-editor/pipeline-editor.js';
 
 import { getExtensionPath, getPopupModule } from '../compat-st.js';
 import { showPromptPreview } from './settings/prompt-preview.js';

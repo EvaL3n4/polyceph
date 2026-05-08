@@ -83,6 +83,11 @@
     font-family: monospace;
 }
 
+.polyceph-textarea-container:has(#polyceph_prompt_input) {
+    margin-top: 16px;
+    padding-top: 1px;
+}
+
 .polyceph-slider-row {
     display: flex;
     flex-wrap: wrap;
@@ -123,6 +128,8 @@
 
 .polyceph-divider-container {
     margin: 15px 0 5px 0;
+    background-color: var(--SmartThemeQuoteColor);
+    border-radius: 5px;
 }
 
 .polyceph-divider-line {
@@ -134,7 +141,7 @@
 
 .polyceph-section-heading {
     margin-left: 0.5rem;
-    color: var(--SmartThemeQuoteColor);
+    color: var(--SmartThemeChatTintColor);
     font-weight: bold;
     text-transform: uppercase;
     letter-spacing: 1px;
