@@ -201,6 +201,25 @@
     text-align: left !important;
 }
 
+/* Maximized Editor Overrides - High Specificity */
+.polyceph-editor.polyceph-maximized-editor.CodeMirror {
+    height: 100% !important;
+    max-height: none !important;
+}
+
+.polyceph-editor.polyceph-maximized-editor .CodeMirror-scroll {
+    min-height: 100% !important;
+}
+
+.polyceph-editor.polyceph-maximized-editor .CodeMirror-sizer {
+    min-height: 100% !important;
+}
+
+.polyceph-editor.polyceph-maximized-editor .CodeMirror-gutters {
+    min-height: 100% !important;
+    height: auto !important;
+}
+
 .polyceph-editor span[class*="cm-poly-tag"] {
     text-decoration: none !important;
     border-bottom: none !important;
