@@ -1,4 +1,4 @@
-import { availableProfiles, availablePresetsByApi } from '../../../state.js';
+import { availableProfiles, availablePresetsByApi, getActivePipeline } from '../../../state.js';
 import { isChatCompletionApi } from '../../../compat-chat.js';
 import { getPresetSettings } from '../../../compat-presets.js';
 
@@ -152,4 +152,72 @@ export function renderTask(stepId, task, isLocked = false) {
             </div>
         </div>
     `;
+}
+/**
+ * Refreshes specific parts of the task UI without a full re-render.
+ */
+export function refreshTaskUI(nodeId) {
+    const card = document.querySelector(`.polyceph-node-card[data-node-id="${nodeId}"]`);
+    if (!card) return;
+
+    const activePipeline = getActivePipeline();
+    let task = null;
+    let stepId = null;
+
+    for (const step of activePipeline.steps) {
+        task = step.tasks.find(n => n.id === nodeId);
+        if (task) {
+            stepId = step.id;
+            break;
+        }
+    }
+    if (!task) return;
+
+    const profileId = task.profile || 'none';
+    const profile = availableProfiles.find(p => p.id === profileId);
+    const apiId = profileId === 'none' ? 'none' : (profile?.api || SillyTavern.getContext().mainApi || '');
+    const isCC = profileId !== 'none' && isChatCompletionApi(apiId);
+    const isLocked = !!activePipeline.isLocked;
+    const disabled = isLocked ? 'disabled' : '';
+
+    // 1. Update Preset Select
+    const presetSelect = card.querySelector('.polyceph-preset-select');
+    if (presetSelect) {
+        presetSelect.innerHTML = getPresetOptionsHTML(task.profile, task.preset);
+    }
+
+    // 2. Update Task Type Select (to show/hide Tool Processor)
+    const typeSelect = card.querySelector('.polyceph-node-output-type');
+    if (typeSelect) {
+        const currentVal = typeSelect.value;
+        typeSelect.innerHTML = `
+            <option value="character" ${currentVal === 'character' ? 'selected' : ''}>Character Message</option>
+            <option value="thinking" ${currentVal === 'thinking' ? 'selected' : ''}>Reasoning</option>
+            ${isCC ? `<option value="tool" ${currentVal === 'tool' ? 'selected' : ''}>Tool Processor</option>` : ''}
+            <option value="internal" ${currentVal === 'internal' ? 'selected' : ''}>Internal (Hidden)</option>
+        `;
+    }
+
+    // 3. Update Options Bar
+    let optionsBar = card.querySelector('.polyceph-task-options-bar');
+    const newOptionsBarHtml = renderTaskOptionsBar(task, apiId, disabled);
+
+    if (optionsBar) {
+        if (newOptionsBarHtml) {
+            // Replace existing bar
+            const temp = document.createElement('div');
+            temp.innerHTML = newOptionsBarHtml;
+            const newBar = temp.firstElementChild;
+            optionsBar.replaceWith(newBar);
+        } else {
+            // Remove existing bar
+            optionsBar.remove();
+        }
+    } else if (newOptionsBarHtml) {
+        // Add new bar after the task type select container
+        const header = card.querySelector('.polyceph-node-header');
+        if (header) {
+            header.insertAdjacentHTML('beforeend', newOptionsBarHtml);
+        }
+    }
 }

@@ -3,6 +3,7 @@ import { generateId, autoResizeTextarea } from '../../../utils.js';
 import { getEl, SELECTORS } from '../../ui-shared.js';
 import { activeStepIndex, setActiveStepIndex, Popup } from './state.js';
 import { updatePipelineEditorUI } from './pipeline-editor.js';
+import { refreshTaskUI } from './render-task.js';
 
 /**
  * Binds event listeners to the step and task elements.
@@ -112,7 +113,8 @@ export function bindStepEvents() {
                 }
             }
             saveSettings();
-            updatePipelineEditorUI();
+            refreshTaskUI(nodeId);
+            bindStepEvents();
         });
     });
 
@@ -254,7 +256,8 @@ export function bindStepEvents() {
                 }
             }
             saveSettings();
-            updatePipelineEditorUI();
+            refreshTaskUI(nodeId);
+            bindStepEvents();
         });
     });
 
