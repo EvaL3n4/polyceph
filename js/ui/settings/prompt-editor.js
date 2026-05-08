@@ -43,6 +43,12 @@ export async function createPromptEditor(textarea, onUpdate) {
                 "Tab": (cm) => cm.replaceSelection("    ", "end")
             }
         });
+        
+        // FORCED SYNC: Ensure content is pulled even if initialized while hidden
+        if (textarea.value && !cm.getValue()) {
+            cm.setValue(textarea.value);
+        }
+        
         console.log('[Polyceph] CodeMirror instance created');
     } catch (e) {
         console.error('[Polyceph] Failed to create CodeMirror instance:', e);
@@ -164,18 +170,26 @@ export async function createPromptEditor(textarea, onUpdate) {
         
         // Define the mode in the global registry
         CodeMirror.defineMode(modeName, (config) => {
-            console.log('[Polyceph] Mode factory invoked for:', modeName);
             return overlayMode(baseMode, polyOverlay, true);
         });
         
         // Apply it
         cm.setOption("mode", modeName);
-        cm.refresh();
         console.log('[Polyceph] Mode applied successfully:', modeName);
     } catch (e) {
         console.error('[Polyceph] Failed to apply custom mode:', e);
         cm.setOption("mode", "markdown");
     }
+
+    // Refresh when visible - critical for editors in drawers/tabs
+    const observer = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting) {
+            cm.refresh();
+            // Once refreshed, we don't need to observe anymore
+            observer.disconnect();
+        }
+    });
+    observer.observe(cm.getWrapperElement());
 
     // Sync CM -> Textarea
     let isSyncing = false;
