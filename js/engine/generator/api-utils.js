@@ -3,8 +3,8 @@ import { generateViaCC } from '../../compat-chat.js';
 /**
  * Internal helper: runs the non-streaming generation path with timeout/abort racing.
  */
-export async function _generateNonStreaming(messages, tools, tool_choice, signal, timeoutMs, noEmissions = false) {
-    const apiPromise = generateViaCC(messages, tools, tool_choice, noEmissions);
+export async function _generateNonStreaming(messages, tools, tool_choice, signal, timeoutMs, noEmissions = false, options = {}) {
+    const apiPromise = generateViaCC(messages, tools, tool_choice, noEmissions, options);
 
     const abortPromise = signal ? new Promise((_, reject) => {
         if (signal.aborted) reject(new Error('Aborted'));

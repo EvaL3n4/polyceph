@@ -2,7 +2,7 @@ import { logger } from '../logger.js';
 import { settings, availableProfiles } from '../state.js';
 import { expandPrompt } from '../macros/macros.js';
 import { getCurrentPresetName, applyPreset, restorePresetState, getCapturedPresetName } from '../compat-presets.js';
-import { updateTypingIndicator } from './ui-utils.js';
+import { updateTypingIndicator, updateTaskStatus } from './ui-utils.js';
 import { parseOutputTags } from './parser.js';
 import { generateQuietly } from './generator/generator.js';
 
@@ -13,26 +13,8 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
     const stContext = SillyTavern.getContext();
     const taskIdIndx = nodeIndex + 1;
 
-    /**
-     * Surgically updates the task's status in the typing indicator.
-     */
-    const updateTaskStatus = (status, labelOverride = null) => {
-        const currentContext = SillyTavern.getContext();
-        const idx = currentContext.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
-        if (idx !== -1) {
-            const msg = currentContext.chat[idx];
-            if (msg.extra?.polyceph_active_tasks) {
-                const task = msg.extra.polyceph_active_tasks.find(t => t.id === node.id);
-                if (task) {
-                    task.status = status;
-                    if (labelOverride) task.label = labelOverride;
-                    updateTypingIndicator();
-                } else {
-                    logger.debug(`Task ${node.id} not found in active tasks list.`, msg.extra.polyceph_active_tasks.map(t => t.id));
-                }
-            }
-        }
-    };
+    const taskId = node.id;
+    const updateStatus = (status, label = null) => updateTaskStatus(taskId, status, label);
 
     // 1. Preset Management
     const taskPreset = node.preset || 'Current';
@@ -40,7 +22,7 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
         const currentPreset = getCurrentPresetName();
         if (currentPreset !== taskPreset) {
             logger.info(`Applying task preset: "${taskPreset}" (was: "${currentPreset}")`);
-            updateTaskStatus('applying preset');
+            updateStatus('applying preset');
             const switched = applyPreset(taskPreset);
             if (switched) {
                 // Give ST time to settle the new preset settings
@@ -83,9 +65,21 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
 
 
     // 2. Update Progress Metadata (Now handled by orchestrator, but we ensure status is 'generating' here)
-    updateTaskStatus('generating');
+    updateStatus('generating');
 
     logger.debug(`Task Start: "${node.label || node.id}" (Profile: ${profileDisplayName}, API: ${taskApi})`);
+
+    if (stContext.eventSource) {
+        stContext.eventSource.emit('polyceph-task-started', {
+            taskId: node.id,
+            label: node.label || 'Unnamed Task',
+            profile: profileDisplayName,
+            api: taskApi,
+            model: taskModel,
+            stepIdx,
+            totalSteps
+        });
+    }
 
     try {
         // 4. Prompt Expansion
@@ -104,6 +98,8 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
             onStream: null, // Can be set by orchestrator for character message streaming
             outputType: node.outputType || 'internal',
             allowTools: node.allowTools !== false,
+            polyceph_task_id: node.id,
+            polyceph_task_label: node.label || 'Unnamed Task',
             skipSuccessRecursion: !!node.skipSuccessRecursion,
             hideSuccessResponse: !!node.hideSuccessResponse,
             hideToolHistory: !!node.hideToolHistory,

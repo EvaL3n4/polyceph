@@ -8,15 +8,18 @@ import { settings } from '../../../../state.js';
 export function renderPolycephTyping(messageElement, chatMsg) {
     const activeTasks = chatMsg.extra?.polyceph_active_tasks || [];
     const isStopping = chatMsg.extra?.polyceph_stopping === true;
+    const isWaitingOnExtensions = activeTasks.length > 0 && activeTasks.every(t => 
+        t.id === 'waiting' || 
+        t.status === 'waiting' || 
+        t.status === 'waiting_on_extensions'
+    );
 
     let stepInfo = 'Processing';
-    if (activeTasks.length > 0) {
+    if (isWaitingOnExtensions) {
+        stepInfo = 'Waiting for Extensions';
+    } else if (activeTasks.length > 0) {
         const firstTask = activeTasks[0];
-        if (firstTask.id === 'waiting') {
-            stepInfo = 'Preparing';
-        } else {
-            stepInfo = `Step ${firstTask.step}/${firstTask.totalSteps}`;
-        }
+        stepInfo = `Step ${firstTask.step}/${firstTask.totalSteps}`;
     } else if (chatMsg.mes && chatMsg.mes.includes('Step')) {
         const match = chatMsg.mes.match(/Step (\d+\/\d+)/);
         if (match) stepInfo = `Step ${match[1]}`;
@@ -45,7 +48,7 @@ export function renderPolycephTyping(messageElement, chatMsg) {
             <div class="polyceph-typing-indicator ${isSticky ? 'polyceph-sticky' : ''}">
                 <div class="polyceph-typing-header">
                     <div class="polyceph-typing-title">
-                        <span class="fa-solid fa-spinner fa-spin"></span>
+                        <span class="polyceph-typing-icon fa-solid fa-spinner fa-spin"></span>
                         <span class="polyceph-typing-step-label">Polyceph ${stepInfo}</span>
                     </div>
                     <div class="polyceph-stop-button" title="Stop Pipeline">
@@ -71,16 +74,32 @@ export function renderPolycephTyping(messageElement, chatMsg) {
     if (isStopping) {
         $indicator.find('.polyceph-typing-step-label').text(`Polyceph Stopping...`);
         $indicator.find('.polyceph-active-tasks-list').html('<div class="polyceph-active-task-label">Cleaning up tasks...</div>');
-        $indicator.find('.fa-spinner').removeClass('fa-spinner fa-spin').addClass('fa-hourglass-half');
+        $indicator.find('.polyceph-typing-icon').removeClass('fa-spinner fa-spin fa-clock').addClass('fa-hourglass-half');
         $indicator.find('.polyceph-stop-button').hide();
     } else {
         $indicator.find('.polyceph-typing-step-label').text(`Polyceph ${stepInfo}`);
-        const tasksHtml = activeTasks.map(task => `
-            <div class="polyceph-active-task">
-                <div class="polyceph-active-task-label">${task.label}</div>
-                <div class="polyceph-active-task-profile">${task.profile}</div>
-            </div>
-        `).join('');
+        
+        // Update Icon based on state
+        const $icon = $indicator.find('.polyceph-typing-icon');
+        if (isWaitingOnExtensions) {
+            $icon.removeClass('fa-spinner fa-spin').addClass('fa-clock');
+        } else {
+            $icon.removeClass('fa-clock').addClass('fa-spinner fa-spin');
+        }
+
+        const tasksHtml = activeTasks.map(task => {
+            const statusLabel = (task.status === 'waiting' || task.status === 'waiting_on_extensions') 
+                ? '<span class="polyceph-task-status-waiting">(Waiting)</span>' 
+                : '';
+            
+            return `
+                <div class="polyceph-active-task ${task.status === 'waiting' || task.status === 'waiting_on_extensions' ? 'polyceph-task-waiting' : ''}">
+                    <div class="polyceph-active-task-label">${task.label} ${statusLabel}</div>
+                    <div class="polyceph-active-task-profile">${task.profile}</div>
+                </div>
+            `;
+        }).join('');
+        
         $indicator.find('.polyceph-active-tasks-list').html(tasksHtml || '<div class="polyceph-active-task-label">Preparing...</div>');
         $indicator.find('.polyceph-stop-button').show();
 

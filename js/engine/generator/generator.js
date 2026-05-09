@@ -79,7 +79,13 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
 
             // --- API Call Execution ---
             const responseData = await executeGeneration(messages, tools, tool_choice, api, signal, {
-                useStreaming, antiLoop, loopThreshold, onStream, depth
+                useStreaming, 
+                antiLoop, 
+                loopThreshold, 
+                onStream, 
+                depth,
+                polyceph_task_id: options.polyceph_task_id,
+                polyceph_task_label: options.polyceph_task_label
             });
 
             if (!responseData) {

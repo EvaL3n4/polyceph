@@ -116,7 +116,7 @@ export function isChatCompletionApi(apiOverride = null) {
  * @param {boolean} [noEmissions=false] - Whether to skip extension prompt injection events.
  * @returns {Promise<object>} The generated response data.
  */
-export async function generateViaCC(messages, tools = null, tool_choice = null, noEmissions = false) {
+export async function generateViaCC(messages, tools = null, tool_choice = null, noEmissions = false, options = {}) {
     const context = SillyTavern.getContext();
     const api = context.mainApi;
 
@@ -169,6 +169,14 @@ export async function generateViaCC(messages, tools = null, tool_choice = null, 
         await context.eventSource.emit(context.eventTypes.CHAT_COMPLETION_SETTINGS_READY, generate_data);
     }
 
+    // NEW: Polyceph-specific payload event (includes all ST injections)
+    if (!noEmissions && context.eventSource) {
+        if (!generate_data.extra) generate_data.extra = {};
+        generate_data.extra.polyceph_task_id = options.polyceph_task_id || 'unknown';
+        generate_data.extra.polyceph_task_label = options.polyceph_task_label || 'Unnamed Task';
+        context.eventSource.emit('polyceph-task-payload-ready', generate_data);
+    }
+
     logger.debug('Non-streaming generation payload:', generate_data);
 
     const response = await fetch('/api/backends/chat-completions/generate', {
@@ -197,7 +205,7 @@ export async function generateViaCC(messages, tools = null, tool_choice = null, 
  * @param {boolean} [noEmissions=false] - Whether to skip extension prompt injection events.
  * @returns {Promise<object|null>} Accumulated response data, or null if streaming unavailable.
  */
-export async function generateViaCCStreaming(messages, signal, onChunk, tools = null, tool_choice = null, apiOverride = null, noEmissions = false) {
+export async function generateViaCCStreaming(messages, signal, onChunk, tools = null, tool_choice = null, apiOverride = null, noEmissions = false, options = {}) {
     const context = SillyTavern.getContext();
     let api = apiOverride || context.mainApi;
 
@@ -256,6 +264,11 @@ export async function generateViaCCStreaming(messages, signal, onChunk, tools = 
         await context.eventSource.emit(context.eventTypes.CHAT_COMPLETION_SETTINGS_READY, generate_data);
     }
 
+    // NEW: Polyceph-specific payload event (includes all ST injections)
+    if (!noEmissions && context.eventSource) {
+        context.eventSource.emit('polyceph-task-payload-ready', generate_data);
+    }
+
     logger.debug('Streaming generation payload:', generate_data);
 
     // Set up abort handling
@@ -308,6 +321,11 @@ export async function generateViaCCStreaming(messages, signal, onChunk, tools = 
             } catch (e) {
                 logger.warn('Failed to parse SSE data:', value.data);
                 continue;
+            }
+
+            if (parsed.error) {
+                const err = parsed.error;
+                throw new Error(`API returned error in stream: ${err.message || JSON.stringify(err)} (Code: ${err.code})`);
             }
 
             const delta = getStreamingReply(parsed, state);

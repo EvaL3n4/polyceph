@@ -59,6 +59,28 @@ export function updateTypingIndicator() {
 }
 
 /**
+ * Surgically updates a specific task's status in the typing indicator.
+ * @param {string} taskId - The ID of the task to update.
+ * @param {string} status - The new status string (e.g., 'generating', 'waiting').
+ * @param {string} [labelOverride] - Optional new label for the task.
+ */
+export function updateTaskStatus(taskId, status, labelOverride = null) {
+    const currentContext = SillyTavern.getContext();
+    const idx = currentContext.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
+    if (idx !== -1) {
+        const msg = currentContext.chat[idx];
+        if (msg.extra?.polyceph_active_tasks) {
+            const task = msg.extra.polyceph_active_tasks.find(t => t.id === taskId);
+            if (task) {
+                task.status = status;
+                if (labelOverride) task.label = labelOverride;
+                updateTypingIndicator();
+            }
+        }
+    }
+}
+
+/**
  * Activates the polyceph typing indicator flag on a specific message.
  */
 export function startTypingIndicator(mesId, taskLabels = []) {

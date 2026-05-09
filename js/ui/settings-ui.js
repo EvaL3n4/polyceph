@@ -43,6 +43,7 @@ function syncSettingsToUI() {
     setChecked('polyceph_show_only_last_recursion_checkbox', settings.showOnlyLastRecursion);
     setChecked('polyceph_sticky_typing_checkbox', settings.stickyTypingIndicator);
     setChecked('polyceph_show_hidden_checkbox', settings.showHiddenMessages);
+    setChecked('polyceph_continue_on_failure_checkbox', settings.continueOnFailure);
 
     // Behavior Settings
     setChecked('polyceph_restore_after_run_checkbox', settings.restore_after_run);
@@ -136,6 +137,11 @@ export async function addSettingsUI() {
     getEl('polyceph_show_hidden_checkbox')?.addEventListener('change', (e) => {
         settings.showHiddenMessages = e.target.checked;
         syncHiddenMessageVisibility();
+        saveSettings();
+    });
+
+    getEl('polyceph_continue_on_failure_checkbox')?.addEventListener('change', (e) => {
+        settings.continueOnFailure = e.target.checked;
         saveSettings();
     });
 

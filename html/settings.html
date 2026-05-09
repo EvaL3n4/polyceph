@@ -144,6 +144,12 @@
                         <div id="polyceph_max_tool_retries_container" class="polyceph-slider-item"></div>
                         <div id="polyceph_loop_threshold_container" class="polyceph-slider-item"></div>
                     </div>
+
+                    <div class="polyceph-settings-row mt-1">
+                        <input type="checkbox" id="polyceph_continue_on_failure_checkbox">
+                        <label for="polyceph_continue_on_failure_checkbox" class="polyceph-pointer"
+                            title="If enabled, the pipeline will move to the next step even if a task in the current step fails after all retries.">Continue Pipeline on Task Failure</label>
+                    </div>
                 </div>
             </div>
 

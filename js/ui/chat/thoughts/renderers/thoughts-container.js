@@ -25,6 +25,12 @@ export function generateThoughtsHTML(thoughtsArray, pipelineName) {
             const taskId = t.taskId || 'default';
             return t.turnIndex === tasks.get(taskId).maxTurn;
         });
+
+        // Strip "Recursion N" from titles for a cleaner look
+        displayThoughts = displayThoughts.map(t => ({
+            ...t,
+            title: t.title ? t.title.replace(/\s?\(Recursion\s\d+\)/gi, '') : t.title
+        }));
     }
 
     const thoughtsId = `polyceph_thoughts_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;

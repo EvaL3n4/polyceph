@@ -5,6 +5,7 @@ import { runTask } from './task-executor.js';
 import { handleBackgroundOutput, handleCharacterOutput, persistReasoningMessage } from './message-manager.js';
 import { postMessageToChat, getActiveCharacterInfo } from '../compat-shared.js';
 import { scrollToBottomIfNear } from '../ui/ui-shared.js';
+import { updateTaskStatus } from './ui-utils.js';
 
 /**
  * Executes the core pipeline logic, including step iteration, task grouping,
@@ -29,6 +30,18 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
     for (let i = 0; i < totalSteps; i++) {
         const step = activePipeline.steps[i];
         const stepIdx = i + 1;
+
+        if (stContext.eventSource) {
+            stContext.eventSource.emit('polyceph-step-started', {
+                stepIdx,
+                totalSteps,
+                stepId: step.id,
+                label: step.label || `Step ${stepIdx}`,
+                tasks: step.tasks.map(t => ({ id: t.id, label: t.label || 'Unnamed Task' })),
+                pipelineId: activePipeline.id,
+                pipelineName: pipelineName
+            });
+        }
 
         if (!step.tasks || step.tasks.length === 0) continue;
 
@@ -100,6 +113,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
             // Process tasks in parallel (staggered)
             const groupResults = new Array(groupNodes.length);
             const groupThoughts = new Array(groupNodes.length);
+            let anyTaskFailed = false;
 
             await Promise.all(groupNodes.map(async (item, k) => {
                 const { node, nodeIndex } = item;
@@ -230,13 +244,53 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                             isStreamingSwipe 
                         };
                         groupThoughts[k] = thoughts.map(t => ({ ...t, taskId: node.id }));
+
+                        // 5. Task Completion Event (Immediate & Parallel-friendly)
+                        if (stContext.eventSource) {
+                            updateTaskStatus(node.id, 'waiting_on_extensions');
+                            logger.debug(`Task "${node.label || node.id}" waiting on extension processing...`);
+                            await stContext.eventSource.emit('polyceph-task-finished', {
+                                taskId: node.id,
+                                label: node.label || 'Unnamed Task',
+                                success: true,
+                                output: cleanOutput,
+                                error: null,
+                                stepIdx,
+                                totalSteps,
+                                pipelineId: activePipeline.id
+                            });
+                            logger.debug(`Task "${node.label || node.id}" extension processing complete.`);
+                        }
                     }
                 } catch (err) {
                     if (err.message === 'Aborted') throw err;
                     logger.error(`Task ${nodeIndex} in step ${stepIdx} failed:`, err);
+                    anyTaskFailed = true;
                     groupResults[k] = { node, cleanOutput: `(Error: ${err.message})`, persistentOutput: '' };
+
+                    if (stContext.eventSource) {
+                        updateTaskStatus(node.id, 'waiting_on_extensions');
+                        logger.debug(`Task "${node.label || node.id}" waiting on extension processing (Error State)...`);
+                        await stContext.eventSource.emit('polyceph-task-finished', {
+                            taskId: node.id,
+                            label: node.label || 'Unnamed Task',
+                            success: false,
+                            output: '',
+                            error: err.message,
+                            stepIdx,
+                            totalSteps,
+                            pipelineId: activePipeline.id
+                        });
+                        logger.debug(`Task "${node.label || node.id}" extension error processing complete.`);
+                    }
                 }
             }));
+
+            // Stop pipeline if any task failed and continueOnFailure is false
+            const continueOnFailure = settings.continueOnFailure === true || activePipeline.settings?.continueOnFailure === true;
+            if (anyTaskFailed && !continueOnFailure) {
+                throw new Error(`Pipeline stopped: One or more tasks in step ${stepIdx} failed.`);
+            }
 
             // After group completion, process results and thoughts in original order
             for (let i = 0; i < groupNodes.length; i++) {
@@ -350,11 +404,22 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
             }
         }
         // Store step results
-
         const stepResult = resultsByIndex.join('\n\n---\n\n');
         contextVault[step.id] = stepResult;
         contextVault[`s${stepIdx}`] = stepResult;
         if (step.label) contextVault[step.label.trim()] = stepResult;
+
+        // 8. Step Completion Event (Awaited for extension processing)
+        if (stContext.eventSource) {
+            await stContext.eventSource.emit('polyceph-step-finished', {
+                stepIdx,
+                totalSteps,
+                stepId: step.id,
+                label: step.label || `Step ${stepIdx}`,
+                success: true,
+                pipelineId: activePipeline.id
+            });
+        }
     }
 
     // 6. Final Thoughts Persistence
