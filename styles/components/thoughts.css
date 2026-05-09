@@ -266,11 +266,13 @@ body.polyceph-show-reasoning .polyceph-thoughts {
 
 .polyceph-json-field-horizontal .polyceph-json-key-container {
     min-width: 120px;
+    max-width: 40%;
+    flex-shrink: 0;
 }
 
 .polyceph-json-key-container {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 6px;
     justify-content: space-between;
 }
@@ -281,6 +283,8 @@ body.polyceph-show-reasoning .polyceph-thoughts {
     opacity: 0.9;
     font-size: 0.8em;
     text-transform: capitalize;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .polyceph-json-format-mini {
