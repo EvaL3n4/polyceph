@@ -237,6 +237,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                             node, 
                             taskResult, 
                             cleanOutput, 
+                            rawOutput: taskResult.rawResponse,
                             persistentOutput, 
                             taskApi, 
                             taskModel, 
@@ -302,14 +303,22 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
 
                 // Store in vault
                 const taskIdIndx = taskResult ? taskResult.taskIdIndx : (i + 1);
-                contextVault[`${step.id}_task_${taskIdIndx}`] = cleanOutput;
-                contextVault[`${step.id}_target_${taskIdIndx}`] = cleanOutput;
-                contextVault[`s${stepIdx}k${taskIdIndx}`] = cleanOutput;
-                contextVault[`s${stepIdx}t${taskIdIndx}`] = cleanOutput;
+                const rawOutput = res.rawOutput || cleanOutput;
+
+                // Primary keys default to RAW (history-preserving)
+                contextVault[`${step.id}_task_${taskIdIndx}`] = rawOutput;
+                contextVault[`${step.id}_target_${taskIdIndx}`] = rawOutput;
+                contextVault[`s${stepIdx}k${taskIdIndx}`] = rawOutput;
+                contextVault[`s${stepIdx}t${taskIdIndx}`] = rawOutput;
+
+                // Secondary keys for clean (stripped) output
+                contextVault[`${step.id}_task_${taskIdIndx}_clean`] = cleanOutput;
+                contextVault[`s${stepIdx}k${taskIdIndx}_clean`] = cleanOutput;
                 
                 if (node.label && node.label.trim()) {
                     const labelKey = node.label.trim();
-                    contextVault[labelKey] = cleanOutput;
+                    contextVault[labelKey] = rawOutput;
+                    contextVault[`${labelKey}_clean`] = cleanOutput;
                 }
 
                 // Prepare display result for step summation

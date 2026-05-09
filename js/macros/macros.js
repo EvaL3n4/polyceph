@@ -99,10 +99,21 @@ export async function expandPrompt(template, settings, contextVault, cleanChat, 
     // 9. Resolve remaining contextVault items (Task/Step placeholders)
     if (contextVault) {
         Object.keys(contextVault).forEach(key => {
+            // Only process base keys (ignore our internal _clean suffixes)
+            if (key.endsWith('_clean')) return;
+
             // Escape key for regex
             const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const regex = new RegExp(`\\{\\{${escapedKey}\\}\\}`, 'g');
-            result = result.replace(regex, contextVault[key]);
+            // Support {{key}}, {{key|clean}}, {{key|history}}, {{key|raw}}
+            const regex = new RegExp(`\\{\\{${escapedKey}(?:\\|(history|raw|clean))?\\}\\}`, 'g');
+            
+            result = result.replace(regex, (match, pipe) => {
+                if (pipe === 'clean') {
+                    return contextVault[`${key}_clean`] || contextVault[key];
+                }
+                // Default (or |history/|raw) is the raw role-tagged content
+                return contextVault[key];
+            });
         });
     }
 
