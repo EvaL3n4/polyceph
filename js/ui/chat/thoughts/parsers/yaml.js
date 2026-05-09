@@ -23,9 +23,10 @@ export function parseInternalYaml(yamlString) {
     }
 
     // Safety: If it's a single line and contains commas, it's likely just a string (e.g. "Atmosphere: Sterile, high-tech, and focused")
-    // BUT if it starts with { or [, it's likely compact JSON/YAML data, so we allow it.
+    // BUT if it has a valid KV separator or starts with { or [, it's likely data, so we allow it.
     const isWrapped = (yamlString.startsWith('{') && yamlString.endsWith('}')) || (yamlString.startsWith('[') && yamlString.endsWith(']'));
-    if (!yamlString.includes('\n') && yamlString.includes(',') && !isWrapped) return null;
+    const hasKV = yamlString.includes(': ');
+    if (!yamlString.includes('\n') && yamlString.includes(',') && !isWrapped && !hasKV) return null;
 
     for (let line of lines) {
         const rawLine = line;

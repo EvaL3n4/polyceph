@@ -151,24 +151,17 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
             }
 
             // --- Final Response Branch ---
-            const rawText = extractRawText(responseData, api);
-            finalResponse = cleanMessage(rawText);
-
-            // Inject API reasoning if present and not already handled by <think> tags
-            if (turnReasoning && !finalResponse.includes('<think>')) {
-                finalResponse += `\n\n<think>\n${turnReasoning}\n</think>`;
-            }
+            finalResponse = extractRawText(responseData, api);
             break;
         }
 
-        logger.debug('Generation loop finished. Final Response length:', finalResponse?.length || 0);
-
         // --- Post-Generation Logic ---
-        if (anyToolError && outputType === 'tool') {
+        if (anyToolError && options.outputType === 'tool') {
             logger.warn('Tool execution encountered errors in a Tool Processor task. Proceeding to reconstruct history for UI visibility.');
         }
 
-        return reconstructOutput(taskMessages, finalResponse, options);
+        const finalOutput = reconstructOutput(taskMessages, finalResponse, options);
+        return { text: finalOutput, isPartial: false };
 
     } catch (err) {
         if (err.message === 'Aborted' || err.message === 'Loop detected') throw err;
@@ -187,10 +180,12 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
         
         if (taskMessages && taskMessages.length > 0) {
             logger.warn('Reconstructing partial history after generation failure.');
-            const partialResponse = `(Error: ${errorDetail})`;
-            return reconstructOutput(taskMessages, partialResponse, options);
+            // We reconstruct the history but DO NOT include the literal error message in the text 
+            // that might be used by macros. We pass the error separately.
+            const partialText = reconstructOutput(taskMessages, '', options);
+            return { text: partialText, isPartial: true, error: errorDetail };
         } else {
-            throw new Error(errorDetail);
+            return { text: '', isPartial: true, error: errorDetail };
         }
     }
 }

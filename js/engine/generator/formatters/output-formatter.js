@@ -35,8 +35,7 @@ function _formatHiddenToolHistory(taskMessages, finalResponse, options) {
         }
 
         let output = `[[ROLE:assistant]]\n`;
-        if (accumulatedReasoning && !finalResponse.includes('<think>')) {
-            logger.debug(`Wrapping ${accumulatedReasoning.length} chars of accumulated reasoning in <think> tags.`);
+        if (accumulatedReasoning) {
             output += `<think>\n${accumulatedReasoning}\n</think>\n\n`;
         }
         output += finalResponse;
@@ -63,7 +62,8 @@ function _formatFullToolHistory(taskMessages, finalResponse) {
             const role = m.role;
             const roleSuffix = (role === 'tool' && m.tool_call_id) ? `:${m.tool_call_id}` : '';
             let content = m.content || '';
-            if (role === 'assistant' && m.reasoning_content && !content.includes('<think>')) {
+
+            if (role === 'assistant' && m.reasoning_content) {
                 content += `\n\n<think>\n${m.reasoning_content}\n</think>`;
             }
 
@@ -78,7 +78,7 @@ function _formatFullToolHistory(taskMessages, finalResponse) {
                 }
             }
             return `[[ROLE:${role}${roleSuffix}]]\n${content.trim()}\n[[/ROLE]]`;
-        }).join('\n\n') + (finalResponse && finalResponse.includes('(Error:') ? `\n\n[[ROLE:system]]\n${finalResponse}\n[[/ROLE]]` : '');
+        }).join('\n\n');
     }
     
     if (finalResponse !== undefined && finalResponse !== null) return finalResponse;

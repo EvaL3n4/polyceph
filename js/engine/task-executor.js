@@ -120,21 +120,30 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
             if (signal.aborted) return null;
 
             try {
-                const rawRes = await generateQuietly(node.profile, prompt, taskApi, signal, streamingOptions);
-                lastRawResponse = rawRes;
+                const genRes = await generateQuietly(node.profile, prompt, taskApi, signal, streamingOptions);
+                lastRawResponse = genRes.text;
 
                 if (signal.aborted) return null;
 
-                const isEmpty = !rawRes || rawRes.trim() === "" || rawRes === "(Generation returned empty)" || rawRes === "(Error during generation)";
+                parsedResult = parseOutputTags(lastRawResponse, node.label || node.id, node.profile, {
+                    isSilent: node.isSilent,
+                    isToolTask: true, // task-executor is always tool-aware
+                    isThinkingTask: node.outputType === 'thought'
+                });
 
-                if (!isEmpty) {
-                    parsedResult = parseOutputTags(rawRes, node.label || `Task ${taskIdIndx}`, profileDisplayName, node.persist && !node.isCharacter, node.outputType === 'tool');
-                    logger.debug(`Task ${node.id} ("${node.label || 'Step'}") parsed: ${parsedResult.thoughts.length} thoughts, ${parsedResult.hiddenBackgrounds.length} backgrounds, ${parsedResult.cleanOutput.length} chars text.`);
+                if (genRes.error) {
+                    const err = new Error(genRes.error);
+                    err.partialOutput = lastRawResponse;
+                    err.parsedResult = parsedResult;
+                    throw err;
+                }
+
+                if (lastRawResponse) {
                     break;
                 }
 
                 if (attempt >= maxAttempts) {
-                    throw new Error(lastRawResponse || "Generation returned empty after all attempts.");
+                    throw new Error("Generation returned empty after all attempts.");
                 }
             } catch (e) {
                 if (e.message === 'Aborted' || e.message === 'Loop detected') {
@@ -188,7 +197,9 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
             node,
             nodeIndex,
             taskIdIndx,
-            error: e.message
+            error: e.message,
+            partialOutput: e.partialOutput,
+            parsedResult: e.parsedResult
         };
     } finally {
         // Cleanup metadata

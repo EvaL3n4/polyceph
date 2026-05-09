@@ -5,7 +5,11 @@ import { ROLES } from './syntax-definitions.js';
 /**
  * Parses raw LLM output to extract special tags like <think>, <ramble>, and <background>.
  */
-export function parseOutputTags(rawOutput, taskId, profileDisplayName, isThinkingTask, isToolTask = false) {
+export function parseOutputTags(rawOutput, taskId, profileDisplayName, options = {}) {
+    const isThinkingTask = options.isThinkingTask || false;
+    const isToolTask = options.isToolTask || false;
+    const isSilent = options.isSilent || false;
+
     const thoughts = [];
     const hiddenBackgrounds = [];
     let cleanParts = [];
@@ -64,7 +68,7 @@ export function parseOutputTags(rawOutput, taskId, profileDisplayName, isThinkin
         segments.forEach(segment => {
             if (!segment) return;
 
-            if (segment.toLowerCase().startsWith('<think>')) {
+            if (segment.toLowerCase().includes('<think>')) {
                 const content = segment.replace(/<\/?think>/gi, '').trim();
                 if (content) {
                     thoughts.push({ title: `Thinking (${turnLabel})`, content, isSilent: true, profile: profileDisplayName, turnIndex: recursionIndex });
@@ -97,18 +101,24 @@ export function parseOutputTags(rawOutput, taskId, profileDisplayName, isThinkin
                     persistentParts.push(response);
                 }
             } else {
-                // Regular text (remove backgrounds and invocations)
-                const content = segment.replace(backgroundRegex, '').replace(invocationRegex, '').trim();
-                if (content) {
-                    cleanParts.push(content);
-                    persistentParts.push(content);
+            // Regular text (remove backgrounds and invocations)
+            const content = segment.replace(backgroundRegex, '').replace(invocationRegex, '').trim();
+            if (content) {
+                cleanParts.push(content);
+                persistentParts.push(content);
 
-                    // If it's a "Thinking" task, or if we have multiple turns, add to thoughts list
-                    if (isThinkingTask || turns.length > 1) {
-                        thoughts.push({ title: turnLabel, content, isSilent: false, profile: profileDisplayName, turnIndex: recursionIndex });
-                    }
+                // Add to thoughts if:
+                // 1. It's a "Thinking" task (user explicitly requested it)
+                // 2. It's a Silent task (Step 1 Tool Processor)
+                // 3. It's an internal recursion turn (not the final output)
+                const assistantTurns = turns.filter(t => t.role === 'assistant');
+                const isLastAssistantTurn = (recursionIndex === assistantTurns.length);
+
+                if (isThinkingTask || isSilent || !isLastAssistantTurn) {
+                    thoughts.push({ title: turnLabel, content, isSilent: false, profile: profileDisplayName, turnIndex: recursionIndex });
                 }
             }
+        }
         });
     }
 

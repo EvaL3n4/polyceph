@@ -175,6 +175,10 @@ export async function generateViaCC(messages, tools = null, tool_choice = null, 
         generate_data.extra.polyceph_task_id = options.polyceph_task_id || 'unknown';
         generate_data.extra.polyceph_task_label = options.polyceph_task_label || 'Unnamed Task';
         context.eventSource.emit('polyceph-task-payload-ready', generate_data);
+        
+        // Remove from the actual API payload - we only want this for the emission
+        delete generate_data.extra.polyceph_task_id;
+        delete generate_data.extra.polyceph_task_label;
     }
 
     logger.debug('Non-streaming generation payload:', generate_data);
@@ -266,7 +270,14 @@ export async function generateViaCCStreaming(messages, signal, onChunk, tools = 
 
     // NEW: Polyceph-specific payload event (includes all ST injections)
     if (!noEmissions && context.eventSource) {
+        if (!generate_data.extra) generate_data.extra = {};
+        generate_data.extra.polyceph_task_id = options.polyceph_task_id || 'unknown';
+        generate_data.extra.polyceph_task_label = options.polyceph_task_label || 'Unnamed Task';
         context.eventSource.emit('polyceph-task-payload-ready', generate_data);
+        
+        // Remove from the actual API payload - we only want this for the emission
+        delete generate_data.extra.polyceph_task_id;
+        delete generate_data.extra.polyceph_task_label;
     }
 
     logger.debug('Streaming generation payload:', generate_data);

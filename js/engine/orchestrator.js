@@ -267,7 +267,18 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                     if (err.message === 'Aborted') throw err;
                     logger.error(`Task ${nodeIndex} in step ${stepIdx} failed:`, err);
                     anyTaskFailed = true;
-                    groupResults[k] = { node, cleanOutput: `(Error: ${err.message})`, persistentOutput: '' };
+                    const partialOutput = err.partialOutput || '';
+                    groupResults[k] = { 
+                        node, 
+                        taskResult: { ...err, node, nodeIndex, taskIdIndx: k + 1 },
+                        rawOutput: partialOutput,
+                        cleanOutput: partialOutput, 
+                        persistentOutput: '', 
+                        error: err.message 
+                    };
+                    if (err.parsedResult) {
+                        groupThoughts[k] = err.parsedResult.thoughts || [];
+                    }
 
                     if (stContext.eventSource) {
                         updateTaskStatus(node.id, 'waiting_on_extensions');
@@ -330,23 +341,24 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                 }
 
                 // Handle Character Persistence
-                if (cleanOutput && (node.persist || node.isCharacter)) {
+                if (node.persist || node.isCharacter) {
                     const content = (node.isCharacter && persistentOutput) ? persistentOutput : cleanOutput;
                     logger.debug(`Persisting task result: id=${node.id}, type=${node.outputType}, content_len=${content?.length}, isCharacter=${node.isCharacter}`);
                     
                     if (node.isCharacter) {
                         let streamingHandled = false;
+                        
+                        // CONSUME accumulated thoughts (even if content is empty/failed)
+                        const combinedThoughts = [...accumulatedThoughts, ...taskThoughts];
+                        accumulatedThoughts = []; // Clear the global pool
+
                         if (streamMessageIndex !== null && streamMessageIndex !== -1) {
                             const ctx = SillyTavern.getContext();
                             const streamMsg = ctx.chat[streamMessageIndex];
                             if (streamMsg && (streamMsg.extra?.polyceph_streaming || isStreamingSwipe)) {
                                 logger.debug(`Finalizing streaming message at index ${streamMessageIndex}. Content length: ${content?.length}`);
                                 
-                                // CONSUME accumulated thoughts
-                                const combinedThoughts = [...accumulatedThoughts, ...taskThoughts];
-                                accumulatedThoughts = []; // Clear the global pool
-                                
-                                streamMsg.mes = content;
+                                streamMsg.mes = content || streamMsg.mes; // Keep existing if content is empty (failure)
                                 streamMsg.extra.polyceph_streaming = false;
                                 streamMsg.extra.polyceph_batch = batchData.batchId;
                                 streamMsg.extra.polyceph_task_id = node.id;
@@ -355,7 +367,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                                 streamMsg.extra.model = taskModel;
 
                                 if (Array.isArray(streamMsg.swipes)) {
-                                    streamMsg.swipes[streamMsg.swipe_id] = content;
+                                    streamMsg.swipes[streamMsg.swipe_id] = streamMsg.mes;
                                     if (streamMsg.swipe_info?.[streamMsg.swipe_id]) {
                                         streamMsg.swipe_info[streamMsg.swipe_id].extra = { ...streamMsg.extra };
                                     }
@@ -379,12 +391,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                         }
 
                         if (!streamingHandled) {
-                            logger.debug(`Calling handleCharacterOutput for non-streamed content. Content length: ${content?.length}`);
-                            
-                            // CONSUME accumulated thoughts
-                            const combinedThoughts = [...accumulatedThoughts, ...taskThoughts];
-                            accumulatedThoughts = []; // Clear the global pool
-                            
+                            logger.debug(`Calling handleCharacterOutput for non-streamed/failed content. Content length: ${content?.length}`);
                             await handleCharacterOutput(content, combinedThoughts, node._charIndex, node, batchData, taskApi, taskModel, userInput, pipelineName);
                         }
                     } else {
