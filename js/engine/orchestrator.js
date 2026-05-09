@@ -56,38 +56,38 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
             // but for character messages it MUST be pre-calculated.
         });
 
+        // 1. Pre-register ALL tasks in the step to the typing indicator as "queued"
+        // This gives the user immediate feedback on what's coming.
+        const currentCtx = SillyTavern.getContext();
+        const typingIdx = currentCtx.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
+        if (typingIdx !== -1) {
+            const typingMsg = currentCtx.chat[typingIdx];
+            if (!typingMsg.extra.polyceph_active_tasks) {
+                typingMsg.extra.polyceph_active_tasks = [];
+            }
+
+            step.tasks.forEach((node, nodeIndex) => {
+                const exists = typingMsg.extra.polyceph_active_tasks.find(t => t.id === node.id);
+                if (!exists) {
+                    const prof = availableProfiles.find(p => p.id === node.profile);
+                    const profileDisplayName = node.profile === 'none' ? '(Template Only)' : (prof ? prof.name : (node.profile || 'Default'));
+                    
+                    typingMsg.extra.polyceph_active_tasks.push({
+                        id: node.id,
+                        label: node.label || `Task ${nodeIndex + 1}`,
+                        profile: profileDisplayName,
+                        status: 'queued',
+                        step: stepIdx,
+                        totalSteps: totalSteps
+                    });
+                }
+            });
+            import('./ui-utils.js').then(m => m.updateTypingIndicator());
+        }
+
         // Process profile groups sequentially
         for (const [profileId, groupNodes] of Object.entries(profileGroups)) {
             if (signal.aborted) return;
-
-            // 1. Pre-register ALL tasks in the step to the typing indicator as "queued"
-            // This gives the user immediate feedback on what's coming, even for sequential groups.
-            const currentCtx = SillyTavern.getContext();
-            const typingIdx = currentCtx.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
-            if (typingIdx !== -1) {
-                const typingMsg = currentCtx.chat[typingIdx];
-                if (!typingMsg.extra.polyceph_active_tasks) {
-                    typingMsg.extra.polyceph_active_tasks = [];
-                }
-
-                step.tasks.forEach((node, nodeIndex) => {
-                    const exists = typingMsg.extra.polyceph_active_tasks.find(t => t.id === node.id);
-                    if (!exists) {
-                        const prof = availableProfiles.find(p => p.id === node.profile);
-                        const profileDisplayName = node.profile === 'none' ? '(Template Only)' : (prof ? prof.name : (node.profile || 'Default'));
-                        
-                        typingMsg.extra.polyceph_active_tasks.push({
-                            id: node.id,
-                            label: node.label || `Task ${nodeIndex + 1}`,
-                            profile: profileDisplayName,
-                            status: 'queued',
-                            step: stepIdx,
-                            totalSteps: totalSteps
-                        });
-                    }
-                });
-                import('./ui-utils.js').then(m => m.updateTypingIndicator());
-            }
 
             if (profileId !== 'none' && profileId !== 'Task') {
                 logger.info(`Switching to profile group: ${profileId}`);

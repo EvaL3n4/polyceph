@@ -17,15 +17,16 @@ export async function executeGeneration(messages, tools, tool_choice, api, signa
     }
 
     let responseData = null;
-    let apiAttempt = 0;
-    const maxApiRetries = settings.maxToolRetries || 0;
+    let attempt = 0;
+    const maxAttempts = Math.max(1, settings.maxToolRetries || 1);
     const timeoutMs = settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 60000;
 
-    while (apiAttempt <= maxApiRetries) {
+    while (attempt < maxAttempts) {
+        attempt++;
         try {
             if (canStream) {
                 // ========== STREAMING PATH ==========
-                logger.debug(`Using streaming generation path (attempt ${apiAttempt + 1}/${maxApiRetries + 1}).`);
+                logger.debug(`Using streaming generation path (attempt ${attempt}/${maxAttempts}).`);
 
                 const streamingChunkHandler = async (chunk) => {
                     // Feed loop detector
@@ -71,7 +72,7 @@ export async function executeGeneration(messages, tools, tool_choice, api, signa
                 }
             } else {
                 // ========== NON-STREAMING PATH ==========
-                logger.debug(`Streaming disabled or unsupported (attempt ${apiAttempt + 1}/${maxApiRetries + 1}). Using non-streaming generation path.`);
+                logger.debug(`Streaming disabled or unsupported (attempt ${attempt}/${maxAttempts}). Using non-streaming generation path.`);
                 responseData = await _generateNonStreaming(messages, tools, tool_choice, signal, timeoutMs, false);
             }
 
@@ -87,12 +88,23 @@ export async function executeGeneration(messages, tools, tool_choice, api, signa
         } catch (err) {
             if (err.message === 'Aborted' || err.message === 'Loop detected') throw err;
 
-            apiAttempt++;
-            if (apiAttempt > maxApiRetries) throw err;
+            if (attempt >= maxAttempts) throw err;
 
-            const delay = settings.retryDelayMs || 2000;
-            logger.warn(`API Turn ${depth} failed (attempt ${apiAttempt}/${maxApiRetries + 1}). Retrying in ${delay}ms...`, err);
-            await new Promise(r => setTimeout(r, delay));
+            const delay = Number(settings.retryDelayMs) || 2000;
+            logger.warn(`API Turn ${depth} failed (attempt ${attempt}/${maxAttempts}). Retrying in ${delay}ms...`, err);
+            
+            // Explicitly wait with abort signal check
+            await new Promise(resolve => {
+                const timer = setTimeout(resolve, delay);
+                if (signal) {
+                    signal.addEventListener('abort', () => {
+                        clearTimeout(timer);
+                        resolve();
+                    }, { once: true });
+                }
+            });
+
+            if (signal && signal.aborted) throw new Error('Aborted');
         }
     }
     

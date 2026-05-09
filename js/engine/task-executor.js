@@ -95,7 +95,6 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
 
         let lastRawResponse = null;
         let parsedResult = null;
-        const maxAttempts = (settings.maxRetries !== undefined) ? settings.maxRetries : 0;
 
         // 4b. Build streaming options
         const streamingOptions = {
@@ -116,8 +115,12 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
             streamingOptions.onStream = options.onStream;
         }
 
+        let attempt = 0;
+        const maxAttempts = Math.max(1, settings.maxRetries || 1);
+
         // 5. Generation Loop (Retries)
-        for (let attempt = 0; attempt <= maxAttempts; attempt++) {
+        while (attempt < maxAttempts) {
+            attempt++;
             if (signal.aborted) return null;
 
             try {
@@ -134,39 +137,41 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
                     break;
                 }
 
-                if (attempt === maxAttempts) {
-                    throw new Error(lastRawResponse || "Generation returned empty after all retries.");
+                if (attempt >= maxAttempts) {
+                    throw new Error(lastRawResponse || "Generation returned empty after all attempts.");
                 }
             } catch (e) {
-                if (signal.aborted) throw e;
-
-                // Loop detection: on last retry, return truncated text instead of failing
-                if (e.message === 'Loop detected' && attempt === maxAttempts) {
-                    logger.warn(`Task ${node.id}: loop detected on final attempt. Returning truncated output.`);
-                    // The truncated text will be in the error's context — use what we have
-                    if (lastRawResponse && lastRawResponse.trim()) {
-                        parsedResult = parseOutputTags(lastRawResponse, node.label || `Task ${taskIdIndx}`, profileDisplayName, node.persist && !node.isCharacter, node.outputType === 'tool');
-                        break;
-                    }
-                    throw new Error('Loop detected: no usable output after all retries.');
-                }
-
-                if (e.message === 'Loop detected') {
-                    logger.warn(`Task ${node.id} attempt ${attempt + 1}: loop detected. Retrying...`);
-                    toastr.warning(`Loop detected. Retrying (${attempt + 1}/${maxAttempts})...`, 'Polyceph');
-                } else {
-                    lastRawResponse = e.message;
-                    if (attempt === maxAttempts) {
+                if (e.message === 'Aborted' || e.message === 'Loop detected') {
+                    if (e.message === 'Loop detected' && attempt < maxAttempts) {
+                        logger.warn(`Task ${node.id} attempt ${attempt}: loop detected. Retrying...`);
+                        toastr.warning(`Loop detected. Retrying (${attempt}/${maxAttempts})...`, 'Polyceph');
+                        // Fallthrough to delay and retry
+                    } else {
                         throw e;
                     }
-                    logger.warn(`Task ${node.id} attempt ${attempt + 1} failed: ${e.message}. Retrying...`);
-                    toastr.warning(`Task failed. Retrying (${attempt + 1}/${maxAttempts})...`, 'Polyceph');
+                } else {
+                    lastRawResponse = e.message;
+                    if (attempt >= maxAttempts) {
+                        throw e;
+                    }
+                    logger.warn(`Task ${node.id} attempt ${attempt} failed: ${e.message}. Retrying...`);
+                    toastr.warning(`Task failed. Retrying (${attempt}/${maxAttempts})...`, 'Polyceph');
                 }
             }
 
-            const delayWait = settings.retryDelayMs !== undefined ? settings.retryDelayMs : 2000;
-            await new Promise(r => setTimeout(r, delayWait));
+            const delayWait = Number(settings.retryDelayMs) || 2000;
+            await new Promise(resolve => {
+                const timer = setTimeout(resolve, delayWait);
+                if (signal) {
+                    signal.addEventListener('abort', () => {
+                        clearTimeout(timer);
+                        resolve();
+                    }, { once: true });
+                }
+            });
+            if (signal && signal.aborted) return null;
         }
+
 
         if (!parsedResult) throw new Error("Task failed to produce a valid response.");
 
