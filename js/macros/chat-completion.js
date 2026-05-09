@@ -254,6 +254,7 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
 
     // 3. Resolve individual macros (no trimming for specific requests)
     if (result.includes('{{cc_main_prompt}}')) result = result.replace(/\{\{cc_main_prompt\}\}/g, await resolveIdentifier('main', cleanChat));
+    if (result.includes('{{system_prompt}}')) result = result.replace(/\{\{system_prompt\}\}/g, await resolveIdentifier('main', cleanChat));
     if (result.includes('{{cc_aux_prompt}}')) {
         const content = await resolveIdentifier('nsfw', cleanChat);
         result = result.replace(/\{\{cc_aux_prompt\}\}/g, content);

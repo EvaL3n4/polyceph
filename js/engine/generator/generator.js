@@ -56,8 +56,8 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
         
         let anyToolError = false;
         
-        // Determine default role for orphaned text based on task type
-        const defaultRole = (outputType === 'character') ? 'user' : 'system';
+        // Determine default role for orphaned text (Default to system for all quiet tasks)
+        const defaultRole = 'system';
         const messages = [...parsePromptToMessages(prompt, api, defaultRole)];
         
         // 3. Main Tool Recursion Loop
