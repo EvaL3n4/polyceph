@@ -13,12 +13,34 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
     const stContext = SillyTavern.getContext();
     const taskIdIndx = nodeIndex + 1;
 
+    /**
+     * Surgically updates the task's status in the typing indicator.
+     */
+    const updateTaskStatus = (status, labelOverride = null) => {
+        const currentContext = SillyTavern.getContext();
+        const idx = currentContext.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
+        if (idx !== -1) {
+            const msg = currentContext.chat[idx];
+            if (msg.extra?.polyceph_active_tasks) {
+                const task = msg.extra.polyceph_active_tasks.find(t => t.id === node.id);
+                if (task) {
+                    task.status = status;
+                    if (labelOverride) task.label = labelOverride;
+                    updateTypingIndicator();
+                } else {
+                    logger.debug(`Task ${node.id} not found in active tasks list.`, msg.extra.polyceph_active_tasks.map(t => t.id));
+                }
+            }
+        }
+    };
+
     // 1. Preset Management
     const taskPreset = node.preset || 'Current';
     if (taskPreset !== 'Current') {
         const currentPreset = getCurrentPresetName();
         if (currentPreset !== taskPreset) {
             logger.info(`Applying task preset: "${taskPreset}" (was: "${currentPreset}")`);
+            updateTaskStatus('applying preset');
             const switched = applyPreset(taskPreset);
             if (switched) {
                 // Give ST time to settle the new preset settings
@@ -59,23 +81,9 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
             : (stContext.chatCompletionSettings?.openai_model || '');
     }
 
-    // 3. Update Progress Metadata
-    const typingIdx = stContext.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
-    if (typingIdx !== -1) {
-        const typingMsg = stContext.chat[typingIdx];
-        if (!typingMsg.extra.polyceph_active_tasks) typingMsg.extra.polyceph_active_tasks = [];
 
-        const taskMetadata = {
-            id: node.id,
-            label: node.label || `Task ${taskIdIndx}`,
-            profile: profileDisplayName,
-            status: 'generating',
-            step: stepIdx,
-            totalSteps: totalSteps
-        };
-        typingMsg.extra.polyceph_active_tasks.push(taskMetadata);
-        updateTypingIndicator();
-    }
+    // 2. Update Progress Metadata (Now handled by orchestrator, but we ensure status is 'generating' here)
+    updateTaskStatus('generating');
 
     logger.debug(`Task Start: "${node.label || node.id}" (Profile: ${profileDisplayName}, API: ${taskApi})`);
 
@@ -100,6 +108,7 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
             skipSuccessRecursion: !!node.skipSuccessRecursion,
             hideSuccessResponse: !!node.hideSuccessResponse,
             hideToolHistory: !!node.hideToolHistory,
+            onStatusUpdate: updateTaskStatus
         };
 
         // Allow orchestrator to inject a stream callback (for character message streaming)
@@ -120,7 +129,7 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
                 const isEmpty = !rawRes || rawRes.trim() === "" || rawRes === "(Generation returned empty)" || rawRes === "(Error during generation)";
 
                 if (!isEmpty) {
-                    parsedResult = parseOutputTags(rawRes, node.label || `Task ${taskIdIndx}`, profileDisplayName, node.persist && !node.isCharacter);
+                    parsedResult = parseOutputTags(rawRes, node.label || `Task ${taskIdIndx}`, profileDisplayName, node.persist && !node.isCharacter, node.outputType === 'tool');
                     logger.debug(`Task ${node.id} ("${node.label || 'Step'}") parsed: ${parsedResult.thoughts.length} thoughts, ${parsedResult.hiddenBackgrounds.length} backgrounds, ${parsedResult.cleanOutput.length} chars text.`);
                     break;
                 }
@@ -136,7 +145,7 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
                     logger.warn(`Task ${node.id}: loop detected on final attempt. Returning truncated output.`);
                     // The truncated text will be in the error's context — use what we have
                     if (lastRawResponse && lastRawResponse.trim()) {
-                        parsedResult = parseOutputTags(lastRawResponse, node.label || `Task ${taskIdIndx}`, profileDisplayName, node.persist && !node.isCharacter);
+                        parsedResult = parseOutputTags(lastRawResponse, node.label || `Task ${taskIdIndx}`, profileDisplayName, node.persist && !node.isCharacter, node.outputType === 'tool');
                         break;
                     }
                     throw new Error('Loop detected: no usable output after all retries.');

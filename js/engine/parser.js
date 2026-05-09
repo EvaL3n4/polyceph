@@ -5,7 +5,7 @@ import { ROLES } from './syntax-definitions.js';
 /**
  * Parses raw LLM output to extract special tags like <think>, <ramble>, and <background>.
  */
-export function parseOutputTags(rawOutput, taskId, profileDisplayName, isThinkingTask) {
+export function parseOutputTags(rawOutput, taskId, profileDisplayName, isThinkingTask, isToolTask = false) {
     const thoughts = [];
     const hiddenBackgrounds = [];
     let cleanParts = [];
@@ -36,7 +36,13 @@ export function parseOutputTags(rawOutput, taskId, profileDisplayName, isThinkin
     for (const turn of turns) {
         if (turn.role === 'assistant') recursionIndex++;
 
-        const turnLabel = turn.role === 'assistant' ? `Recursion ${recursionIndex}` : 'Turn';
+        let turnLabel = taskId;
+        if (isToolTask && turns.length > 1 && turn.role === 'assistant') {
+            turnLabel = `${taskId} (Recursion ${recursionIndex})`;
+        } else if (turn.role !== 'assistant') {
+            turnLabel = `${taskId} (${turn.role})`;
+        }
+
         const turnContent = turn.content;
 
         // 2a. Skip tool results in thoughts (they are already interleaved in assistant turns)

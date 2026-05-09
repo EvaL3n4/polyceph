@@ -32,6 +32,10 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
     const antiLoop = options.antiLoop !== undefined ? options.antiLoop : true;
     const loopThreshold = options.loopThreshold || settings.loopDetectionThreshold || 3;
     const onStream = options.onStream || null;
+    const onStatusUpdate = options.onStatusUpdate || null;
+
+    let taskMessages = [];
+    let finalResponse = "";
 
     try {
         const context = SillyTavern.getContext();
@@ -50,14 +54,12 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
         let depth = 0;
         const maxDepth = stRecurseLimit !== undefined ? Number(stRecurseLimit) : (settings.toolRecursionLimit !== undefined ? settings.toolRecursionLimit : DEFAULT_TOOL_RECURSION_LIMIT);
         
-        let finalResponse = "";
         let anyToolError = false;
         
         // Determine default role for orphaned text based on task type
         const defaultRole = (outputType === 'character') ? 'user' : 'system';
         const messages = [...parsePromptToMessages(prompt, api, defaultRole)];
-        const taskMessages = [];
-
+        
         // 3. Main Tool Recursion Loop
         while (depth < maxDepth) {
             depth++;
@@ -120,6 +122,10 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                 const { results, hasErrors } = await executeToolCallsParallel(ToolManager, toolCalls);
                 if (hasErrors) anyToolError = true;
 
+                if (onStatusUpdate) {
+                    onStatusUpdate('executing tools');
+                }
+
                 if (results && Array.isArray(results)) {
                     messages.push(...results);
                     taskMessages.push(...results);
@@ -131,6 +137,9 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                 if (options.skipSuccessRecursion && !hasErrors) {
                     logger.info('skipSuccessRecursion is true and tools succeeded. Ending task early.');
                     break;
+                }
+                if (onStatusUpdate) {
+                    onStatusUpdate('generating');
                 }
                 continue;
             }
@@ -170,7 +179,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
 
         logger.error('Generation failed:', errorDetail, err);
         
-        if (taskMessages.length > 0) {
+        if (taskMessages && taskMessages.length > 0) {
             logger.warn('Reconstructing partial history after generation failure.');
             const partialResponse = `(Error: ${errorDetail})`;
             return reconstructOutput(taskMessages, partialResponse, options);
