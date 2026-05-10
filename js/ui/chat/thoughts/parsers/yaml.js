@@ -39,7 +39,17 @@ export function parseInternalYaml(yamlString) {
         const kvSep = line.indexOf(': ');
 
         // A valid KV separator must be followed by a space or end of line
-        const isValidKV = kvSep !== -1 && (kvSep === line.length - 1 || line[kvSep + 1] === ' ');
+        let isValidKV = kvSep !== -1 && (kvSep === line.length - 1 || line[kvSep + 1] === ' ');
+
+        // Heuristic: If it's a KV, the key should look like an identifier, not a sentence.
+        if (isValidKV) {
+            const keyPart = line.slice(0, kvSep).trim();
+            const words = keyPart.split(/\s+/).filter(w => w.length > 0);
+            // If the key has more than 5 words or is very long (40+ chars), it's likely a sentence
+            if (words.length > 5 || keyPart.length > 40) {
+                isValidKV = false;
+            }
+        }
 
         if (isValidKV) {
             hasActualKV = true;

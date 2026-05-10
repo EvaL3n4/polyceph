@@ -20,11 +20,11 @@ export function generateSingleThoughtHTML(t) {
                 <div class="polyceph-tool-details">
                     <div class="polyceph-tool-section">
                         <div class="polyceph-tool-section-header">Arguments</div>
-                        <div class="polyceph-tool-args-container">${renderJsonObject(argsParsed.data, true)}</div>
+                        <div class="polyceph-tool-args-container">${renderJsonObject(argsParsed.data, true, argsParsed.format)}</div>
                     </div>
                     <div class="polyceph-tool-section">
                         <div class="polyceph-tool-section-header">Response</div>
-                        <div class="polyceph-tool-response-container">${renderJsonObject(responseParsed.data, true)}</div>
+                        <div class="polyceph-tool-response-container">${renderJsonObject(responseParsed.data, true, responseParsed.format)}</div>
                     </div>
                 </div>
             `;

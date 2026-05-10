@@ -3,7 +3,7 @@ import { tryParseInternalData } from '../parsers/data.js';
 /**
  * Renders a JSON-like object into a clean, nested UI structure.
  */
-export function renderJsonObject(data, isRoot = false) {
+export function renderJsonObject(data, isRoot = false, preferredFormat = null) {
     if (data === null || data === undefined) return '<span class="polyceph-json-null">null</span>';
 
     if (typeof data !== 'object') {
@@ -18,11 +18,11 @@ export function renderJsonObject(data, isRoot = false) {
         return `
             <div class="polyceph-json-array">
                 ${data.map(item => {
-                    const parsed = tryParseInternalData(item);
+                    const parsed = tryParseInternalData(item, preferredFormat);
                     return `
                         <div class="polyceph-json-item-box">
                             ${parsed.format ? `<div class="polyceph-json-item-header"><span class="polyceph-json-format-mini">${parsed.format}</span></div>` : ''}
-                            <div class="polyceph-json-item-content">${renderJsonObject(parsed.data, false)}</div>
+                            <div class="polyceph-json-item-content">${renderJsonObject(parsed.data, false, parsed.format || preferredFormat)}</div>
                         </div>
                     `;
                 }).join('')}
@@ -73,7 +73,7 @@ export function renderJsonObject(data, isRoot = false) {
     }
 
     const bodyHtml = bodyFields.map(key => {
-        const parsed = tryParseInternalData(data[key]);
+        const parsed = tryParseInternalData(data[key], preferredFormat);
         const isSimple = (typeof parsed.data !== 'object' || parsed.data === null || (Array.isArray(parsed.data) && parsed.data.length === 0));
         const rowClass = isSimple ? 'polyceph-json-field-horizontal' : 'polyceph-json-field-vertical';
 
@@ -83,7 +83,7 @@ export function renderJsonObject(data, isRoot = false) {
                     <span class="polyceph-json-key">${key}</span>
                     ${parsed.format ? `<span class="polyceph-json-format-mini">${parsed.format}</span>` : ''}
                 </div>
-                <div class="polyceph-json-value">${renderJsonObject(parsed.data, false)}</div>
+                <div class="polyceph-json-value">${renderJsonObject(parsed.data, false, parsed.format || preferredFormat)}</div>
             </div>
         `;
     }).join('');

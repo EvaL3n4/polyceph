@@ -12,7 +12,7 @@ export function reconstructOutput(taskMessages, finalResponse, options) {
     if (options.hideToolHistory) {
         return _formatHiddenToolHistory(taskMessages, finalResponse, options);
     } else {
-        return _formatFullToolHistory(taskMessages, finalResponse);
+        return _formatFullToolHistory(taskMessages, finalResponse, options);
     }
 }
 
@@ -46,7 +46,8 @@ function _formatHiddenToolHistory(taskMessages, finalResponse, options) {
                 for (const tc of m.tool_calls) {
                     const resultMsg = taskMessages.find(rm => rm.role === 'tool' && rm.tool_call_id === tc.id);
                     const result = resultMsg ? resultMsg.content : '(No result found)';
-                    output += `\n\n<tool_call name="${tc.function.name}" args='${tc.function.arguments}'>\n${result}\n</tool_call>`;
+                    const dispName = (options.toolDisplayNames && options.toolDisplayNames[tc.function.name]) || tc.function.name;
+                    output += `\n\n<tool_call name="${tc.function.name}" displayName="${dispName}" args='${tc.function.arguments}'>\n${result}\n</tool_call>`;
                 }
             }
         }
@@ -56,7 +57,7 @@ function _formatHiddenToolHistory(taskMessages, finalResponse, options) {
     return "(Generation returned empty)";
 }
 
-function _formatFullToolHistory(taskMessages, finalResponse) {
+function _formatFullToolHistory(taskMessages, finalResponse, options = {}) {
     if (taskMessages.length > 0) {
         return taskMessages.map(m => {
             const role = m.role;
@@ -71,7 +72,8 @@ function _formatFullToolHistory(taskMessages, finalResponse) {
                 for (const tc of m.tool_calls) {
                     const resultMsg = taskMessages.find(rm => rm.role === 'tool' && rm.tool_call_id === tc.id);
                     const result = resultMsg ? resultMsg.content : '(No result found)';
-                    content += `\n\n<tool_call name="${tc.function.name}" args='${tc.function.arguments}'>\n${result}\n</tool_call>`;
+                    const dispName = (options.toolDisplayNames && options.toolDisplayNames[tc.function.name]) || tc.function.name;
+                    content += `\n\n<tool_call name="${tc.function.name}" displayName="${dispName}" args='${tc.function.arguments}'>\n${result}\n</tool_call>`;
                 }
                 if (m.tool_calls && Array.isArray(m.tool_calls)) {
                     content += `\n[[INVOCATIONS:${encodeInvocations(m.tool_calls)}]]`;

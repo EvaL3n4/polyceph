@@ -61,6 +61,14 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
         const messages = [...parsePromptToMessages(prompt, api, defaultRole)];
         
         // 3. Main Tool Recursion Loop
+        const toolDisplayNames = {};
+        if (ToolManager && ToolManager.tools) {
+            for (const t of ToolManager.tools) {
+                if (t.name && t.displayName) toolDisplayNames[t.name] = t.displayName;
+            }
+        }
+        options.toolDisplayNames = toolDisplayNames;
+
         while (depth < maxDepth) {
             depth++;
             logger.info(`Starting tool recursion depth ${depth}/${maxDepth}`);

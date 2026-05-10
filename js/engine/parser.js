@@ -42,7 +42,7 @@ export function parseOutputTags(rawOutput, taskId, profileDisplayName, options =
 
         let turnLabel = taskId;
         if (isToolTask && turns.length > 1 && turn.role === 'assistant') {
-            turnLabel = `${taskId} (Recursion ${recursionIndex})`;
+            turnLabel = `${taskId} - Recursion ${recursionIndex}`;
         } else if (turn.role !== 'assistant') {
             turnLabel = `${taskId} (${turn.role})`;
         }
@@ -81,13 +81,16 @@ export function parseOutputTags(rawOutput, taskId, profileDisplayName, options =
                 }
             } else if (segment.toLowerCase().startsWith('<tool_call')) {
                 const nameMatch = segment.match(/name="([\s\S]+?)"/i);
+                const dispMatch = segment.match(/displayName="([\s\S]+?)"/i);
                 const argsMatch = segment.match(/args='([\s\S]+)'\s*>/i);
+
                 const name = nameMatch ? nameMatch[1] : 'Unknown Tool';
+                const displayName = dispMatch ? dispMatch[1] : name;
                 const args = argsMatch ? argsMatch[1] : '';
                 const response = segment.replace(/<tool_call[\s\S]*?>/i, '').replace(/<\/tool_call>/i, '').trim();
 
                 thoughts.push({
-                    title: `Tool: ${name}`,
+                    title: `Tool: ${displayName}`,
                     content: { args, response },
                     type: 'tool',
                     isSilent: true,
@@ -101,24 +104,24 @@ export function parseOutputTags(rawOutput, taskId, profileDisplayName, options =
                     persistentParts.push(response);
                 }
             } else {
-            // Regular text (remove backgrounds and invocations)
-            const content = segment.replace(backgroundRegex, '').replace(invocationRegex, '').trim();
-            if (content) {
-                cleanParts.push(content);
-                persistentParts.push(content);
+                // Regular text (remove backgrounds and invocations)
+                const content = segment.replace(backgroundRegex, '').replace(invocationRegex, '').trim();
+                if (content) {
+                    cleanParts.push(content);
+                    persistentParts.push(content);
 
-                // Add to thoughts if:
-                // 1. It's a "Thinking" task (user explicitly requested it)
-                // 2. It's a Silent task (Step 1 Tool Processor)
-                // 3. It's an internal recursion turn (not the final output)
-                const assistantTurns = turns.filter(t => t.role === 'assistant');
-                const isLastAssistantTurn = (recursionIndex === assistantTurns.length);
+                    // Add to thoughts if:
+                    // 1. It's a "Thinking" task (user explicitly requested it)
+                    // 2. It's a Silent task (Step 1 Tool Processor)
+                    // 3. It's an internal recursion turn (not the final output)
+                    const assistantTurns = turns.filter(t => t.role === 'assistant');
+                    const isLastAssistantTurn = (recursionIndex === assistantTurns.length);
 
-                if (isThinkingTask || isSilent || !isLastAssistantTurn) {
-                    thoughts.push({ title: turnLabel, content, isSilent: false, profile: profileDisplayName, turnIndex: recursionIndex });
+                    if (isThinkingTask || isSilent || !isLastAssistantTurn) {
+                        thoughts.push({ title: turnLabel, content, isSilent: false, profile: profileDisplayName, turnIndex: recursionIndex });
+                    }
                 }
             }
-        }
         });
     }
 
@@ -143,7 +146,7 @@ export function parseOutputTags(rawOutput, taskId, profileDisplayName, options =
  */
 export function parsePromptToMessages(text, api = '', defaultRole = 'system') {
     const messages = [];
-    
+
     const rolePattern = ROLES.join('|');
     // Combined regex for start tags, end tags, and shorthands
     // Group 1: Optional escape backslash
@@ -152,14 +155,14 @@ export function parsePromptToMessages(text, api = '', defaultRole = 'system') {
 
     let lastIndex = 0;
     let match;
-    
+
     let currentRole = defaultRole;
     let currentName = null;
     let isForced = false;
-    
+
     const appendToMessages = (content) => {
         if (!content || !content.trim()) return;
-        
+
         // Cleanup escape backslashes
         const cleanContent = content.replace(/\\\[\[/g, '[[').trim();
         if (!cleanContent) return;
@@ -179,7 +182,7 @@ export function parsePromptToMessages(text, api = '', defaultRole = 'system') {
 
     while ((match = tagRegex.exec(text)) !== null) {
         const isEscaped = !!match[1];
-        
+
         if (isEscaped) {
             // If escaped, we don't treat it as a tag. 
             // We just keep going, letting the next loop (or the end) handle it as text.
@@ -197,7 +200,7 @@ export function parsePromptToMessages(text, api = '', defaultRole = 'system') {
             // but we still honor manual shorthands [[user]] and terminators [[/]]
             if (isEndTag || (role && !isEngineTag)) {
                 appendToMessages(precedingText);
-                
+
                 if (isEndTag) {
                     currentRole = defaultRole;
                     currentName = null;
