@@ -69,7 +69,7 @@ export function renderTaskOptionsBar(task, apiId, disabled) {
             ${task.outputType === 'mcp' ? `
                 <div class="polyceph-node-option" style="display: flex; align-items: center; gap: 4px;">
                     <div class="polyceph-mcp-sources-trigger menu_button" data-node-id="${task.id}" style="padding: 4px 8px; white-space: nowrap; cursor: pointer; display: flex; align-items: center; gap: 5px;" title="Select MCP tool sources for this task">
-                        <span>Sources (${(task.mcpSources || ['Local Hub']).length})</span>
+                        <span>Sources (${(task.mcpSources || ['MCP Tool Hub']).length})</span>
                         <i class="fa-solid fa-chevron-down" style="font-size: 0.8em; opacity: 0.8;"></i>
                     </div>
                 </div>

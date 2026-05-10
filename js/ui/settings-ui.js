@@ -378,7 +378,7 @@ async function updateMcpStatus() {
     if (available) {
         badge.textContent = 'Connected';
         badge.className = 'polyceph-status-badge connected';
-        // Auto-connect to local hub if found
+        // Auto-connect to MCP tool hub if found
         await mcpService.connectToHub();
     } else {
         badge.textContent = 'Not Connected';

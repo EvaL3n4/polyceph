@@ -345,8 +345,8 @@ export function bindStepEvents() {
             if (!targetTask) return;
 
             const remoteServers = (settings.mcpServers || '').split('\n').map(s => s.trim()).filter(s => s);
-            const availableSources = ['Local Hub', ...remoteServers];
-            const currentSources = targetTask.mcpSources || ['Local Hub'];
+            const availableSources = ['MCP Tool Hub', ...remoteServers];
+            const currentSources = targetTask.mcpSources || ['MCP Tool Hub'];
 
             showMultiSelectDropdown(trigger, {
                 items: availableSources,

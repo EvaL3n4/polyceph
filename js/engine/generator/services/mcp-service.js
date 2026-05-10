@@ -80,7 +80,7 @@ class McpService {
                 // MCP handshake: initialize (only once per transport)
                 if (!this.initializedTransports.has(transport)) {
                     logger.debug(`Initializing MCP transport for source: ${name}`);
-                    // Using empty params for maximum compatibility with the local Hub
+                    // Using empty params for maximum compatibility with the MCP Tool Hub
                     await this.sendRequest(transport, 'initialize', {});
                     this.initializedTransports.add(transport);
 
