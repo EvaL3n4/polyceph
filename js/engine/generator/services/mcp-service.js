@@ -15,9 +15,26 @@ class McpService {
      */
     async checkHub() {
         try {
-            const hubPath = '/scripts/extensions/third-party/st-tool-mcp/index.js';
-            // Check if file exists by a simple fetch (non-blocking)
-            const head = await fetch(hubPath, { method: 'HEAD' });
+            const context = SillyTavern.getContext();
+            const hubPath = 'third-party/st-tool-mcp';
+            
+            // 1. Check if the extension is actually active/enabled in ST
+            // Third-party extensions are listed in context.extensions
+            const isActive = context.extensions?.some(ext => ext.name === hubPath || ext.name === 'st-tool-mcp');
+            
+            if (!isActive) {
+                if (this.transports.has('MCP Tool Hub')) {
+                    const transport = this.transports.get('MCP Tool Hub');
+                    this.initializedTransports.delete(transport);
+                    this.transports.delete('MCP Tool Hub');
+                }
+                this.hubAvailable = false;
+                return false;
+            }
+
+            // 2. Double check file existence (standard check)
+            const hubFile = `/scripts/extensions/${hubPath}/index.js`;
+            const head = await fetch(hubFile, { method: 'HEAD' });
             this.hubAvailable = head.ok;
             return this.hubAvailable;
         } catch (e) {
@@ -30,15 +47,15 @@ class McpService {
      * Connects to the local MCP Tool Hub.
      */
     async connectToHub() {
-        if (this.transports.has('Local Hub')) return this.transports.get('Local Hub');
+        if (this.transports.has('MCP Tool Hub')) return this.transports.get('MCP Tool Hub');
 
         try {
             const hubPath = '/scripts/extensions/third-party/st-tool-mcp/index.js';
             const hub = await import(hubPath);
             if (typeof hub.createLocalTransport === 'function') {
                 const transport = await hub.createLocalTransport();
-                this.transports.set('Local Hub', transport);
-                logger.info('Connected to Local MCP Tool Hub.');
+                this.transports.set('MCP Tool Hub', transport);
+                logger.info('Connected to MCP Tool Hub.');
                 return transport;
             }
         } catch (e) {
