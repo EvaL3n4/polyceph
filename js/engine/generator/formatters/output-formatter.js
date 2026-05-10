@@ -1,5 +1,6 @@
 import { logger } from '../../../logger.js';
 import { encodeInvocations } from '../../../macros/utils.js';
+import { getToolDisplayName } from '../../tool-handler.js';
 
 /**
  * Reconstructs the final output string from the accumulated task messages.
@@ -46,7 +47,7 @@ function _formatHiddenToolHistory(taskMessages, finalResponse, options) {
                 for (const tc of m.tool_calls) {
                     const resultMsg = taskMessages.find(rm => rm.role === 'tool' && rm.tool_call_id === tc.id);
                     const result = resultMsg ? resultMsg.content : '(No result found)';
-                    const dispName = (options.toolDisplayNames && options.toolDisplayNames[tc.function.name]) || tc.function.name;
+                    const dispName = getToolDisplayName(tc.function.name);
                     output += `\n\n<tool_call name="${tc.function.name}" displayName="${dispName}" args='${tc.function.arguments}'>\n${result}\n</tool_call>`;
                 }
             }
@@ -72,7 +73,7 @@ function _formatFullToolHistory(taskMessages, finalResponse, options = {}) {
                 for (const tc of m.tool_calls) {
                     const resultMsg = taskMessages.find(rm => rm.role === 'tool' && rm.tool_call_id === tc.id);
                     const result = resultMsg ? resultMsg.content : '(No result found)';
-                    const dispName = (options.toolDisplayNames && options.toolDisplayNames[tc.function.name]) || tc.function.name;
+                    const dispName = getToolDisplayName(tc.function.name);
                     content += `\n\n<tool_call name="${tc.function.name}" displayName="${dispName}" args='${tc.function.arguments}'>\n${result}\n</tool_call>`;
                 }
                 if (m.tool_calls && Array.isArray(m.tool_calls)) {

@@ -171,3 +171,52 @@ export async function executeToolCallsParallel(ToolManager, toolCalls) {
     return { results, hasErrors };
 }
 
+/**
+ * Resolves a tool's internal API name to its human-readable display name.
+ * Checks both MCP tool mapping and native SillyTavern ToolManager.
+ * @param {string} name - Internal API name of the tool.
+ * @returns {string} Human-readable display name.
+ */
+export function getToolDisplayName(name) {
+    if (!name) return 'Unknown Tool';
+
+    // 1. Check MCP mapping first (includes original ST tools proxied via MCP)
+    const mcpMapping = mcpService.currentToolMapping?.get(name);
+    if (mcpMapping?.displayName) {
+        logger.debug(`[Tool] Resolved ${name} via MCP mapping: ${mcpMapping.displayName}`);
+        return mcpMapping.displayName;
+    }
+
+    // 2. Check native SillyTavern ToolManager
+    try {
+        const context = SillyTavern.getContext();
+        const tools = context.ToolManager?.tools || [];
+        
+        // Find tool by name (checking both standard and private-backed field patterns if necessary)
+        const nativeTool = tools.find(t => {
+            const tName = t.name || t._name; // standard or common underscore prefix
+            return tName === name;
+        });
+
+        if (nativeTool) {
+            // Prefer displayName, then name, then _displayName
+            const dName = nativeTool.displayName || nativeTool._displayName || nativeTool.name || nativeTool._name;
+            if (dName) {
+                logger.debug(`[Tool] Resolved ${name} via ST ToolManager: ${dName}`);
+                return dName;
+            }
+        }
+    } catch (e) {
+        logger.debug(`[Tool] Failed to access ST ToolManager for ${name}`, e);
+    }
+
+    // Fallback: cleaning up the name for a nicer look
+    const fallback = name
+        .replace(/^mcp__.*?__/i, '')
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase());
+    
+    logger.debug(`[Tool] No display name found for ${name}, using fallback: ${fallback}. MCP Mapping size: ${mcpService.currentToolMapping?.size || 0}`);
+    return fallback;
+}
+

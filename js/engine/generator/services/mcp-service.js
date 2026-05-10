@@ -8,6 +8,7 @@ class McpService {
         this.transports = new Map(); // name -> transport
         this.initializedTransports = new Set(); // transport
         this.hubAvailable = false;
+        this.currentToolMapping = new Map(); // finalName -> { originalName, sourceName, displayName }
     }
 
     /**
@@ -124,7 +125,8 @@ class McpService {
 
                 this.currentToolMapping.set(finalName, {
                     originalName: tool.name,
-                    sourceName: sourceName
+                    sourceName: sourceName,
+                    displayName: tool.displayName || tool.name
                 });
 
                 // MCP uses 'inputSchema', but OpenAI/LLMs expect 'parameters'
