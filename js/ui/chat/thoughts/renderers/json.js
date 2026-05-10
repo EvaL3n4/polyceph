@@ -1,4 +1,5 @@
 import { tryParseInternalData } from '../parsers/data.js';
+import { parseMarkdown } from '../parsers/markdown.js';
 
 /**
  * Renders a JSON-like object into a clean, nested UI structure.
@@ -7,9 +8,13 @@ export function renderJsonObject(data, isRoot = false, preferredFormat = null) {
     if (data === null || data === undefined) return '<span class="polyceph-json-null">null</span>';
 
     if (typeof data !== 'object') {
-        const str = String(data);
+        let str = String(data);
         if (typeof data === 'boolean') return `<span class="polyceph-json-boolean">${str}</span>`;
         if (typeof data === 'number') return `<span class="polyceph-json-number">${str}</span>`;
+
+        // Parse markdown formatting for strings
+        str = parseMarkdown(str);
+        
         return `<span class="polyceph-json-string">${str}</span>`;
     }
 

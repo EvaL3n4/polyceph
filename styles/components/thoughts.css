@@ -314,6 +314,59 @@ body.polyceph-show-reasoning .polyceph-thoughts {
 
 .polyceph-json-string {
     color: var(--SmartThemeBodyColor);
+    white-space: pre-wrap;
+    display: block;
+    line-height: 1.4;
+}
+
+.polyceph-md-h1, .polyceph-md-h2, .polyceph-md-h3, .polyceph-md-h4, .polyceph-md-h5, .polyceph-md-h6 {
+    font-weight: bold;
+    color: var(--SmartThemeQuoteColor);
+    margin: 12px 0 6px 0;
+    line-height: 1.2;
+}
+
+.polyceph-md-h1 { font-size: 1.4em; border-bottom: 2px solid rgba(255, 255, 255, 0.15); padding-bottom: 5px; }
+.polyceph-md-h2 { font-size: 1.25em; border-bottom: 1px solid rgba(255, 255, 255, 0.12); padding-bottom: 4px; }
+.polyceph-md-h3 { font-size: 1.1em; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 3px; }
+.polyceph-md-h4 { font-size: 1em; opacity: 0.95; }
+.polyceph-md-h5 { font-size: 0.9em; opacity: 0.9; text-transform: uppercase; letter-spacing: 0.5px; }
+.polyceph-md-h6 { font-size: 0.85em; opacity: 0.8; font-style: italic; }
+
+.polyceph-json-string em {
+    font-style: italic;
+    opacity: 0.9;
+}
+
+.polyceph-json-string del {
+    text-decoration: line-through;
+    opacity: 0.6;
+    color: var(--grey50);
+}
+
+.polyceph-json-string u {
+    text-decoration: underline;
+    text-decoration-color: var(--SmartThemeUnderlineColor);
+}
+
+.polyceph-md-code {
+    font-family: var(--SmartThemeMonoFont, monospace);
+    background: var(--black50a);
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    color: var(--SmartThemeUnderlineColor);
+}
+
+.polyceph-md-bullet {
+    display: flex;
+    gap: 8px;
+    margin: 4px 0 4px 10px;
+}
+
+.polyceph-md-bullet span {
+    color: var(--SmartThemeQuoteColor);
+    font-weight: bold;
 }
 
 .polyceph-json-number {
