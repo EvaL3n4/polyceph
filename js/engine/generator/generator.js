@@ -137,7 +137,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                 if (hasErrors) anyToolError = true;
 
                 if (onStatusUpdate) {
-                    onStatusUpdate('executing tools');
+                    onStatusUpdate('executing tools', null, { recursion: depth + 1 });
                 }
 
                 if (results && Array.isArray(results)) {
@@ -153,7 +153,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                     break;
                 }
                 if (onStatusUpdate) {
-                    onStatusUpdate('generating');
+                    onStatusUpdate('generating', null, { recursion: depth + 1 });
                 }
                 continue;
             }

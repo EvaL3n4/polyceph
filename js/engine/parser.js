@@ -78,6 +78,7 @@ export function parseOutputTags(rawOutput, taskId, profileDisplayName, options =
                 if (content) {
                     thoughts.push({ title: `Rambling (${turnLabel})`, content, isSilent: true, profile: profileDisplayName, turnIndex: recursionIndex });
                     cleanParts.push(content);
+                    // Do NOT push to persistentParts; rambling is internal
                 }
             } else if (segment.toLowerCase().startsWith('<tool_call')) {
                 const nameMatch = segment.match(/name="([\s\S]+?)"/i);
@@ -98,10 +99,10 @@ export function parseOutputTags(rawOutput, taskId, profileDisplayName, options =
                     turnIndex: recursionIndex
                 });
 
-                // Include tool results in clean output for use in macros and task chaining
+                // Include tool results in clean output for use in macros and task chaining,
+                // but NOT in persistent narrative text.
                 if (response) {
                     cleanParts.push(response);
-                    persistentParts.push(response);
                 }
             } else {
                 // Regular text (remove backgrounds and invocations)

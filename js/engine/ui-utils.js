@@ -63,8 +63,9 @@ export function updateTypingIndicator() {
  * @param {string} taskId - The ID of the task to update.
  * @param {string} status - The new status string (e.g., 'generating', 'waiting').
  * @param {string} [labelOverride] - Optional new label for the task.
+ * @param {object} [metadata] - Optional additional data (e.g., { turn: 2 }).
  */
-export function updateTaskStatus(taskId, status, labelOverride = null) {
+export function updateTaskStatus(taskId, status, labelOverride = null, metadata = {}) {
     const currentContext = SillyTavern.getContext();
     const idx = currentContext.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
     if (idx !== -1) {
@@ -74,6 +75,12 @@ export function updateTaskStatus(taskId, status, labelOverride = null) {
             if (task) {
                 task.status = status;
                 if (labelOverride) task.label = labelOverride;
+                
+                // Merge additional metadata
+                if (metadata && typeof metadata === 'object') {
+                    Object.assign(task, metadata);
+                }
+                
                 updateTypingIndicator();
             }
         }

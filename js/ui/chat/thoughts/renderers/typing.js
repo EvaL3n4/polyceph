@@ -92,9 +92,13 @@ export function renderPolycephTyping(messageElement, chatMsg) {
                 ? '<span class="polyceph-task-status-waiting">(Waiting)</span>' 
                 : '';
             
+            const recursionLabel = (task.recursion > 1)
+                ? `<span class="polyceph-task-recursion-tag">(Recursion ${task.recursion})</span>`
+                : '';
+            
             return `
                 <div class="polyceph-active-task ${task.status === 'waiting' || task.status === 'waiting_on_extensions' ? 'polyceph-task-waiting' : ''}">
-                    <div class="polyceph-active-task-label">${task.label} ${statusLabel}</div>
+                    <div class="polyceph-active-task-label">${task.label} ${recursionLabel} ${statusLabel}</div>
                     <div class="polyceph-active-task-profile">${task.profile}</div>
                 </div>
             `;
