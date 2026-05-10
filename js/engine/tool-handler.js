@@ -1,4 +1,5 @@
 import { logger } from '../logger.js';
+import { mcpService } from './generator/services/mcp-service.js';
 
 /**
  * Extracts tool calls from various LLM API response formats.
@@ -7,12 +8,7 @@ import { logger } from '../logger.js';
 export function extractToolCalls(data) {
     if (!data) return [];
 
-    // 1. Standard OpenAI format (non-streaming)
-    if (data.choices?.[0]?.message?.tool_calls) {
-        return data.choices[0].message.tool_calls;
-    }
-
-    // 2. ST streaming-accumulated format
+    // 1. Standard OpenAI format (non-streaming or accumulated)
     if (data.choices?.[0]?.message?.tool_calls) {
         return data.choices[0].message.tool_calls;
     }
@@ -132,7 +128,12 @@ export async function executeToolCallsParallel(ToolManager, toolCalls) {
                 logger.debug(`[Tool] Raw arguments for ${name}:`, parameters.substring(0, 200) + (parameters.length > 200 ? '...' : ''));
             }
 
-            const output = await ToolManager.invokeFunctionTool(name, parameters);
+            let output;
+            if (name.startsWith('mcp__')) {
+                output = await mcpService.callTool(name, parameters);
+            } else {
+                output = await ToolManager.invokeFunctionTool(name, parameters);
+            }
 
             logger.debug(`[Tool] Result for ${name} (${id}):`, typeof output === 'object' ? JSON.stringify(output).substring(0, 200) : String(output).substring(0, 200));
 

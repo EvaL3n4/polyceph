@@ -108,6 +108,28 @@
                 </div>
             </div>
 
+            <div class="polyceph-settings-section">
+                <div class="polyceph-settings-section-header" id="polyceph_mcp_settings_toggle">
+                    <span>MCP Servers</span>
+                    <i class="fa-solid fa-chevron-down"></i>
+                </div>
+                <div class="polyceph-settings-section-content" id="polyceph_mcp_settings_content">
+                    <div class="polyceph-settings-row" id="polyceph_mcp_hub_status">
+                        <i class="fa-solid fa-circle-info"></i>
+                        <span style="font-size: 0.9em; margin-left: 5px;">ST MCP Tool Hub Extension: </span>
+                        <span id="polyceph_mcp_hub_badge" class="polyceph-status-badge">Checking...</span>
+                    </div>
+
+                    <div class="polyceph-field-container mt-1">
+                        <label for="polyceph_mcp_servers_input" class="polyceph-field-label"
+                            title="Add SSE MCP server URLs, one per line. e.g. http://localhost:3001/sse">Remote MCP
+                            Servers (SSE)</label>
+                        <textarea id="polyceph_mcp_servers_input" class="text_pole" style="min-height: 60px;"
+                            placeholder="http://..."></textarea>
+                    </div>
+                </div>
+            </div>
+
             <div class="polyceph-divider-container">
                 <div class="polyceph-divider-line"></div>
                 <small class="polyceph-section-heading">Pipelines</small>
@@ -148,7 +170,8 @@
                     <div class="polyceph-settings-row mt-1">
                         <input type="checkbox" id="polyceph_continue_on_failure_checkbox">
                         <label for="polyceph_continue_on_failure_checkbox" class="polyceph-pointer"
-                            title="If enabled, the pipeline will move to the next step even if a task in the current step fails after all retries.">Continue Pipeline on Task Failure</label>
+                            title="If enabled, the pipeline will move to the next step even if a task in the current step fails after all retries.">Continue
+                            Pipeline on Task Failure</label>
                     </div>
                 </div>
             </div>
@@ -282,13 +305,17 @@
                 <div class="polyceph-management-actions">
                     <div class="polyceph-management-row">
                         <i id="polyceph_add_step_btn" class="fa-solid fa-plus polyceph-pointer" title="Add Step"></i>
-                        <i id="polyceph_duplicate_step_btn" class="fa-solid fa-copy polyceph-pointer" title="Duplicate Active Step"></i>
+                        <i id="polyceph_duplicate_step_btn" class="fa-solid fa-copy polyceph-pointer"
+                            title="Duplicate Active Step"></i>
                     </div>
                     <div class="polyceph-management-row">
-                        <i id="polyceph_move_left_step_btn" class="fa-solid fa-chevron-left polyceph-pointer" title="Move Left"></i>
-                        <i id="polyceph_move_right_step_btn" class="fa-solid fa-chevron-right polyceph-pointer" title="Move Right"></i>
+                        <i id="polyceph_move_left_step_btn" class="fa-solid fa-chevron-left polyceph-pointer"
+                            title="Move Left"></i>
+                        <i id="polyceph_move_right_step_btn" class="fa-solid fa-chevron-right polyceph-pointer"
+                            title="Move Right"></i>
                     </div>
-                    <i id="polyceph_del_step_btn" class="fa-solid fa-trash polyceph-pointer polyceph-text-red" title="Delete Active Step"></i>
+                    <i id="polyceph_del_step_btn" class="fa-solid fa-trash polyceph-pointer polyceph-text-red"
+                        title="Delete Active Step"></i>
                 </div>
             </div>
 

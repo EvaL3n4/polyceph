@@ -103,6 +103,7 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
             skipSuccessRecursion: !!node.skipSuccessRecursion,
             hideSuccessResponse: !!node.hideSuccessResponse,
             hideToolHistory: !!node.hideToolHistory,
+            mcpSources: node.mcpSources,
             onStatusUpdate: updateTaskStatus
         };
 
@@ -127,8 +128,8 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
 
                 parsedResult = parseOutputTags(lastRawResponse, node.label || node.id, node.profile, {
                     isSilent: node.isSilent,
-                    isToolTask: true, // task-executor is always tool-aware
-                    isThinkingTask: node.outputType === 'thought'
+                    isToolTask: (node.outputType === 'tool' || node.outputType === 'mcp'),
+                    isThinkingTask: (node.outputType === 'thinking')
                 });
 
                 if (genRes.error) {

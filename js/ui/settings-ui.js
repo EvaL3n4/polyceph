@@ -12,6 +12,7 @@ import { showPromptPreview } from './settings/prompt-preview.js';
 import { exportPipeline, importPipeline } from './settings/import-export.js';
 import { renderPolycephThoughts } from './ui.js';
 import { createPromptEditor } from './settings/prompt-editor.js';
+import { mcpService } from '../engine/generator/services/mcp-service.js';
 
 let Popup = null;
 
@@ -66,6 +67,7 @@ function syncSettingsToUI() {
     injectSlider('polyceph_loop_threshold_container', 'Streaming Loop Detection Threshold', 'polyceph_loop_threshold', settings.loopDetectionThreshold !== undefined ? settings.loopDetectionThreshold : 3, 1, 10, 1);
 
     setValue('polyceph_prompt_input', settings.polycephPrompt || '');
+    setValue('polyceph_mcp_servers_input', settings.mcpServers || '');
 }
 
 /**
@@ -102,6 +104,7 @@ export async function addSettingsUI() {
     // Sync state before binding events
     syncSettingsToUI();
     updateUI();
+    updateMcpStatus();
 
     // Bind Global Settings
     const bindSlider = (id, settingKey) => {
@@ -213,6 +216,13 @@ export async function addSettingsUI() {
         settings.polycephPrompt = val;
         saveSettings();
     });
+
+    getEl('polyceph_mcp_servers_input')?.addEventListener('input', (e) => {
+        settings.mcpServers = e.target.value;
+        saveSettings();
+    });
+
+    bindToggle('polyceph_mcp_settings_toggle', 'polyceph_mcp_settings_content');
 
     // Pipeline Manager Events
     getEl(SELECTORS.SETTINGS_SELECTOR)?.addEventListener('change', (e) => {
@@ -354,6 +364,25 @@ export async function addSettingsUI() {
             logger.debug('ST Chat Completion settings ready, refreshing Polyceph UI...');
             updateUI();
         });
+    }
+}
+
+/**
+ * Updates the MCP Hub status badge in the settings UI.
+ */
+async function updateMcpStatus() {
+    const badge = getEl('polyceph_mcp_hub_badge');
+    if (!badge) return;
+
+    const available = await mcpService.checkHub();
+    if (available) {
+        badge.textContent = 'Connected';
+        badge.className = 'polyceph-status-badge connected';
+        // Auto-connect to local hub if found
+        await mcpService.connectToHub();
+    } else {
+        badge.textContent = 'Not Connected';
+        badge.className = 'polyceph-status-badge disconnected';
     }
 }
 

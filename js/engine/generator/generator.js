@@ -79,7 +79,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
             let tools = null;
             let tool_choice = null;
             if (allowTools && ToolManager && typeof ToolManager.isToolCallingSupported === 'function' && ToolManager.isToolCallingSupported()) {
-                const registration = await registerTools(ToolManager, api, messages);
+                const registration = await registerTools(ToolManager, api, messages, options);
                 tools = registration.tools;
                 tool_choice = registration.tool_choice;
                 if (tools && tools.length > 0) logger.debug('Tools to be sent:', tools);
@@ -160,6 +160,17 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
 
             // --- Final Response Branch ---
             finalResponse = extractRawText(responseData, api);
+            
+            // Capture final turn reasoning if present
+            if (turnReasoning) {
+                const finalTurnAssistant = {
+                    role: 'assistant',
+                    content: finalResponse,
+                    reasoning_content: turnReasoning
+                };
+                taskMessages.push(finalTurnAssistant);
+                finalResponse = ""; // It's now in taskMessages
+            }
             break;
         }
 

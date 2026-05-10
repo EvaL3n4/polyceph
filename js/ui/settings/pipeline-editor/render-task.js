@@ -49,7 +49,7 @@ export function renderTaskOptionsBar(task, apiId, disabled) {
     const isFunctionCallingDisabled = presetSettings?.function_calling === false;
     let html = '';
 
-    if (task.outputType === 'tool' && isCC) {
+    if ((task.outputType === 'tool' || task.outputType === 'mcp') && isCC) {
         html = `
             <div class="polyceph-node-option" style="display: flex; align-items: center; gap: 4px;">
                 <input type="checkbox" class="polyceph-node-skip-recursion-checkbox" data-node-id="${task.id}" ${task.skipSuccessRecursion ? 'checked' : ''} title="If checked, the task will end immediately after successful tool calls, skipping the model's final response." ${disabled}>
@@ -64,9 +64,14 @@ export function renderTaskOptionsBar(task, apiId, disabled) {
                 <label style="font-size: 0.8em; cursor: pointer;">Hide Tool History</label>
             </div>
             ${isFunctionCallingDisabled ? `
-                <div class="polyceph-node-option" style="display: flex; align-items: center; gap: 4px; color: #ff4d4d; font-weight: bold;" title="Function calling is disabled in the selected preset for this task. This task will fail to execute tools.">
-                    <i class="fa-solid fa-triangle-exclamation"></i>
-                    <span style="font-size: 0.8em;">Function Calling Disabled</span>
+                </div>
+            ` : ''}
+            ${task.outputType === 'mcp' ? `
+                <div class="polyceph-node-option" style="display: flex; align-items: center; gap: 4px;">
+                    <div class="polyceph-mcp-sources-trigger menu_button" data-node-id="${task.id}" style="padding: 4px 8px; white-space: nowrap; cursor: pointer; display: flex; align-items: center; gap: 5px;" title="Select MCP tool sources for this task">
+                        <span>Sources (${(task.mcpSources || ['Local Hub']).length})</span>
+                        <i class="fa-solid fa-chevron-down" style="font-size: 0.8em; opacity: 0.8;"></i>
+                    </div>
                 </div>
             ` : ''}
         `;
@@ -87,7 +92,7 @@ export function renderTaskOptionsBar(task, apiId, disabled) {
     if (!html) return '';
 
     return `
-        <div class="polyceph-task-options-bar" data-node-id="${task.id}" style="display: flex; align-items: center; gap: 15px; padding: 4px 6px; background: rgba(0,0,0,0.2); border-radius: 4px; margin-top: 4px;">
+        <div class="polyceph-task-options-bar" data-node-id="${task.id}" style="display: flex; align-items: center; gap: 15px; padding: 4px 6px; background: rgba(0,0,0,0.2); border-radius: 4px; margin-top: 4px; flex-wrap: wrap;">
             ${html}
         </div>
     `;
@@ -139,6 +144,7 @@ export function renderTask(stepId, task, isLocked = false) {
                             <option value="character" ${task.outputType === 'character' ? 'selected' : ''}>Character Message</option>
                             <option value="thinking" ${task.outputType === 'thinking' ? 'selected' : ''}>Reasoning</option>
                             ${isCC ? `<option value="tool" ${task.outputType === 'tool' ? 'selected' : ''}>Tool Processor</option>` : ''}
+                            ${isCC ? `<option value="mcp" ${task.outputType === 'mcp' ? 'selected' : ''}>MCP</option>` : ''}
                             <option value="internal" ${task.outputType === 'internal' ? 'selected' : ''}>Internal (Hidden)</option>
                         </select>
 
@@ -194,6 +200,7 @@ export function refreshTaskUI(nodeId) {
             <option value="character" ${currentVal === 'character' ? 'selected' : ''}>Character Message</option>
             <option value="thinking" ${currentVal === 'thinking' ? 'selected' : ''}>Reasoning</option>
             ${isCC ? `<option value="tool" ${currentVal === 'tool' ? 'selected' : ''}>Tool Processor</option>` : ''}
+            ${isCC ? `<option value="mcp" ${currentVal === 'mcp' ? 'selected' : ''}>MCP</option>` : ''}
             <option value="internal" ${currentVal === 'internal' ? 'selected' : ''}>Internal (Hidden)</option>
         `;
     }

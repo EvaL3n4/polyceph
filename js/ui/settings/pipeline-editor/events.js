@@ -1,7 +1,8 @@
-import { getActivePipeline, saveSettings } from '../../../state.js';
+import { getActivePipeline, saveSettings, settings } from '../../../state.js';
 import { generateId, autoResizeTextarea } from '../../../utils.js';
 import { getEl, SELECTORS } from '../../ui-shared.js';
 import { activeStepIndex, setActiveStepIndex, Popup } from './state.js';
+import { showMultiSelectDropdown } from '../../components/dropdown.js';
 import { updatePipelineEditorUI } from './pipeline-editor.js';
 import { refreshTaskUI } from './render-task.js';
 
@@ -251,7 +252,7 @@ export function bindStepEvents() {
                     // Keep legacy flags in sync for engine compatibility
                     task.persist = (val === 'thinking' || val === 'character');
                     task.isCharacter = (val === 'character');
-                    task.allowTools = (val === 'tool'); // Tools only enabled for Tool Processor mode
+                    task.allowTools = (val === 'tool' || val === 'mcp'); // Tools only enabled for Tool Processor or MCP mode
                     break;
                 }
             }
@@ -324,6 +325,42 @@ export function bindStepEvents() {
                 if (task) { task.hideToolHistory = e.target.checked; break; }
             }
             saveSettings();
+        });
+    });
+
+    container.querySelectorAll('.polyceph-mcp-sources-trigger').forEach(trigger => {
+        if (trigger.dataset.bound) return;
+        trigger.dataset.bound = 'true';
+        trigger.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const nodeId = trigger.getAttribute('data-node-id');
+            
+            // Resolve target task
+            let targetTask = null;
+            for (const step of activePipeline.steps) {
+                targetTask = step.tasks.find(n => n.id === nodeId);
+                if (targetTask) break;
+            }
+            if (!targetTask) return;
+
+            const remoteServers = (settings.mcpServers || '').split('\n').map(s => s.trim()).filter(s => s);
+            const availableSources = ['Local Hub', ...remoteServers];
+            const currentSources = targetTask.mcpSources || ['Local Hub'];
+
+            showMultiSelectDropdown(trigger, {
+                items: availableSources,
+                selectedItems: [...currentSources],
+                className: 'mcp-sources-dropdown',
+                onToggle: (item, isSelected, newSelectedList) => {
+                    targetTask.mcpSources = newSelectedList;
+                    saveSettings();
+                    
+                    // Update trigger text
+                    const span = trigger.querySelector('span');
+                    if (span) span.textContent = `Sources (${newSelectedList.length})`;
+                }
+            });
         });
     });
 }

@@ -313,7 +313,7 @@ export async function generateViaCCStreaming(messages, signal, onChunk, tools = 
         const reader = eventStream.readable.getReader();
 
         let text = '';
-        const state = { reasoning: '', images: [], signature: '', toolSignatures: {} };
+        const state = { reasoning: '', images: [], signature: '', toolSignatures: {}, toolCalls: [] };
 
         while (true) {
             const { done, value } = await reader.read();
@@ -340,12 +340,35 @@ export async function generateViaCCStreaming(messages, signal, onChunk, tools = 
             }
 
             const delta = getStreamingReply(parsed, state);
-            if (delta) {
-                text += delta;
+
+            // Accumulate tool calls manually for maximum robustness across ST versions
+            const deltaToolCalls = parsed.choices?.[0]?.delta?.tool_calls;
+            if (Array.isArray(deltaToolCalls)) {
+                for (const tc of deltaToolCalls) {
+                    const idx = tc.index;
+                    if (idx === undefined) continue;
+                    
+                    if (!state.toolCalls[idx]) {
+                        state.toolCalls[idx] = {
+                            id: tc.id || '',
+                            type: tc.type || 'function',
+                            function: { name: '', arguments: '' }
+                        };
+                    }
+                    
+                    const existing = state.toolCalls[idx];
+                    if (tc.id) existing.id = tc.id;
+                    if (tc.function?.name) existing.function.name = tc.function.name;
+                    if (tc.function?.arguments) existing.function.arguments += tc.function.arguments;
+                }
+            }
+
+            if (delta || (Array.isArray(deltaToolCalls) && deltaToolCalls.length > 0)) {
+                if (delta) text += delta;
                 if (onChunk) onChunk({ 
                     text, 
                     reasoning: state.reasoning,
-                    toolCalls: state.toolCalls || [], 
+                    toolCalls: state.toolCalls.filter(tc => !!tc), 
                     done: false 
                 });
             }
@@ -354,7 +377,7 @@ export async function generateViaCCStreaming(messages, signal, onChunk, tools = 
         if (onChunk) onChunk({ 
             text, 
             reasoning: state.reasoning,
-            toolCalls: state.toolCalls || [], 
+            toolCalls: state.toolCalls.filter(tc => !!tc), 
             done: true 
         });
 

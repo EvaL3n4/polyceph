@@ -65,7 +65,7 @@ function _formatFullToolHistory(taskMessages, finalResponse, options = {}) {
             let content = m.content || '';
 
             if (role === 'assistant' && m.reasoning_content) {
-                content += `\n\n<think>\n${m.reasoning_content}\n</think>`;
+                content = `<think>\n${m.reasoning_content}\n</think>\n\n${content}`;
             }
 
             if (role === 'assistant' && m.tool_calls && m.tool_calls.length > 0) {
@@ -83,6 +83,6 @@ function _formatFullToolHistory(taskMessages, finalResponse, options = {}) {
         }).join('\n\n');
     }
     
-    if (finalResponse !== undefined && finalResponse !== null) return finalResponse;
+    if (finalResponse) return finalResponse;
     return "(Generation returned empty)";
 }

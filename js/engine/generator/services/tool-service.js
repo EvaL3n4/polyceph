@@ -1,6 +1,7 @@
 import { logger } from '../../../logger.js';
 import { isChatCompletionApi } from '../../../compat-chat.js';
 import { getToolCallingModule } from '../../../compat-st.js';
+import { mcpService } from './mcp-service.js';
 
 /**
  * Initializes and returns the SillyTavern ToolManager.
@@ -22,9 +23,10 @@ export async function getToolManager(allowTools) {
 /**
  * Registers tools with SillyTavern and Polyceph listeners.
  */
-export async function registerTools(ToolManager, api, messages) {
+export async function registerTools(ToolManager, api, messages, options = {}) {
     const context = SillyTavern.getContext();
     const isOaiCompatible = isChatCompletionApi(api);
+    const isMcpTask = options.outputType === 'mcp';
 
     // Prepare metadata for event listeners
     const generateData = {
@@ -36,31 +38,43 @@ export async function registerTools(ToolManager, api, messages) {
         max_tokens: context.chatCompletionSettings?.openai_max_tokens || context.chatCompletionSettings?.max_tokens_openai,
     };
 
-    // Use native ST registration if available (most robust)
-    if (typeof ToolManager.registerFunctionToolsOpenAI === 'function') {
-        await ToolManager.registerFunctionToolsOpenAI(generateData);
-    } else {
-        // Fallback: Manual collection
-        const availableTools = [];
-        for (const tool of (ToolManager.tools || [])) {
-            try {
-                if (typeof tool.shouldRegister === 'function' ? await tool.shouldRegister() : true) {
-                    const toolDef = typeof tool.toFunctionOpenAI === 'function' ? tool.toFunctionOpenAI() : tool;
-                    if (toolDef) availableTools.push(toolDef);
+    // 1. Native ST Tool Registration (Skipped in MCP mode to allow "replacement")
+    if (!isMcpTask) {
+        if (typeof ToolManager.registerFunctionToolsOpenAI === 'function') {
+            await ToolManager.registerFunctionToolsOpenAI(generateData);
+        } else {
+            // Fallback: Manual collection
+            const availableTools = [];
+            for (const tool of (ToolManager.tools || [])) {
+                try {
+                    if (typeof tool.shouldRegister === 'function' ? await tool.shouldRegister() : true) {
+                        const toolDef = typeof tool.toFunctionOpenAI === 'function' ? tool.toFunctionOpenAI() : tool;
+                        if (toolDef) availableTools.push(toolDef);
+                    }
+                } catch (e) {
+                    logger.warn('Failed to process tool definition:', tool, e);
                 }
-            } catch (e) {
-                logger.warn('Failed to process tool definition:', tool, e);
+            }
+            if (availableTools.length > 0) {
+                generateData.tools = availableTools;
+                generateData.tool_choice = 'auto';
             }
         }
-        if (availableTools.length > 0) {
-            generateData.tools = availableTools;
-            generateData.tool_choice = 'auto';
+
+        // Emit event to allow other extensions to modify native tools
+        if (context.eventSource && context.eventTypes?.CHAT_COMPLETION_SETTINGS_READY) {
+            await context.eventSource.emit(context.eventTypes.CHAT_COMPLETION_SETTINGS_READY, generateData);
         }
     }
 
-    // Emit event to allow other extensions (like specialized tool managers) to modify
-    if (context.eventSource && context.eventTypes?.CHAT_COMPLETION_SETTINGS_READY) {
-        await context.eventSource.emit(context.eventTypes.CHAT_COMPLETION_SETTINGS_READY, generateData);
+    // 2. MCP Tool Integration
+    if (mcpService.transports.size > 0 || isMcpTask) {
+        const mcpTools = await mcpService.listTools(options.mcpSources);
+        if (mcpTools.length > 0) {
+            generateData.tools = [...(generateData.tools || []), ...mcpTools];
+            generateData.tool_choice = generateData.tool_choice || 'auto';
+            logger.info(`Registered ${mcpTools.length} MCP tools (Mode: ${isMcpTask ? 'MCP Replacement' : 'Additive'}).`);
+        }
     }
 
     return {

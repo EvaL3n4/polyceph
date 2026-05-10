@@ -202,3 +202,29 @@
     cursor: not-allowed;
     background-color: var(--black30a) !important;
 }
+
+.polyceph-status-badge {
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.polyceph-status-badge.connected {
+    background: var(--SmartThemeChatTintColor);
+    color: var(--SmartThemeQuoteColor);
+    border: 1px solid var(--SmartThemeQuoteColor);
+}
+
+.polyceph-status-badge.disconnected {
+    background: var(--SmartThemeChatTintColor);
+    color: #ff4d4d;
+    border: 1px solid #ff4d4d;
+}
+
+.polyceph-status-badge.warning {
+    background: var(--SmartThemeChatTintColor);
+    color: #ffff00;
+    border: 1px solid #ffff00;
+}
