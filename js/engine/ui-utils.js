@@ -82,8 +82,14 @@ export function updateTaskStatus(taskId, status, labelOverride = null, metadata 
                 }
                 
                 updateTypingIndicator();
+            } else {
+                logger.warn(`[UI-Utils] Could not find task ${taskId} in active tasks list:`, msg.extra.polyceph_active_tasks.map(t => t.id));
             }
+        } else {
+            logger.warn(`[UI-Utils] No polyceph_active_tasks found on typing message ${idx}`);
         }
+    } else {
+        logger.warn(`[UI-Utils] Could not find active typing indicator message in chat!`);
     }
 }
 

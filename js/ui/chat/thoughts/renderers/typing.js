@@ -1,6 +1,7 @@
 import { stopPipeline } from '../../../../engine.js';
 import { scrollToBottomIfNear } from '../../../ui-shared.js';
 import { settings } from '../../../../state.js';
+import { logger } from '../../../../logger.js';
 
 /**
  * Renders the Polyceph typing indicator inside a message block.

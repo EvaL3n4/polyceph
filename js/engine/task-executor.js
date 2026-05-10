@@ -14,7 +14,10 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
     const taskIdIndx = nodeIndex + 1;
 
     const taskId = node.id;
-    const updateStatus = (status, label = null) => updateTaskStatus(taskId, status, label);
+    const updateStatus = (status, label = null, metadata = {}) => {
+        logger.debug(`[Task-Executor] updateStatus wrapper called for task ${taskId}:`, { status, label, metadata });
+        return updateTaskStatus(taskId, status, label, metadata);
+    };
 
     // 1. Preset Management
     const taskPreset = node.preset || 'Current';
@@ -65,6 +68,7 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
 
 
     // 2. Update Progress Metadata (Now handled by orchestrator, but we ensure status is 'generating' here)
+    logger.debug(`[Task-Executor] Available Profiles Sample:`, availableProfiles.slice(0, 5));
     updateStatus('generating');
 
     logger.debug(`Task Start: "${node.label || node.id}" (Profile: ${profileDisplayName}, API: ${taskApi})`);
@@ -104,7 +108,7 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
             hideSuccessResponse: !!node.hideSuccessResponse,
             hideToolHistory: !!node.hideToolHistory,
             mcpSources: node.mcpSources,
-            onStatusUpdate: updateTaskStatus
+            onStatusUpdate: updateStatus
         };
 
         // Allow orchestrator to inject a stream callback (for character message streaming)
@@ -126,7 +130,7 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
 
                 if (signal.aborted) return null;
 
-                parsedResult = parseOutputTags(lastRawResponse, node.label || node.id, node.profile, {
+                parsedResult = parseOutputTags(lastRawResponse, node.label || node.id, profileDisplayName, {
                     isSilent: node.isSilent,
                     isToolTask: (node.outputType === 'tool' || node.outputType === 'mcp'),
                     isThinkingTask: (node.outputType === 'thinking')

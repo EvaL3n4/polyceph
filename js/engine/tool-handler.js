@@ -190,20 +190,33 @@ export function getToolDisplayName(name) {
     // 2. Check native SillyTavern ToolManager
     try {
         const context = SillyTavern.getContext();
-        const tools = context.ToolManager?.tools || [];
-        
-        // Find tool by name (checking both standard and private-backed field patterns if necessary)
-        const nativeTool = tools.find(t => {
-            const tName = t.name || t._name; // standard or common underscore prefix
-            return tName === name;
-        });
+        const TM = context.ToolManager;
+        if (TM) {
+            // A. Try official getter if available
+            let nativeTool = typeof TM.getTool === 'function' ? TM.getTool(name) : null;
 
-        if (nativeTool) {
-            // Prefer displayName, then name, then _displayName
-            const dName = nativeTool.displayName || nativeTool._displayName || nativeTool.name || nativeTool._name;
-            if (dName) {
-                logger.debug(`[Tool] Resolved ${name} via ST ToolManager: ${dName}`);
-                return dName;
+            // B. Manual search if getter failed
+            if (!nativeTool && TM.tools) {
+                nativeTool = TM.tools.find(t => {
+                    // Check standard properties, private-backed fields, or schema-wrapped names
+                    const tName = t.name || t._name || t.schema?.function?.name || t.toFunctionOpenAI?.()?.function?.name;
+                    return tName === name;
+                });
+            }
+
+            if (nativeTool) {
+                // Prefer displayName, then name, then check schema
+                const dName = nativeTool.displayName || 
+                              nativeTool._displayName || 
+                              nativeTool.name || 
+                              nativeTool._name || 
+                              nativeTool.schema?.function?.displayName ||
+                              nativeTool.toFunctionOpenAI?.()?.function?.displayName;
+
+                if (dName) {
+                    logger.debug(`[Tool] Resolved ${name} via ST ToolManager: ${dName}`);
+                    return dName;
+                }
             }
         }
     } catch (e) {

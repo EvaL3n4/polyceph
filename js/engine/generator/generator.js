@@ -71,7 +71,12 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
 
         while (depth < maxDepth) {
             depth++;
-            logger.info(`Starting tool recursion depth ${depth}/${maxDepth}`);
+            const recursionIndex = Math.ceil(depth / 2); // Map internal depth (1, 3, 5) to UI recursion (1, 2, 3)
+            
+            logger.info(`Starting tool recursion depth ${depth}/${maxDepth} (UI Recursion: ${recursionIndex})`);
+            if (onStatusUpdate) {
+                onStatusUpdate('generating', null, { recursion: recursionIndex });
+            }
 
             if (signal && signal.aborted) throw new Error('Aborted');
 
@@ -133,12 +138,12 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                 messages.push(assistantHistoryItem);
                 taskMessages.push(assistantHistoryItem);
 
+                if (onStatusUpdate) {
+                    onStatusUpdate('executing tools', null, { recursion: Math.ceil(depth / 2) });
+                }
+
                 const { results, hasErrors } = await executeToolCallsParallel(ToolManager, toolCalls);
                 if (hasErrors) anyToolError = true;
-
-                if (onStatusUpdate) {
-                    onStatusUpdate('executing tools', null, { recursion: depth + 1 });
-                }
 
                 if (results && Array.isArray(results)) {
                     messages.push(...results);
@@ -153,7 +158,7 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                     break;
                 }
                 if (onStatusUpdate) {
-                    onStatusUpdate('generating', null, { recursion: depth + 1 });
+                    onStatusUpdate('generating', null, { recursion: Math.ceil((depth + 1) / 2) });
                 }
                 continue;
             }
