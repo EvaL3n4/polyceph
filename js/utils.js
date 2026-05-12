@@ -63,3 +63,38 @@ export async function waitForApiReady(timeoutMs = 5000) {
     }
     return false;
 }
+
+/**
+ * Deep merges the source object into the target object.
+ * Arrays are replaced, not merged.
+ * @param {Object} target 
+ * @param {Object} source 
+ * @returns {Object} The merged target object
+ */
+export function deepMerge(target, source) {
+    if (typeof target !== 'object' || target === null) {
+        return source;
+    }
+    if (typeof source !== 'object' || source === null) {
+        return source;
+    }
+
+    if (Array.isArray(source)) {
+        return source;
+    }
+
+    for (const key in source) {
+        if (Object.hasOwn(source, key)) {
+            const sourceValue = source[key];
+            if (typeof sourceValue === 'object' && sourceValue !== null && !Array.isArray(sourceValue)) {
+                if (!target[key] || typeof target[key] !== 'object' || Array.isArray(target[key])) {
+                    target[key] = {};
+                }
+                deepMerge(target[key], sourceValue);
+            } else {
+                target[key] = sourceValue;
+            }
+        }
+    }
+    return target;
+}

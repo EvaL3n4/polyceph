@@ -98,7 +98,9 @@ export async function generateQuietly(profileName, prompt, api = '', signal = nu
                 onStream, 
                 depth,
                 polyceph_task_id: options.polyceph_task_id,
-                polyceph_task_label: options.polyceph_task_label
+                polyceph_task_label: options.polyceph_task_label,
+                profileId: options.profileId,
+                presetName: options.presetName
             });
 
             if (!responseData) {

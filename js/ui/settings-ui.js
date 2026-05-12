@@ -14,6 +14,103 @@ import { renderPolycephThoughts } from './ui.js';
 import { createPromptEditor } from './settings/prompt-editor.js';
 import { mcpService } from '../engine/generator/services/mcp-service.js';
 
+function getPresetOptionsHTMLNoCurrent(profileId, currentPreset) {
+    const profile = availableProfiles.find(p => p.id === profileId);
+    let apiId = profile?.api;
+    if (!apiId) {
+        apiId = SillyTavern.getContext().mainApi || '';
+    }
+    const presets = availablePresetsByApi[apiId] || [];
+    const isValid = presets.includes(currentPreset);
+
+    let html = '';
+    if (!isValid && currentPreset) {
+        html += `<option value="${currentPreset}" selected style="color: var(--red); font-weight: bold;">⚠️ ${currentPreset} (Incompatible)</option>`;
+    }
+    html += presets.map(p => {
+        const isSelected = (isValid && p === currentPreset) ? 'selected' : '';
+        return `<option value="${p}" ${isSelected}>${p}</option>`;
+    }).join('');
+    return html;
+}
+
+function renderProfileParams() {
+    const container = getEl('polyceph_profile_params_container');
+    if (!container) return;
+
+    if (!settings.profileParams) settings.profileParams = [];
+
+    let html = '';
+    settings.profileParams.forEach((param, index) => {
+        let profileOptions = availableProfiles.map(p => `<option value="${p.id}" ${p.id === param.profile ? 'selected' : ''}>${p.name}</option>`).join('');
+        const presetOptions = getPresetOptionsHTMLNoCurrent(param.profile, param.preset);
+        
+        let isValidJson = true;
+        try {
+            if (param.json) JSON.parse(param.json);
+        } catch (e) {
+            isValidJson = false;
+        }
+        
+        html += `
+            <div class="polyceph-step-card" data-index="${index}" style="padding: 10px; margin-bottom: 5px;">
+                <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                    <select class="text_pole polyceph-profile-param-profile" data-index="${index}" style="flex: 1;">
+                        ${profileOptions}
+                    </select>
+                    <select class="text_pole polyceph-profile-param-preset" data-index="${index}" style="flex: 1;">
+                        ${presetOptions}
+                    </select>
+                    <i class="fa-solid fa-trash polyceph-pointer polyceph-text-red polyceph-del-profile-param" data-index="${index}" title="Delete" style="align-self: center;"></i>
+                </div>
+                <textarea class="text_pole polyceph-profile-param-json" data-index="${index}" placeholder='{"key": "value"}' style="min-height: 60px; ${!isValidJson ? 'border-color: var(--red);' : ''}">${param.json || ''}</textarea>
+                ${!isValidJson ? '<div style="color: var(--red); font-size: 0.8em; margin-top: 4px;">Invalid JSON</div>' : ''}
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+
+    // Bind events
+    container.querySelectorAll('.polyceph-profile-param-profile').forEach(el => {
+        el.addEventListener('change', (e) => {
+            const index = e.target.getAttribute('data-index');
+            settings.profileParams[index].profile = e.target.value;
+            // Preset might be invalid now, so we clear it or keep it and let the warning show
+            saveSettings();
+            renderProfileParams(); // Re-render to update preset dropdown
+        });
+    });
+
+    container.querySelectorAll('.polyceph-profile-param-preset').forEach(el => {
+        el.addEventListener('change', (e) => {
+            const index = e.target.getAttribute('data-index');
+            settings.profileParams[index].preset = e.target.value;
+            saveSettings();
+        });
+    });
+
+    container.querySelectorAll('.polyceph-profile-param-json').forEach(el => {
+        el.addEventListener('input', (e) => {
+            const index = e.target.getAttribute('data-index');
+            settings.profileParams[index].json = e.target.value;
+            saveSettings();
+        });
+        el.addEventListener('blur', () => {
+            renderProfileParams(); // Re-render to show/hide validation error
+        });
+    });
+
+    container.querySelectorAll('.polyceph-del-profile-param').forEach(el => {
+        el.addEventListener('click', (e) => {
+            const index = e.target.getAttribute('data-index');
+            settings.profileParams.splice(index, 1);
+            saveSettings();
+            renderProfileParams();
+        });
+    });
+}
+
 let Popup = null;
 
 /**
@@ -105,6 +202,7 @@ export async function addSettingsUI() {
     syncSettingsToUI();
     updateUI();
     updateMcpStatus();
+    renderProfileParams();
 
     // Bind Global Settings
     const bindSlider = (id, settingKey) => {
@@ -223,6 +321,18 @@ export async function addSettingsUI() {
     });
 
     bindToggle('polyceph_mcp_settings_toggle', 'polyceph_mcp_settings_content');
+
+    getEl('polyceph_add_profile_param_btn')?.addEventListener('click', () => {
+        if (!settings.profileParams) settings.profileParams = [];
+        const defaultProfile = availableProfiles.length > 0 ? availableProfiles[0].id : '';
+        const apiId = availableProfiles.find(p => p.id === defaultProfile)?.api || '';
+        const defaultPreset = (availablePresetsByApi[apiId] && availablePresetsByApi[apiId].length > 0) ? availablePresetsByApi[apiId][0] : '';
+        
+        settings.profileParams.push({ profile: defaultProfile, preset: defaultPreset, json: '' });
+        saveSettings();
+        renderProfileParams();
+    });
+    bindToggle('polyceph_profile_params_toggle', 'polyceph_profile_params_content');
 
     // Pipeline Manager Events
     getEl(SELECTORS.SETTINGS_SELECTOR)?.addEventListener('change', (e) => {

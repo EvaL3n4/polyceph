@@ -1,5 +1,5 @@
 export const MODULE_NAME = 'polyceph';
-export const VERSION = '0.10.1';
+export const VERSION = '0.10.2';
 export const PIPELINE_DATA_VERSION = '1.0.0';
 export const DEFAULT_TOOL_RECURSION_LIMIT = 5; //fallback
 
@@ -24,6 +24,7 @@ export const defaultSettings = {
     emulateCoreEvents: true,
     logLevel: 2,
     polycephPrompt: '',
+    profileParams: [],
     pipelines: [
         {
             id: 'default',

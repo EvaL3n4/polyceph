@@ -228,3 +228,7 @@
     color: #ffff00;
     border: 1px solid #ffff00;
 }
+
+#polyceph_add_profile_param_btn {
+    width: 100%;
+}

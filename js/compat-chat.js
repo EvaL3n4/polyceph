@@ -24,6 +24,24 @@ import { MODULE_NAME } from './constants.js';
 import { logger } from './logger.js';
 import { getOpenAIModule, getSSEModule } from './compat-st.js';
 import { getActiveApi } from './compat-shared.js';
+import { settings } from './state.js';
+import { deepMerge } from './utils.js';
+
+function injectCustomParameters(generate_data, profileId, presetName) {
+    if (!settings.profileParams || !Array.isArray(settings.profileParams)) return;
+    
+    for (const param of settings.profileParams) {
+        if (param.profile === profileId && param.preset === presetName && param.json) {
+            try {
+                const parsed = JSON.parse(param.json);
+                deepMerge(generate_data, parsed);
+                logger.debug(`Injected custom parameters for ${profileId}/${presetName}`, parsed);
+            } catch (e) {
+                logger.warn(`Failed to parse custom JSON for ${profileId}/${presetName}:`, e);
+            }
+        }
+    }
+}
 
 /**
  * Reads the active Chat Completion generation parameters from SillyTavern.
@@ -181,6 +199,8 @@ export async function generateViaCC(messages, tools = null, tool_choice = null, 
         delete generate_data.extra.polyceph_task_label;
     }
 
+    injectCustomParameters(generate_data, options.profileId, options.presetName);
+
     logger.debug('Non-streaming generation payload:', generate_data);
 
     const response = await fetch('/api/backends/chat-completions/generate', {
@@ -279,6 +299,8 @@ export async function generateViaCCStreaming(messages, signal, onChunk, tools = 
         delete generate_data.extra.polyceph_task_id;
         delete generate_data.extra.polyceph_task_label;
     }
+
+    injectCustomParameters(generate_data, options.profileId, options.presetName);
 
     logger.debug('Streaming generation payload:', generate_data);
 

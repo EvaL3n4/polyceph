@@ -95,6 +95,7 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
         let parsedResult = null;
 
         // 4b. Build streaming options
+        const resolvedPresetName = taskPreset === 'Current' ? getCurrentPresetName() : taskPreset;
         const streamingOptions = {
             streaming: node.streaming !== false,
             antiLoop: node.antiLoop !== false,
@@ -104,6 +105,8 @@ export async function runTask(node, nodeIndex, stepIdx, totalSteps, contextVault
             allowTools: node.allowTools !== false,
             polyceph_task_id: node.id,
             polyceph_task_label: node.label || 'Unnamed Task',
+            profileId: node.profile,
+            presetName: resolvedPresetName,
             skipSuccessRecursion: !!node.skipSuccessRecursion,
             hideSuccessResponse: !!node.hideSuccessResponse,
             hideToolHistory: !!node.hideToolHistory,

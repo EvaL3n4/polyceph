@@ -8,7 +8,7 @@ import { _generateNonStreaming } from './api-utils.js';
  * Executes the core API generation (streaming or non-streaming) with retries.
  */
 export async function executeGeneration(messages, tools, tool_choice, api, signal, options) {
-    const { useStreaming, antiLoop, loopThreshold, onStream, depth, polyceph_task_id, polyceph_task_label } = options;
+    const { useStreaming, antiLoop, loopThreshold, onStream, depth, polyceph_task_id, polyceph_task_label, profileId, presetName } = options;
     const canStream = useStreaming && isChatCompletionApi(api);
     
     let loopDetector = null;
@@ -47,7 +47,9 @@ export async function executeGeneration(messages, tools, tool_choice, api, signa
 
                 const streamingPromise = generateViaCCStreaming(messages, signal, streamingChunkHandler, tools, tool_choice, api, false, {
                     polyceph_task_id,
-                    polyceph_task_label
+                    polyceph_task_label,
+                    profileId,
+                    presetName
                 });
 
                 // Build race array for timeout + abort
@@ -70,7 +72,9 @@ export async function executeGeneration(messages, tools, tool_choice, api, signa
                     logger.info('Streaming returned null (unavailable). Falling back to non-streaming.');
                     responseData = await _generateNonStreaming(messages, tools, tool_choice, signal, timeoutMs, false, {
                         polyceph_task_id,
-                        polyceph_task_label
+                        polyceph_task_label,
+                        profileId,
+                        presetName
                     });
                 } else {
                     logger.debug('Streaming path successfully returned result object.');
@@ -81,7 +85,9 @@ export async function executeGeneration(messages, tools, tool_choice, api, signa
                 logger.debug(`Streaming disabled or unsupported (attempt ${attempt}/${maxAttempts}). Using non-streaming generation path.`);
                 responseData = await _generateNonStreaming(messages, tools, tool_choice, signal, timeoutMs, false, {
                     polyceph_task_id,
-                    polyceph_task_label
+                    polyceph_task_label,
+                    profileId,
+                    presetName
                 });
             }
 
