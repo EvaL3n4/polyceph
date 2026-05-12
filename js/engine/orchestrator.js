@@ -11,7 +11,7 @@ import { updateTaskStatus } from './ui-utils.js';
  * Executes the core pipeline logic, including step iteration, task grouping,
  * and parallel LLM execution.
  */
-export async function executePipelineSteps(userInput, generateSwipesForBatchId, signal) {
+export async function executePipelineSteps(userInput, generateSwipesForBatchId, signal, options = {}) {
     // 1. Initialize Context
     const { 
         stContext, 
@@ -21,7 +21,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
         batchId, 
         cleanChat, 
         batchData 
-    } = await initializePipelineContext(userInput, generateSwipesForBatchId);
+    } = await initializePipelineContext(userInput, generateSwipesForBatchId, options);
 
     let accumulatedThoughts = [];
     const totalSteps = activePipeline.steps.length;
@@ -31,7 +31,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
         const step = activePipeline.steps[i];
         const stepIdx = i + 1;
 
-        if (stContext.eventSource) {
+        if (stContext.eventSource && !options.skipPersistence) {
             stContext.eventSource.emit('polyceph-step-started', {
                 stepIdx,
                 totalSteps,
@@ -73,7 +73,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
         // This gives the user immediate feedback on what's coming.
         const currentCtx = SillyTavern.getContext();
         const typingIdx = currentCtx.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
-        if (typingIdx !== -1) {
+        if (typingIdx !== -1 && !options.skipPersistence) {
             const typingMsg = currentCtx.chat[typingIdx];
             if (!typingMsg.extra.polyceph_active_tasks) {
                 typingMsg.extra.polyceph_active_tasks = [];
@@ -128,7 +128,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                 let streamMessageIndex = null;
                 let isStreamingSwipe = false;
 
-                if (node.isCharacter && settings.enableStreaming !== false) {
+                if (node.isCharacter && settings.enableStreaming !== false && !options.skipPersistence) {
                     const { name: charName, avatarUrl: avatarStr } = getActiveCharacterInfo();
 
                     taskOptions.onStream = async ({ text, done }) => {
@@ -226,10 +226,11 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                             cleanOutput = '';
                         }
 
-                        // Handle Backgrounds immediately to keep them moving
                         for (const bg of hiddenBackgrounds) {
                             if (signal.aborted) return;
-                            await handleBackgroundOutput(bg, bgMsgOutputCount++, batchData, taskApi, taskModel);
+                            if (!options.skipPersistence) {
+                                await handleBackgroundOutput(bg, bgMsgOutputCount++, batchData, taskApi, taskModel);
+                            }
                         }
 
                         // Buffer the result for ordered processing
@@ -247,7 +248,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                         groupThoughts[k] = thoughts.map(t => ({ ...t, taskId: node.id }));
 
                         // 5. Task Completion Event (Immediate & Parallel-friendly)
-                        if (stContext.eventSource) {
+                        if (stContext.eventSource && !options.skipPersistence) {
                             updateTaskStatus(node.id, 'waiting_on_extensions');
                             logger.debug(`Task "${node.label || node.id}" waiting on extension processing...`);
                             await stContext.eventSource.emit('polyceph-task-finished', {
@@ -280,7 +281,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                         groupThoughts[k] = err.parsedResult.thoughts || [];
                     }
 
-                    if (stContext.eventSource) {
+                    if (stContext.eventSource && !options.skipPersistence) {
                         updateTaskStatus(node.id, 'waiting_on_extensions');
                         logger.debug(`Task "${node.label || node.id}" waiting on extension processing (Error State)...`);
                         await stContext.eventSource.emit('polyceph-task-finished', {
@@ -352,7 +353,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                         const combinedThoughts = [...accumulatedThoughts, ...taskThoughts];
                         accumulatedThoughts = []; // Clear the global pool
 
-                        if (streamMessageIndex !== null && streamMessageIndex !== -1) {
+                        if (streamMessageIndex !== null && streamMessageIndex !== -1 && !options.skipPersistence) {
                             const ctx = SillyTavern.getContext();
                             const streamMsg = ctx.chat[streamMessageIndex];
                             if (streamMsg && (streamMsg.extra?.polyceph_streaming || isStreamingSwipe)) {
@@ -390,7 +391,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                             }
                         }
 
-                        if (!streamingHandled) {
+                        if (!streamingHandled && !options.skipPersistence) {
                             logger.debug(`Calling handleCharacterOutput for non-streamed/failed content. Content length: ${content?.length}`);
                             await handleCharacterOutput(content, combinedThoughts, node._charIndex, node, batchData, taskApi, taskModel, userInput, pipelineName);
                         }
@@ -408,13 +409,15 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                 }
 
                 // 6. Cleanup Task from Indicator
-                const postCtx = SillyTavern.getContext();
-                const tIdx = postCtx.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
-                if (tIdx !== -1) {
-                    const tMsg = postCtx.chat[tIdx];
-                    if (tMsg.extra?.polyceph_active_tasks) {
-                        tMsg.extra.polyceph_active_tasks = tMsg.extra.polyceph_active_tasks.filter(t => t.id !== node.id);
-                        import('./ui-utils.js').then(m => m.updateTypingIndicator());
+                if (!options.skipPersistence) {
+                    const postCtx = SillyTavern.getContext();
+                    const tIdx = postCtx.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
+                    if (tIdx !== -1) {
+                        const tMsg = postCtx.chat[tIdx];
+                        if (tMsg.extra?.polyceph_active_tasks) {
+                            tMsg.extra.polyceph_active_tasks = tMsg.extra.polyceph_active_tasks.filter(t => t.id !== node.id);
+                            import('./ui-utils.js').then(m => m.updateTypingIndicator());
+                        }
                     }
                 }
             }
@@ -426,7 +429,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
         if (step.label) contextVault[step.label.trim()] = stepResult;
 
         // 8. Step Completion Event (Awaited for extension processing)
-        if (stContext.eventSource) {
+        if (stContext.eventSource && !options.skipPersistence) {
             await stContext.eventSource.emit('polyceph-step-finished', {
                 stepIdx,
                 totalSteps,
@@ -439,7 +442,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
     }
 
     // 6. Final Thoughts Persistence
-    if (accumulatedThoughts.length > 0 && !signal.aborted) {
+    if (accumulatedThoughts.length > 0 && !signal.aborted && !options.skipPersistence) {
         await persistReasoningMessage(accumulatedThoughts, batchData);
     }
 }

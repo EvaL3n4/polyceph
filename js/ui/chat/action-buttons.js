@@ -1,5 +1,5 @@
 import { settings } from '../../state.js';
-import { isPipelineActive, stopPipeline } from '../../engine.js';
+import { isPipelineActive, stopPipeline, isScanActive, stopScan } from '../../engine.js';
 import { SELECTORS, getEl, showEl, hideEl, disableEl, enableEl } from '../ui-shared.js';
 
 /**
@@ -8,6 +8,7 @@ import { SELECTORS, getEl, showEl, hideEl, disableEl, enableEl } from '../ui-sha
 export function updateSendButtonVisibility() {
     const polySendBut = getEl(SELECTORS.POLY_SEND_BTN);
     const polyStopBut = getEl(SELECTORS.POLY_STOP_BTN);
+    const scanStopBut = getEl('polyceph_scan_stop_bar_btn');
     const stSendBut = getEl(SELECTORS.ST_SEND_BTN);
     const container = getEl(SELECTORS.POLY_CONTAINER);
 
@@ -16,6 +17,7 @@ export function updateSendButtonVisibility() {
     const isActive = settings.activePipelineId !== 'none';
     const isIntercept = settings.interceptSend !== false;
     const isRunning = isPipelineActive();
+    const isScanning = isScanActive();
 
     // Pipeline Selector visibility
     if (container) {
@@ -35,12 +37,19 @@ export function updateSendButtonVisibility() {
     }
 
     if (isActive) {
-        if (isRunning) {
+        if (isScanning) {
+            hideEl(polyStopBut);
+            hideEl(polySendBut);
+            if (stSendBut) hideEl(stSendBut);
+            if (scanStopBut) showEl(scanStopBut);
+        } else if (isRunning) {
             showEl(polyStopBut);
             hideEl(polySendBut);
             if (stSendBut) hideEl(stSendBut);
+            if (scanStopBut) hideEl(scanStopBut);
         } else {
             hideEl(polyStopBut);
+            if (scanStopBut) hideEl(scanStopBut);
             enableEl(polySendBut);
             if (stSendBut) enableEl(stSendBut);
 
@@ -55,6 +64,7 @@ export function updateSendButtonVisibility() {
     } else {
         hideEl(polySendBut);
         hideEl(polyStopBut);
+        if (scanStopBut) hideEl(scanStopBut);
         stSendBut.style.display = '';
     }
 }
@@ -105,6 +115,31 @@ export function createStopButton() {
     btn.appendChild(overlay);
 
     btn.addEventListener('click', () => stopPipeline());
+
+    return btn;
+}
+
+/**
+ * Creates the custom Polyceph scan stop button.
+ */
+export function createScanStopButton() {
+    const btn = document.createElement('div');
+    btn.id = 'polyceph_scan_stop_bar_btn';
+    btn.className = 'polyceph-stop-button interactable';
+    btn.title = 'Stop Polyceph Scan';
+    btn.style.display = 'none';
+
+    const icon = document.createElement('i');
+    icon.className = 'fa-solid fa-circle-stop';
+    btn.appendChild(icon);
+
+    const overlay = document.createElement('span');
+    overlay.className = 'polyceph-send-button-overlay';
+    overlay.innerText = '☍ Scan';
+    overlay.style.fontSize = '0.5em';
+    btn.appendChild(overlay);
+
+    btn.addEventListener('click', () => stopScan());
 
     return btn;
 }

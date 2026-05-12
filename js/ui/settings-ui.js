@@ -13,6 +13,7 @@ import { exportPipeline, importPipeline } from './settings/import-export.js';
 import { renderPolycephThoughts } from './ui.js';
 import { createPromptEditor } from './settings/prompt-editor.js';
 import { mcpService } from '../engine/generator/services/mcp-service.js';
+import { runScan, stopScan } from '../engine.js';
 
 let Popup = null;
 
@@ -308,6 +309,66 @@ export async function addSettingsUI() {
     bindToggle('polyceph_ui_settings_toggle', 'polyceph_ui_settings_content');
     bindToggle('polyceph_behavior_settings_toggle', 'polyceph_behavior_settings_content');
     bindToggle('polyceph_pipeline_settings_toggle', 'polyceph_pipeline_settings_content');
+    bindToggle('polyceph_pipeline_actions_toggle', 'polyceph_pipeline_actions_content');
+    bindToggle('polyceph_scan_action_toggle', 'polyceph_scan_action_content');
+
+    // Scan Actions
+    const scanInputs = ['polyceph_scan_range_start', 'polyceph_scan_range_end', 'polyceph_scan_batch_size', 'polyceph_scan_offset', 'polyceph_pipeline_selector'];
+    scanInputs.forEach(id => {
+        getEl(id)?.addEventListener('input', updateScanWarnings);
+        getEl(id)?.addEventListener('change', updateScanWarnings);
+    });
+
+    getEl('polyceph_run_scan_btn')?.addEventListener('click', async () => {
+        const rangeStart = getEl('polyceph_scan_range_start').value;
+        const rangeEnd = getEl('polyceph_scan_range_end').value;
+        const batchSize = getEl('polyceph_scan_batch_size').value;
+        const offset = getEl('polyceph_scan_offset').value;
+        
+        const warnEl = getEl('polyceph_scan_warnings');
+        const warningHtml = warnEl && warnEl.style.display !== 'none' ? warnEl.innerHTML : 'No warnings detected.';
+        
+        const confirmed = await Popup.show.confirm(
+            'Confirm Pipeline Scan',
+            `Are you sure you want to run this scan?<br><br><div style="text-align: left; background: var(--black30a); padding: 10px; border-radius: 5px;">${warningHtml}</div>`
+        );
+        if (!confirmed) return;
+        
+        getEl('polyceph_run_scan_btn').style.display = 'none';
+        getEl('polyceph_stop_scan_btn').style.display = 'flex';
+        
+        const outputEl = getEl('polyceph_scan_status_output');
+        outputEl.style.display = 'block';
+        outputEl.value = 'Starting scan...\n';
+
+        const pipeline = getActivePipeline();
+        
+        await runScan(rangeStart, rangeEnd, batchSize, offset, pipeline, (progress) => {
+            if (progress.status === 'running') {
+                outputEl.value += `Batch ${progress.batchIndex}/${progress.totalBatches} (Msgs ${progress.messageStart}-${progress.messageEnd})...\n`;
+                outputEl.scrollTop = outputEl.scrollHeight;
+            } else if (progress.status === 'completed') {
+                outputEl.value += `Scan completed successfully.\n`;
+                outputEl.scrollTop = outputEl.scrollHeight;
+                getEl('polyceph_run_scan_btn').style.display = 'flex';
+                getEl('polyceph_stop_scan_btn').style.display = 'none';
+            } else if (progress.status === 'aborted') {
+                outputEl.value += `Scan aborted by user.\n`;
+                outputEl.scrollTop = outputEl.scrollHeight;
+                getEl('polyceph_run_scan_btn').style.display = 'flex';
+                getEl('polyceph_stop_scan_btn').style.display = 'none';
+            } else if (progress.status === 'error') {
+                outputEl.value += `Scan stopped due to error: ${progress.error}\n`;
+                outputEl.scrollTop = outputEl.scrollHeight;
+                getEl('polyceph_run_scan_btn').style.display = 'flex';
+                getEl('polyceph_stop_scan_btn').style.display = 'none';
+            }
+        });
+    });
+
+    getEl('polyceph_stop_scan_btn')?.addEventListener('click', () => {
+        stopScan();
+    });
 
     // Pipeline Steps
     getEl('polyceph_add_step_btn')?.addEventListener('click', () => {
@@ -384,5 +445,89 @@ async function updateMcpStatus() {
         badge.textContent = 'Not Connected';
         badge.className = 'polyceph-status-badge disconnected';
     }
+}
+
+/**
+ * Updates the warnings section for the scan feature.
+ */
+function updateScanWarnings() {
+    const pipeline = getActivePipeline();
+    if (!pipeline) return;
+
+    const rangeStart = parseInt(getEl('polyceph_scan_range_start')?.value) || 0;
+    const rangeEnd = parseInt(getEl('polyceph_scan_range_end')?.value) || 0;
+    const batchSize = parseInt(getEl('polyceph_scan_batch_size')?.value) || 1;
+    const offset = parseInt(getEl('polyceph_scan_offset')?.value) || 0;
+    
+    const warnEl = getEl('polyceph_scan_warnings');
+    if (!warnEl) return;
+
+    if (rangeEnd <= rangeStart) {
+        warnEl.style.display = 'none';
+        return;
+    }
+    
+    const stepSize = batchSize + offset;
+    if (stepSize < 1) {
+        warnEl.style.display = 'block';
+        warnEl.innerHTML = '<span style="color:#ff4d4d">Batch size + offset must be at least 1.</span>';
+        return;
+    }
+    
+    let currentIndex = rangeStart;
+    let totalBatches = 0;
+    while (currentIndex < rangeEnd) {
+        totalBatches++;
+        currentIndex += stepSize;
+    }
+    
+    let hasNonToolTasks = false;
+    let hasMissingSkipSuccess = false;
+    let totalTasks = 0;
+    let hasLiveTrue = false;
+    let lastN = null;
+    
+    pipeline.steps.forEach(s => {
+        if (!s.tasks) return;
+        s.tasks.forEach(t => {
+            totalTasks++;
+            if (t.outputType !== 'tool' && t.outputType !== 'mcp' && !t.isSilent && !t.hideSuccessResponse) {
+                hasNonToolTasks = true;
+            }
+            if ((t.outputType === 'tool' || t.outputType === 'mcp') && !t.skipSuccessRecursion) {
+                hasMissingSkipSuccess = true;
+            }
+            if (t.template) {
+                if (t.template.includes('live:true')) hasLiveTrue = true;
+                const match = t.template.match(/last:(\d+)/);
+                if (match) lastN = parseInt(match[1]);
+            }
+        });
+    });
+    
+    const totalApiCalls = totalBatches * totalTasks;
+    
+    let warningHtml = `Scan will execute ${totalBatches} batches.<br>Total estimated API calls: ${totalApiCalls}.<br>`;
+    
+    if (hasNonToolTasks) {
+        warningHtml += `<span style="color: #ff9900;">Warning: Pipeline contains standard text tasks. Their output will NOT be saved to chat during a scan.</span><br>`;
+    }
+    
+    if (hasMissingSkipSuccess) {
+        warningHtml += `<span style="color: #ff9900;">Warning: A Tool/MCP task does not have "Skip Success Recursion" enabled. This may cause unnecessary API calls by asking the AI to continue generating after the tool succeeds.</span><br>`;
+    }
+    
+    if (lastN !== null && lastN !== batchSize) {
+        warningHtml += `<span style="color: #ff9900;">Warning: A task uses 'last:${lastN}' but Batch Size is ${batchSize}. This may cause unexpected truncation.</span><br>`;
+    }
+    
+    if (hasLiveTrue) {
+        warningHtml += `<span style="color: #ff4d4d;">CRITICAL: A task uses 'live:true'. This bypasses historical batch slicing and will pull the most recent live messages at the bottom of the chat for every single batch instead of the intended historical slice!</span><br>`;
+    }
+    
+    warningHtml += `<i>Remember to check Prompt Preview to ensure your token limit doesn't truncate the history below your batch size.</i>`;
+    
+    warnEl.innerHTML = warningHtml;
+    warnEl.style.display = 'block';
 }
 
