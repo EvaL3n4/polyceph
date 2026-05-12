@@ -1,7 +1,7 @@
 import { settings } from '../state.js';
 import { getEl, SELECTORS } from './ui-shared.js';
 import { createPipelineSelector, updateChatSelectorOptions } from './chat/pipeline-selector.js';
-import { createSendButton, createStopButton, updateSendButtonVisibility } from './chat/action-buttons.js';
+import { createSendButton, createStopButton, createScanStopButton, updateSendButtonVisibility } from './chat/action-buttons.js';
 import { logger } from '../logger.js';
 
 // Re-export for external use
@@ -24,16 +24,19 @@ export function injectChatPipelineSelector(sendHandler) {
     const container = createPipelineSelector();
     const polySendBut = createSendButton(sendHandler);
     const polyStopBut = createStopButton();
+    const scanStopBut = createScanStopButton();
 
     const stSendBut = getEl(SELECTORS.ST_SEND_BTN);
     if (stSendBut) {
         rightForm.insertBefore(container, stSendBut);
         rightForm.insertBefore(polySendBut, stSendBut);
         rightForm.insertBefore(polyStopBut, stSendBut);
+        rightForm.insertBefore(scanStopBut, stSendBut);
     } else {
         rightForm.appendChild(container);
         rightForm.appendChild(polySendBut);
         rightForm.appendChild(polyStopBut);
+        rightForm.appendChild(scanStopBut);
     }
 
     updateChatSelectorOptions();

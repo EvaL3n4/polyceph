@@ -13,6 +13,7 @@ import { captureSessionState, restoreSessionState } from './engine/state-manager
 import { finalizePipelineTeardown } from './engine/teardown.js';
 import { executePipelineSteps } from './engine/orchestrator.js';
 import { generateQuietly } from './engine/generator/generator.js';
+import { runScan, stopScan, isScanActive } from './engine/scanner.js';
 
 // Re-exports for backward compatibility with index.js and other files
 export { forceHideStopButton, startTypingIndicator, removeTypingIndicator, updateTypingIndicator, clearOrphanedIndicators };
@@ -20,6 +21,7 @@ export { parseOutputTags, parsePromptToMessages };
 export { captureSessionState, restoreSessionState };
 export { finalizePipelineTeardown };
 export { executePipelineSteps, generateQuietly };
+export { runScan, stopScan, isScanActive };
 
 let currentPipelineAbortController = null;
 let currentMutexHolder = null;

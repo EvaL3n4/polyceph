@@ -8,7 +8,7 @@ import { updateTypingIndicator } from './ui-utils.js';
  * Initializes the execution context for a pipeline run.
  * @returns {Promise<Object>} The initialized context data.
  */
-export async function initializePipelineContext(userInput, generateSwipesForBatchId) {
+export async function initializePipelineContext(userInput, generateSwipesForBatchId, options = {}) {
     const stContext = SillyTavern.getContext();
     const activePipeline = getActivePipeline();
     const pipelineName = activePipeline?.name || 'Default';
@@ -20,7 +20,7 @@ export async function initializePipelineContext(userInput, generateSwipesForBatc
     const batchId = generateSwipesForBatchId || 'batch_' + generateId();
     
     // Filter out typing indicator from chat for macro resolution to avoid '...' in history
-    const cleanChat = stContext.chat.filter(m => m && !m.extra?.polyceph_typing && !m.is_system && !m.mes?.trim().startsWith('/'));
+    const cleanChat = options.mockCleanChat || stContext.chat.filter(m => m && !m.extra?.polyceph_typing && !m.is_system && !m.mes?.trim().startsWith('/'));
 
     // Fetch system prompt
     contextVault['system_prompt'] = getMainSystemPrompt();
@@ -46,7 +46,7 @@ export async function initializePipelineContext(userInput, generateSwipesForBatc
         const hasWaiting = typingMsg.extra.polyceph_active_tasks.some(t => t.id === 'waiting');
         if (hasWaiting) {
             typingMsg.extra.polyceph_active_tasks = typingMsg.extra.polyceph_active_tasks.filter(t => t.id !== 'waiting');
-            updateTypingIndicator();
+            if (!options.skipPersistence) updateTypingIndicator();
         }
     }
 
