@@ -13,18 +13,12 @@ import { updateTaskStatus } from './ui-utils.js';
  */
 export async function executePipelineSteps(userInput, generateSwipesForBatchId, signal, options = {}) {
     // 1. Initialize Context
-    const { 
-        stContext, 
-        activePipeline, 
-        pipelineName, 
-        contextVault, 
-        batchId, 
-        cleanChat, 
-        batchData 
-    } = await initializePipelineContext(userInput, generateSwipesForBatchId, options);
+    const batchData = await initializePipelineContext(userInput, generateSwipesForBatchId, options);
+    const { stContext, activePipeline, pipelineName, contextVault, cleanChat } = batchData;
 
     let accumulatedThoughts = [];
     const totalSteps = activePipeline.steps.length;
+    const allResults = [];
 
     // 2. Iterate Steps
     for (let i = 0; i < totalSteps; i++) {
@@ -247,6 +241,13 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                         };
                         groupThoughts[k] = thoughts.map(t => ({ ...t, taskId: node.id }));
 
+                        allResults.push({
+                            taskId: node.id,
+                            label: node.label || node.id,
+                            output: cleanOutput,
+                            raw: taskResult.rawResponse
+                        });
+
                         // 5. Task Completion Event (Immediate & Parallel-friendly)
                         if (stContext.eventSource && !options.skipPersistence) {
                             updateTaskStatus(node.id, 'waiting_on_extensions');
@@ -445,4 +446,6 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
     if (accumulatedThoughts.length > 0 && !signal.aborted && !options.skipPersistence) {
         await persistReasoningMessage(accumulatedThoughts, batchData);
     }
+    
+    return allResults;
 }

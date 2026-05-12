@@ -15,9 +15,9 @@ window.polycephActiveEditors = window.polycephActiveEditors || new Set();
 /**
  * Official CodeMirror overlayMode helper (bundled to ensure availability)
  */
-const overlayMode = function(base, overlay, combine) {
+const overlayMode = function (base, overlay, combine) {
     return {
-        startState: function() {
+        startState: function () {
             return {
                 base: CodeMirror.startState(base),
                 overlay: overlay.startState(),
@@ -25,7 +25,7 @@ const overlayMode = function(base, overlay, combine) {
                 baseCur: null, overlayCur: null
             };
         },
-        copyState: function(state) {
+        copyState: function (state) {
             return {
                 base: CodeMirror.copyState(base, state.base),
                 overlay: overlay.copyState(state.overlay),
@@ -33,7 +33,7 @@ const overlayMode = function(base, overlay, combine) {
                 baseCur: null, overlayCur: null
             };
         },
-        token: function(stream, state) {
+        token: function (stream, state) {
             if (stream.start == state.basePos) {
                 state.baseCur = base.token(stream, state.base);
                 state.basePos = stream.pos;
@@ -50,14 +50,14 @@ const overlayMode = function(base, overlay, combine) {
             if (state.baseCur == null || combine) return state.overlayCur + (state.baseCur ? " " + state.baseCur : "");
             else return state.overlayCur;
         },
-        indent: base.indent && function(state, textAfter) {
+        indent: base.indent && function (state, textAfter) {
             return base.indent(state.base, textAfter);
         },
-        blankLine: function(state) {
+        blankLine: function (state) {
             if (base.blankLine) base.blankLine(state.base);
             if (overlay.blankLine) overlay.blankLine(state.overlay);
         },
-        innerMode: function(state) { return {state: state.base, mode: base}; }
+        innerMode: function (state) { return { state: state.base, mode: base }; }
     };
 };
 
@@ -77,7 +77,7 @@ function toggleAllLineNumbers(show) {
             cm.setOption('lineNumbers', show);
         }
     });
-    
+
     // Update all toggle icons
     document.querySelectorAll('.polyceph-line-toggle').forEach(btn => {
         btn.style.opacity = show ? "1" : "0.4";
@@ -93,7 +93,7 @@ function toggleAllLineNumbers(show) {
  */
 export async function createPromptEditor(textarea, onUpdate, taskLabels = [], extraClasses = []) {
     if (!textarea) return null;
-    
+
     try {
         await ensureCodeMirror();
     } catch (e) {
@@ -136,7 +136,7 @@ export async function createPromptEditor(textarea, onUpdate, taskLabels = [], ex
     cm._polycephType = isRegular ? 'regular' : (isMaximized ? 'maximized' : 'preview');
     textarea._cm = cm;
     window.polycephActiveEditors.add(cm);
-    
+
     const wrapper = cm.getWrapperElement();
     wrapper.classList.add('polyceph-editor');
     extraClasses.forEach(cls => wrapper.classList.add(cls));
@@ -146,15 +146,15 @@ export async function createPromptEditor(textarea, onUpdate, taskLabels = [], ex
     const baseMode = CodeMirror.getMode(cm.options, "markdown");
 
     const polyOverlay = {
-        startState: () => ({ 
-            manualRole: null, 
-            engineRole: null, 
+        startState: () => ({
+            manualRole: null,
+            engineRole: null,
             isPermissive: false,
             baseState: CodeMirror.startState(baseMode)
         }),
-        copyState: (state) => ({ 
-            manualRole: state.manualRole, 
-            engineRole: state.engineRole, 
+        copyState: (state) => ({
+            manualRole: state.manualRole,
+            engineRole: state.engineRole,
             isPermissive: state.isPermissive,
             baseState: CodeMirror.copyState(baseMode, state.baseState)
         }),
@@ -174,7 +174,7 @@ export async function createPromptEditor(textarea, onUpdate, taskLabels = [], ex
 
             // 1. Escaped Tags
             if (stream.match(/\\\[\[/)) {
-                stream.match(/[^\]]+\]\]/); 
+                stream.match(/[^\]]+\]\]/);
                 return finalize("poly-escaped" + bgClass);
             }
 
@@ -184,7 +184,7 @@ export async function createPromptEditor(textarea, onUpdate, taskLabels = [], ex
                 if (forcedRoleMatch) {
                     state.manualRole = forcedRoleMatch[1].toLowerCase();
                     state.isPermissive = !!forcedRoleMatch[3];
-                    state.engineRole = null; 
+                    state.engineRole = null;
                     return finalize(`poly-tag-${state.manualRole}${bgClass}`);
                 }
 
@@ -197,7 +197,7 @@ export async function createPromptEditor(textarea, onUpdate, taskLabels = [], ex
                     }
                     return finalize(`poly-tag-internal poly-tag-engine-${tagRole}${bgClass}`);
                 }
-                
+
                 const forcedClose = stream.match(/\[\[\/\]\]/);
                 if (forcedClose) {
                     const className = state.manualRole ? `poly-tag-${state.manualRole}-close` : "poly-tag-close";
@@ -214,7 +214,7 @@ export async function createPromptEditor(textarea, onUpdate, taskLabels = [], ex
                     state.engineRole = null;
                     return finalize(className + bgClass);
                 }
-                
+
                 // If we're here, it was [[ but not a valid tag.
                 return finalize(bgClass ? bgClass.trim() : null);
             }
@@ -236,7 +236,7 @@ export async function createPromptEditor(textarea, onUpdate, taskLabels = [], ex
 
                 const genericMacro = stream.match(/\{\{.*?\}\}/);
                 if (genericMacro) return finalize("poly-macro" + bgClass);
-                
+
                 return finalize(bgClass ? bgClass.trim() : null);
             }
 
@@ -258,21 +258,21 @@ export async function createPromptEditor(textarea, onUpdate, taskLabels = [], ex
     // Handle Maximize and Line Toggle buttons
     const container = textarea.closest('.polyceph-textarea-container');
     const maximizeBtn = container?.querySelector('.editor_maximize');
-    
+
     // Inject Line Toggle Button if not already present (and not a maximized/preview editor)
     if (container && isRegular && !container.querySelector('.polyceph-line-toggle')) {
         const toggleBtn = document.createElement('i');
         toggleBtn.className = 'polyceph-line-toggle fa-solid fa-list-ol sttt--enabled interactable';
         toggleBtn.title = 'Toggle Line Numbers';
         toggleBtn.style.opacity = showLineNumbers ? "1" : "0.4";
-        
+
         toggleBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
             const newState = localStorage.getItem('polyceph-show-line-numbers') === 'false';
             toggleAllLineNumbers(newState);
         });
-        
+
         container.appendChild(toggleBtn);
     }
 
@@ -281,7 +281,7 @@ export async function createPromptEditor(textarea, onUpdate, taskLabels = [], ex
         maximizeBtn.addEventListener('mousedown', () => {
             textarea.value = cm.getValue();
         }, true);
-        
+
         textarea.addEventListener('focus', () => {
             if (textarea.value !== cm.getValue()) {
                 cm.setValue(textarea.value);
@@ -303,7 +303,7 @@ export async function createPromptEditor(textarea, onUpdate, taskLabels = [], ex
     let debounceTimer;
     cm.on('change', () => {
         if (isSyncing || cm.getOption('readOnly')) return;
-        
+
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
             isSyncing = true;
@@ -334,7 +334,7 @@ function initMaximizedEditorObserver() {
                     maximizedTextarea.dataset.polycephInitialized = 'true';
                     const originalId = maximizedTextarea.getAttribute('data-for');
                     const taskLabels = window.polycephEditorRegistry.get(originalId) || [];
-                    
+
                     createPromptEditor(maximizedTextarea, (val) => {
                         const originalTextarea = document.getElementById(originalId);
                         if (originalTextarea) {

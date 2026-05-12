@@ -367,6 +367,14 @@ export async function addSettingsUI() {
             if (progress.status === 'running') {
                 outputEl.value += `Batch ${progress.batchIndex}/${progress.totalBatches} (Msgs ${progress.messageStart}-${progress.messageEnd})...\n`;
                 outputEl.scrollTop = outputEl.scrollHeight;
+            } else if (progress.status === 'batch_results') {
+                if (progress.results && progress.results.length > 0) {
+                    progress.results.forEach(res => {
+                        outputEl.value += `[${res.label}] ${res.output}\n`;
+                    });
+                    outputEl.value += `-------------------\n`;
+                    outputEl.scrollTop = outputEl.scrollHeight;
+                }
             } else if (progress.status === 'completed') {
                 outputEl.value += `Scan completed successfully.\n`;
                 outputEl.scrollTop = outputEl.scrollHeight;

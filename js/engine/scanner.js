@@ -102,7 +102,14 @@ export async function runScan(rangeStart, rangeEnd, batchSize, offset, pipeline,
             };
 
             // executePipelineSteps throws if a task fails and continueOnFailure is false.
-            await executePipelineSteps('', null, signal, options);
+            const results = await executePipelineSteps('', null, signal, options);
+            
+            if (typeof onProgress === 'function') {
+                onProgress({
+                    status: 'batch_results',
+                    results: results
+                });
+            }
             
             if (signal.aborted) break;
             

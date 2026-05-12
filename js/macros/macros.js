@@ -51,7 +51,7 @@ export async function expandPrompt(template, settings, contextVault, cleanChat, 
         // Polyceph's specialized macro syntax (like pipes '|') or unknown placeholders.
         const protectedMacros = [];
         const protectRegex = /\{\{[^}]+\}\}/g;
-        
+
         // We temporarily hide macros that:
         // 1. Contain a pipe (Polyceph specialized syntax)
         // 2. Are chat_history or user_input (Polyceph handles these later with accurate token budgets)
@@ -107,7 +107,7 @@ export async function expandPrompt(template, settings, contextVault, cleanChat, 
             const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             // Support {{key}}, {{key|clean}}, {{key|history}}, {{key|raw}}
             const regex = new RegExp(`\\{\\{${escapedKey}(?:\\|(history|raw|clean))?\\}\\}`, 'g');
-            
+
             result = result.replace(regex, (match, pipe) => {
                 if (pipe === 'clean') {
                     return contextVault[`${key}_clean`] || contextVault[key];

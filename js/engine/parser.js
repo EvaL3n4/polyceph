@@ -165,6 +165,7 @@ export function parsePromptToMessages(text, api = '', defaultRole = 'system') {
     let currentRole = defaultRole;
     let currentName = null;
     let isForced = false;
+    let isForcedByEngine = false;
 
     const appendToMessages = (content) => {
         if (!content || !content.trim()) return;
@@ -203,22 +204,31 @@ export function parsePromptToMessages(text, api = '', defaultRole = 'system') {
 
         if (isForced) {
             // In forced mode, we ignore engine-style [[ROLE:...]] and [[/ROLE]] tags 
-            // but we still honor manual shorthands [[user]] and terminators [[/]]
-            if (isEndTag ? match[0] === '[[/]]' : (role && !isEngineTag)) {
+            // ONLY IF we were forced by a manual tag (like [[system]]).
+            // If we were forced by an engine tag, we allow other engine tags to switch/exit.
+            const shouldHonor = isEndTag 
+                ? (match[0] === '[[/]]' || (isForcedByEngine && isEngineTag))
+                : (role && (!isEngineTag || isForcedByEngine));
+
+            if (shouldHonor) {
                 appendToMessages(precedingText);
 
                 if (isEndTag) {
                     currentRole = defaultRole;
                     currentName = null;
                     isForced = false;
+                    isForcedByEngine = false;
                 } else {
                     currentRole = role;
                     currentName = match[3] || null;
                     isForced = !permissive;
+                    isForcedByEngine = isEngineTag;
                 }
                 lastIndex = tagRegex.lastIndex;
             } else {
-                // Ignore engine tag, but update lastIndex so it's stripped from content
+                // We are ignoring this engine tag, but we MUST keep the text before it!
+                appendToMessages(precedingText);
+                // Update lastIndex so the tag itself is stripped from content
                 lastIndex = tagRegex.lastIndex;
                 continue;
             }
@@ -230,10 +240,12 @@ export function parsePromptToMessages(text, api = '', defaultRole = 'system') {
                 currentRole = defaultRole;
                 currentName = null;
                 isForced = false;
+                isForcedByEngine = false;
             } else if (role) {
                 currentRole = role;
                 currentName = match[3] || null;
                 isForced = !permissive;
+                isForcedByEngine = isEngineTag;
             }
             lastIndex = tagRegex.lastIndex;
         }
