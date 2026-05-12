@@ -74,8 +74,10 @@ export function weaveInjections(messages, extensionPrompts) {
  * @param {string} userInput - The pending user input.
  * @param {boolean} shouldInjectWI - If false, World Info will NOT be injected into this history block.
  * @param {number} overheadTokens - Tokens already consumed by other parts of the prompt template.
+ * @param {AbortSignal} [signal] - Optional abort signal.
  */
-export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = false, userInput = null, shouldInjectWI = true, overheadTokens = 0) {
+export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = false, userInput = null, shouldInjectWI = true, overheadTokens = 0, signal = null) {
+    if (signal?.aborted) throw new Error('Aborted');
     if (!text) return text;
 
     const isCC = stContext.mainApi === 'openai';
@@ -96,6 +98,7 @@ export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = 
         }
 
         const includeInjections = options.no_extensions !== 'true';
+        const hideSpeakers = options.no_speakers === 'true';
 
         // 1. Select Source
         let source = (options.live === 'true') ?
@@ -160,7 +163,7 @@ export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = 
         let injectionTokens = 0;
         if (injectionPrompts) {
             const injectionText = Object.values(injectionPrompts).map(p => p.value || '').join('\n');
-            injectionTokens = await countTokens(injectionText);
+            injectionTokens = await countTokens(injectionText, signal);
         }
 
         // Usable budget = Total - Injections - Template Overhead - Safety Buffer
@@ -203,7 +206,7 @@ export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = 
                 mContent += `\n[[INVOCATIONS:${JSON.stringify(m.extra.tool_invocations)}]]`;
             }
 
-            const t = await countTokens(mContent);
+            const t = await countTokens(mContent, signal);
             const overhead = 30; // Estimated formatting overhead (Role markers, Names, separators)
 
             if (currentTokens + t + overhead > usableBudget) {
@@ -237,12 +240,16 @@ export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = 
                 encodedInvocations = `\n[[INVOCATIONS:${encodeInvocations(m.extra.tool_invocations)}]]`;
             }
 
+            const name = m.name || (m.is_user ? 'User' : 'Assistant');
+            const messageWithInvocations = `${m.mes || ''}${encodedInvocations}`;
+            const finalContent = hideSpeakers ? messageWithInvocations : `${name}: ${messageWithInvocations}`;
+            
             if (isCC) {
-                return `[[ROLE:${mRole}]]\n${m.mes}${encodedInvocations}\n[[/ROLE]]`;
+                return `[[ROLE:${mRole}]]\n${finalContent}\n[[/ROLE]]`;
             }
 
-            if (mRole === 'system') return `### System Instruction:\n${m.mes}${encodedInvocations}`;
-            return `${m.name || (m.is_user ? 'User' : 'Assistant')}: ${m.mes}${encodedInvocations}`;
+            if (mRole === 'system') return `### System Instruction:\n${messageWithInvocations}`;
+            return finalContent;
         });
 
         const resolvedHistory = history.join('\n\n');

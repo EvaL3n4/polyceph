@@ -335,7 +335,7 @@
                     <div class="polyceph-info-section">
                         <b class="polyceph-info-header">Advanced: Chat History</b>
                         <div class="polyceph-info-text">
-                            Format: <code>{{chat_history|last:10|bg_last:2|live:true|no_extensions:true}}</code>
+                            Format: <code>{{chat_history|last:10|bg_last:2|live:true|no_extensions:true|no_speakers:true}}</code>
                             <ul class="polyceph-info-sublist">
 
                                 <li><code>last:N</code> - Limit total messages to N.</li>
@@ -344,6 +344,7 @@
                                 <li><code>live:true</code> - Use chat *during* pipeline runs, not a snapshot of prior to
                                     the run. (includes pipeline results).</li>
                                 <li><code>no_extensions:true</code> - Do not inject extension prompts.</li>
+                                <li><code>no_speakers:true</code> - Remove the "Name: " labels from history messages.</li>
                             </ul>
                         </div>
                     </div>

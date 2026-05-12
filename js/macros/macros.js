@@ -5,7 +5,8 @@ import { resolveCCMacros } from './chat-completion.js';
 /**
  * Fully expands a prompt by resolving Polyceph-specific recursion and custom macros.
  */
-export async function expandPrompt(template, settings, contextVault, cleanChat, stContext, isDryRun = false) {
+export async function expandPrompt(template, settings, contextVault, cleanChat, stContext, isDryRun = false, signal = null) {
+    if (signal?.aborted) throw new Error('Aborted');
     let result = template || '';
 
     const macroMatch = result.match(/\{\{[^}]+\}\}/g);
@@ -42,7 +43,7 @@ export async function expandPrompt(template, settings, contextVault, cleanChat, 
 
     // 4. Resolve Chat Completion Prompts (Token-aware macros like {{system_prompt}})
     // We do this before overhead calculation so their size is known.
-    result = await resolveCCMacros(result, cleanChat, stContext, null, contextVault);
+    result = await resolveCCMacros(result, cleanChat, stContext, null, contextVault, signal);
 
     // 5. Resolve SillyTavern standard macros (Description, Persona, Char, etc.)
     if (typeof stContext.substituteParams === 'function') {
@@ -84,14 +85,14 @@ export async function expandPrompt(template, settings, contextVault, cleanChat, 
     let overheadTokens = 0;
     try {
         const { countTokens } = await import('../compat-shared.js');
-        overheadTokens = await countTokens(overheadText);
+        overheadTokens = await countTokens(overheadText, signal);
         logger.debug(`Accurate template overhead (including CC macros): ${overheadTokens} tokens`);
     } catch (e) {
         logger.warn('Failed to calculate template overhead:', e);
     }
 
     // 7. Resolve Chat History (with current input, WI awareness, and accurate overhead)
-    result = await resolveChatHistory(result, cleanChat, stContext, isDryRun, resolvedInput, shouldInjectWIIntoHistory, overheadTokens);
+    result = await resolveChatHistory(result, cleanChat, stContext, isDryRun, resolvedInput, shouldInjectWIIntoHistory, overheadTokens, signal);
 
     // 8. Apply the resolved {{user_input}}
     result = result.replace(/\{\{user_input\}\}/g, userInputPlaceholder);

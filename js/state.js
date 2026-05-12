@@ -349,7 +349,14 @@ export function loadSettings() {
         }
         delete saved.enabled;
 
-        settings = { ...defaultSettings, ...saved };
+        // Use Object.assign to preserve the reference for all modules that imported 'settings'
+        // This prevents the "stale import" bug where UI modules modify an old version of the object.
+        Object.keys(settings).forEach(key => delete settings[key]);
+        Object.assign(settings, JSON.parse(JSON.stringify(defaultSettings)), saved);
+        
+        if (settings.scanRangeEnd === undefined) {
+            settings.scanRangeEnd = 2000;
+        }
 
         // Ensure activePipelineId is valid
         if (settings.activePipelineId !== 'none' && !settings.pipelines.find(p => p.id === settings.activePipelineId)) {

@@ -192,14 +192,14 @@ export function parsePromptToMessages(text, api = '', defaultRole = 'system') {
 
         const precedingText = text.substring(lastIndex, match.index);
         const isEndTag = match[0].startsWith('[[/');
-        const isEngineTag = match[0].includes('ROLE:');
+        const isEngineTag = match[0].toUpperCase().includes('ROLE');
         const role = match[2]?.toLowerCase();
         const permissive = match[4] === '?';
 
         if (isForced) {
-            // In forced mode, we ignore engine-style [[ROLE:...]] tags 
+            // In forced mode, we ignore engine-style [[ROLE:...]] and [[/ROLE]] tags 
             // but we still honor manual shorthands [[user]] and terminators [[/]]
-            if (isEndTag || (role && !isEngineTag)) {
+            if (isEndTag ? match[0] === '[[/]]' : (role && !isEngineTag)) {
                 appendToMessages(precedingText);
 
                 if (isEndTag) {
@@ -213,7 +213,8 @@ export function parsePromptToMessages(text, api = '', defaultRole = 'system') {
                 }
                 lastIndex = tagRegex.lastIndex;
             } else {
-                // Ignore engine tag, keep accumulating
+                // Ignore engine tag, but update lastIndex so it's stripped from content
+                lastIndex = tagRegex.lastIndex;
                 continue;
             }
         } else {

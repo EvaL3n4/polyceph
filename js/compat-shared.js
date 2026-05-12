@@ -333,15 +333,47 @@ let lastModelId = null;
 
 /**
  * Counts the number of tokens in a given text or message array using ST's tokenizer.
- * Caches results to prevent API spam.
+ * Caches results (and pending requests) to prevent API spam.
  *
  * @param {string | object[]} content - Text string or array of {role, content} messages.
+ * @param {AbortSignal} [signal] - Optional abort signal.
  * @returns {Promise<number>} Token count.
  */
-export async function countTokens(content) {
+export async function countTokens(content, signal) {
+    if (signal?.aborted) throw new Error('Aborted');
+
     const ctx = SillyTavern.getContext();
     const oaiSettings = ctx.chatCompletionSettings;
-    const currentModel = oaiSettings?.openai_model || ctx.mainApi; // Basic heuristic for model changes
+    const currentModel = oaiSettings?.openai_model || ctx.mainApi;
+
+    // --- Polyceph Global Tokenizer Optimization ---
+    // We monkey-patch the SillyTavern context tokenizer to use our cache.
+    // This fixes spam originating from SillyTavern's internal logic (e.g. Dialogue Examples).
+    if (typeof ctx.getTokenCountAsync === 'function' && !ctx.getTokenCountAsync._polycephPatched) {
+        const originalGetTokenCount = ctx.getTokenCountAsync.bind(ctx);
+        logger.info('[Polyceph] Optimizing SillyTavern tokenizer with deduplication cache...');
+
+        ctx.getTokenCountAsync = async function(text) {
+            // Check cache first
+            if (tokenCache.has(text)) {
+                return tokenCache.get(text);
+            }
+
+            // Create promise for deduplication
+            const promise = originalGetTokenCount(text).catch(err => {
+                tokenCache.delete(text);
+                throw err;
+            });
+
+            // Cache the promise
+            if (typeof text === 'string' && text.length < 50000) {
+                tokenCache.set(text, promise);
+            }
+            
+            return promise;
+        };
+        ctx.getTokenCountAsync._polycephPatched = true;
+    }
 
     // Clear cache if model changes
     if (currentModel !== lastModelId) {
@@ -354,18 +386,8 @@ export async function countTokens(content) {
             ? content 
             : content.map(m => m.content || '').join('\n');
         
-        if (tokenCache.has(text)) {
-            return tokenCache.get(text);
-        }
-
-        const count = await ctx.getTokenCountAsync(text);
-        
-        // Don't cache massive strings to avoid memory pressure, but cache normal ones
-        if (text.length < 50000) {
-            tokenCache.set(text, count);
-        }
-        
-        return count;
+        // Use the (now optimized) ctx function
+        return ctx.getTokenCountAsync(text);
     }
 
     const errorMsg = 'SillyTavern tokenizer (getTokenCountAsync) is not available. Token counting failed.';

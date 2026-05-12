@@ -63,11 +63,12 @@ Polyceph leverages SillyTavern's built-in **Connection Profiles**.
 
 Route data between tasks using these handlebars macros/macros:
 - `{{user_input}}`: The original text from the chat box, the last user message.
-- `{{chat_history|last:10|bg_last:2|live:true|no_extensions:true}}`: Advanced history filtering. Automatically filters out system messages and slash commands. Does not include the last user message.
+- `{{chat_history|last:10|bg_last:2|live:true|no_extensions:true|no_speakers:true}}`: Advanced history filtering. Automatically filters out system messages and slash commands. Does not include the last user message.
     - `last:N`: Limit total messages to N.
     - `bg_last:N`: Keep only the last N background messages (interspersed).
     - `live:true`: Use real-time chat (includes earlier pipeline results).
     - `no_extensions:true`: Exclude SillyTavern extension injections (trackers, status bars, etc.). Injections are included by default.
+    - `no_speakers:true`: Removes the "Name: " labels from each message in the history.
 - `{{s1}}`, `{{s2}}`: The combined output of all tasks in a previous Step.
 - `{{TaskLabel}}`: The output of a specific task (uses the custom label you assigned to the task).
 - `{{system_prompt}}`: The **Main Prompt** text from SillyTavern's Advanced Formatting settings.
