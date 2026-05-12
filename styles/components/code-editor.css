@@ -202,7 +202,8 @@
 }
 
 /* Maximized Editor Overrides - High Specificity */
-.polyceph-editor.polyceph-maximized-editor.CodeMirror {
+.polyceph-editor.polyceph-maximized-editor.CodeMirror,
+.polyceph-editor.polyceph-preview-editor.CodeMirror {
     height: 100% !important;
     max-height: none !important;
 }
@@ -218,6 +219,11 @@
 .polyceph-editor.polyceph-maximized-editor .CodeMirror-gutters {
     min-height: 100% !important;
     height: auto !important;
+}
+
+.polyceph-editor .CodeMirror-sizer {
+    align-content: flex-start !important;
+    display: block !important;
 }
 
 .polyceph-editor span[class*="cm-poly-tag"] {

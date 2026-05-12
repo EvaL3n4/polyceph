@@ -8,7 +8,7 @@ import { createPromptEditor } from './prompt-editor.js';
 /**
  * Generates and displays a modal with the assembled prompts for each task in the active pipeline.
  */
-export async function showPromptPreview(initialPageIndex = 0) {
+export async function showPromptPreview(initialPageIndex = 0, mockChat = null) {
     // ... (rest of the setup code remains the same)
     const pipeline = getActivePipeline();
     const stContext = SillyTavern.getContext();
@@ -18,7 +18,7 @@ export async function showPromptPreview(initialPageIndex = 0) {
     if (initialPageIndex >= totalTasks) initialPageIndex = 0;
 
     // Use the current chat state, excluding typing indicators and system commands
-    const cleanChat = stContext.chat.filter(m => m && !m.extra?.polyceph_typing && !m.is_system && !m.mes?.trim().startsWith('/'));
+    const cleanChat = mockChat || stContext.chat.filter(m => m && !m.extra?.polyceph_typing && !m.is_system && !m.mes?.trim().startsWith('/'));
 
     // 1. Prepare contextVault with placeholders for task/step outputs
     const contextVault = {};
@@ -186,11 +186,12 @@ export async function showPromptPreview(initialPageIndex = 0) {
     }
 
     // Global hook for the sentinel
-    window.polyceph_on_preview_ready = () => {
+    window.polyceph_on_preview_ready = async () => {
         console.log(`[Polyceph] Preview modal sentinel triggered. Initializing editors with ${allLabels.length} labels...`);
-        $('.polyceph-preview-cm').each(function () {
-            createPromptEditor(this, null, allLabels);
-        });
+        for (const el of $('.polyceph-preview-cm').get()) {
+            const cm = await createPromptEditor(el, null, allLabels, ['polyceph-preview-editor']);
+            if (cm) setTimeout(() => cm.refresh(), 100);
+        }
         // Cleanup
         delete window.polyceph_on_preview_ready;
     };

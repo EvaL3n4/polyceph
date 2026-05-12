@@ -58,7 +58,7 @@
 
 .polyceph-preview-textarea {
     width: 100%;
-    flex: 1; /* Fill remaining vertical space */
+    display: none !important; /* Ensure it doesn't take flex space after CM init */
     font-family: 'Courier New', Courier, monospace;
     font-size: 0.9em;
     background: var(--SmartThemeChatTintColor) !important;
@@ -71,12 +71,12 @@
 }
 
 /* Force CodeMirror to fill the flex container and use internal scrolling */
-.polyceph-preview-cm + .CodeMirror {
+.polyceph-preview-task-container .CodeMirror {
     flex: 1;
     height: 100% !important;
 }
 
-.polyceph-preview-cm + .CodeMirror .CodeMirror-scroll {
+.polyceph-preview-task-container .CodeMirror .CodeMirror-scroll {
     height: 100% !important;
 }
 

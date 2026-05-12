@@ -113,7 +113,7 @@ export async function createPromptEditor(textarea, onUpdate, taskLabels = [], ex
     }
 
     const isMaximized = extraClasses.includes('polyceph-maximized-editor');
-    const isPreview = textarea.classList.contains('polyceph-preview-cm');
+    const isPreview = textarea.classList.contains('polyceph-preview-cm') || extraClasses.includes('polyceph-preview-editor');
     const isRegular = !isMaximized && !isPreview;
 
     // Regular editors follow the toggle, others stay on
@@ -124,7 +124,7 @@ export async function createPromptEditor(textarea, onUpdate, taskLabels = [], ex
         lineNumbers: showLineNumbers,
         lineWrapping: true,
         scrollbarStyle: 'native',
-        viewportMargin: Infinity,
+        viewportMargin: isRegular ? Infinity : 10,
         theme: 'default',
         readOnly: textarea.disabled,
         placeholder: textarea.placeholder || 'Enter prompt template...',
@@ -222,9 +222,9 @@ export async function createPromptEditor(textarea, onUpdate, taskLabels = [], ex
             // 3. Thinking Blocks
             if (stream.match(/<\/?thinking>/, true)) return finalize("poly-thinking" + bgClass);
 
-            // 4. Special Macro Tokens (with optional parameters like :5)
+            // 4. Special Macro Tokens (with optional parameters like :5 or |last:5)
             const specialMacrosPattern = SPECIAL_MACROS.join('|');
-            if (stream.match(new RegExp(`\\{\\{(?:${specialMacrosPattern})(?::[^\\]}]+)?\\}\\}`, 'i'), true)) {
+            if (stream.match(new RegExp(`\\{\\{(?:${specialMacrosPattern})(?:[|:][^\\]}]+)?\\}\\}`, 'i'), true)) {
                 return finalize("poly-macro-special" + bgClass);
             }
 

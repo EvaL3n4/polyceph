@@ -328,22 +328,44 @@ export async function getMaxPromptTokens(overrideResponseLength = null) {
     return contextTokens - responseTokens;
 }
 
+let tokenCache = new Map();
+let lastModelId = null;
+
 /**
  * Counts the number of tokens in a given text or message array using ST's tokenizer.
+ * Caches results to prevent API spam.
  *
  * @param {string | object[]} content - Text string or array of {role, content} messages.
  * @returns {Promise<number>} Token count.
  */
 export async function countTokens(content) {
     const ctx = SillyTavern.getContext();
+    const oaiSettings = ctx.chatCompletionSettings;
+    const currentModel = oaiSettings?.openai_model || ctx.mainApi; // Basic heuristic for model changes
+
+    // Clear cache if model changes
+    if (currentModel !== lastModelId) {
+        tokenCache.clear();
+        lastModelId = currentModel;
+    }
 
     if (typeof ctx.getTokenCountAsync === 'function') {
-        if (typeof content === 'string') {
-            return await ctx.getTokenCountAsync(content);
+        const text = typeof content === 'string' 
+            ? content 
+            : content.map(m => m.content || '').join('\n');
+        
+        if (tokenCache.has(text)) {
+            return tokenCache.get(text);
         }
-        // For message arrays, count the combined content
-        const text = content.map(m => m.content || '').join('\n');
-        return await ctx.getTokenCountAsync(text);
+
+        const count = await ctx.getTokenCountAsync(text);
+        
+        // Don't cache massive strings to avoid memory pressure, but cache normal ones
+        if (text.length < 50000) {
+            tokenCache.set(text, count);
+        }
+        
+        return count;
     }
 
     const errorMsg = 'SillyTavern tokenizer (getTokenCountAsync) is not available. Token counting failed.';

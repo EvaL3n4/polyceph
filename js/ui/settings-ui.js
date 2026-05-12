@@ -22,6 +22,7 @@ let Popup = null;
  */
 export function updateUI() {
     updatePipelineEditorUI();
+    updateScanWarnings();
 }
 
 /**
@@ -370,6 +371,34 @@ export async function addSettingsUI() {
         stopScan();
     });
 
+    getEl('polyceph_scan_preview_btn')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        const originalHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Processing...';
+
+        try {
+            const rangeStart = parseInt(getEl('polyceph_scan_range_start').value) || 0;
+            const batchSize = parseInt(getEl('polyceph_scan_batch_size').value) || 1;
+            const offset = parseInt(getEl('polyceph_scan_offset').value) || 0;
+            const batchNum = parseInt(getEl('polyceph_scan_preview_batch').value) || 1;
+            
+            const start = rangeStart + ((batchNum - 1) * (batchSize + offset));
+            const end = start + batchSize;
+            
+            const stContext = SillyTavern.getContext();
+            const mockChat = stContext.chat.slice(start, end).filter(m => m && !m.is_system && !m.mes?.trim().startsWith('/'));
+            
+            await showPromptPreview(0, mockChat);
+        } catch (err) {
+            toastr.error('Failed to generate scan preview.');
+            console.error(err);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        }
+    });
+
     // Pipeline Steps
     getEl('polyceph_add_step_btn')?.addEventListener('click', () => {
         const pipeline = getActivePipeline();
@@ -460,16 +489,17 @@ function updateScanWarnings() {
     const offset = parseInt(getEl('polyceph_scan_offset')?.value) || 0;
     
     const warnEl = getEl('polyceph_scan_warnings');
-    if (!warnEl) return;
+    const previewContainer = getEl('polyceph_scan_preview_container');
+    if (!warnEl || !previewContainer) return;
 
     if (rangeEnd <= rangeStart) {
-        warnEl.style.display = 'none';
+        previewContainer.style.display = 'none';
         return;
     }
     
     const stepSize = batchSize + offset;
     if (stepSize < 1) {
-        warnEl.style.display = 'block';
+        previewContainer.style.display = 'block';
         warnEl.innerHTML = '<span style="color:#ff4d4d">Batch size + offset must be at least 1.</span>';
         return;
     }
@@ -479,6 +509,12 @@ function updateScanWarnings() {
     while (currentIndex < rangeEnd) {
         totalBatches++;
         currentIndex += stepSize;
+    }
+
+    const batchInput = getEl('polyceph_scan_preview_batch');
+    if (batchInput) {
+        batchInput.max = totalBatches;
+        if (parseInt(batchInput.value) > totalBatches) batchInput.value = totalBatches;
     }
     
     let hasNonToolTasks = false;
@@ -507,27 +543,30 @@ function updateScanWarnings() {
     
     const totalApiCalls = totalBatches * totalTasks;
     
-    let warningHtml = `Scan will execute ${totalBatches} batches.<br>Total estimated API calls: ${totalApiCalls}.<br>`;
+    let warningHtml = `<div style="margin-bottom: 5px;">Scan will execute <b>${totalBatches}</b> batches.</div>
+                       <div style="margin-bottom: 10px;">Total estimated API calls: <b>${totalApiCalls}</b>.</div>
+                       <ul style="margin: 0; padding-left: 1.5em; list-style-type: disc;">`;
     
     if (hasNonToolTasks) {
-        warningHtml += `<span style="color: #ff9900;">Warning: Pipeline contains standard text tasks. Their output will NOT be saved to chat during a scan.</span><br>`;
+        warningHtml += `<li style="color: #ff9900; margin-bottom: 5px;">Warning: Pipeline contains standard text tasks. Their output will NOT be saved to chat during a scan.</li>`;
     }
     
     if (hasMissingSkipSuccess) {
-        warningHtml += `<span style="color: #ff9900;">Warning: A Tool/MCP task does not have "Skip Success Recursion" enabled. This may cause unnecessary API calls by asking the AI to continue generating after the tool succeeds.</span><br>`;
+        warningHtml += `<li style="color: #ff9900; margin-bottom: 5px;">Warning: A Tool/MCP task does not have "Skip Success Recursion" enabled. This may cause unnecessary API calls by asking the AI to continue after the tool succeeds.</li>`;
     }
     
     if (lastN !== null && lastN !== batchSize) {
-        warningHtml += `<span style="color: #ff9900;">Warning: A task uses 'last:${lastN}' but Batch Size is ${batchSize}. This may cause unexpected truncation.</span><br>`;
+        warningHtml += `<li style="color: #ff9900; margin-bottom: 5px;">Warning: A task uses 'last:${lastN}' but Batch Size is ${batchSize}. This may cause unexpected truncation.</li>`;
     }
     
     if (hasLiveTrue) {
-        warningHtml += `<span style="color: #ff4d4d;">CRITICAL: A task uses 'live:true'. This bypasses historical batch slicing and will pull the most recent live messages at the bottom of the chat for every single batch instead of the intended historical slice!</span><br>`;
+        warningHtml += `<li style="color: #ff4d4d; margin-bottom: 5px; font-weight: bold;">CRITICAL: A task uses 'live:true'. This bypasses historical batch slicing and will pull the most recent live messages at the bottom of the chat for every single batch instead of the intended historical slice!</li>`;
     }
     
-    warningHtml += `<i>Remember to check Prompt Preview to ensure your token limit doesn't truncate the history below your batch size.</i>`;
+    warningHtml += `<li style="font-style: italic; opacity: 0.8;">Remember to check Prompt Preview to ensure your token limit doesn't truncate the history below your batch size.</li>`;
+    warningHtml += `</ul>`;
     
     warnEl.innerHTML = warningHtml;
-    warnEl.style.display = 'block';
+    previewContainer.style.display = 'block';
 }
 
