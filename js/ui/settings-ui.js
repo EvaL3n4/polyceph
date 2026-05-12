@@ -70,6 +70,12 @@ function syncSettingsToUI() {
 
     setValue('polyceph_prompt_input', settings.polycephPrompt || '');
     setValue('polyceph_mcp_servers_input', settings.mcpServers || '');
+
+    // Scan Settings
+    setValue('polyceph_scan_range_start', settings.scanRangeStart || 0);
+    setValue('polyceph_scan_range_end', settings.scanRangeEnd || 100);
+    setValue('polyceph_scan_batch_size', settings.scanBatchSize || 1);
+    setValue('polyceph_scan_offset', settings.scanOffset || 0);
 }
 
 /**
@@ -313,12 +319,25 @@ export async function addSettingsUI() {
     bindToggle('polyceph_pipeline_actions_toggle', 'polyceph_pipeline_actions_content');
     bindToggle('polyceph_scan_action_toggle', 'polyceph_scan_action_content');
 
-    // Scan Actions
-    const scanInputs = ['polyceph_scan_range_start', 'polyceph_scan_range_end', 'polyceph_scan_batch_size', 'polyceph_scan_offset', 'polyceph_pipeline_selector'];
-    scanInputs.forEach(id => {
-        getEl(id)?.addEventListener('input', updateScanWarnings);
-        getEl(id)?.addEventListener('change', updateScanWarnings);
+    // Scan Settings Persistence
+    const scanMap = {
+        'polyceph_scan_range_start': 'scanRangeStart',
+        'polyceph_scan_range_end': 'scanRangeEnd',
+        'polyceph_scan_batch_size': 'scanBatchSize',
+        'polyceph_scan_offset': 'scanOffset'
+    };
+
+    Object.entries(scanMap).forEach(([id, key]) => {
+        getEl(id)?.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            if (!isNaN(val)) {
+                settings[key] = val;
+                saveSettings();
+                updateScanWarnings();
+            }
+        });
     });
+    getEl('polyceph_pipeline_selector')?.addEventListener('change', updateScanWarnings);
 
     getEl('polyceph_run_scan_btn')?.addEventListener('click', async () => {
         const rangeStart = getEl('polyceph_scan_range_start').value;

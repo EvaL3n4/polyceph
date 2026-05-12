@@ -24,6 +24,10 @@ export const defaultSettings = {
     emulateCoreEvents: true,
     logLevel: 2,
     polycephPrompt: '',
+    scanRangeStart: 0,
+    scanRangeEnd: 100,
+    scanBatchSize: 1,
+    scanOffset: 0,
     pipelines: [
         {
             id: 'default',

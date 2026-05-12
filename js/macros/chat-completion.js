@@ -8,8 +8,15 @@ import { getOpenAIModule, getChatCompletionModule, getMessagesModule } from '../
  * Resolves all active SillyTavern Chat Completion prompts into a single string.
  * Implements token-based history trimming to respect context limits by leveraging
  * SillyTavern's native ChatCompletion and Message classes.
+ * @param {string} text
+ * @param {object[]} cleanChat
+ * @param {object} stContext
+ * @param {string} wiPrompt
+ * @param {object} contextVault
+ * @param {AbortSignal} [signal]
  */
-export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, contextVault) {
+export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, contextVault, signal = null) {
+    if (signal?.aborted) throw new Error('Aborted');
     if (!text) return text;
 
     const ccSettings = stContext.chatCompletionSettings;
@@ -171,14 +178,13 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
             });
         }
 
-        const shadowTokens = await countTokens(shadowPrompt);
+        const shadowTokens = await countTokens(shadowPrompt, signal);
         chatCompletion.reserveBudget(shadowTokens);
 
         // Reserve budget for extension-injected prompts (Lorebook, Vector storage, etc.)
         let injectionTokens = 0;
         if (stContext.extensionPrompts) {
-            const injectionText = Object.values(stContext.extensionPrompts).map(p => p.value || '').join('\n');
-            injectionTokens = await countTokens(injectionText);
+            injectionTokens = await countTokens(injectionText, signal);
             chatCompletion.reserveBudget(injectionTokens);
         }
 
