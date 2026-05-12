@@ -183,50 +183,75 @@
                 </div>
                 <div class="polyceph-settings-section-content" id="polyceph_pipeline_actions_content">
                     <div class="polyceph-settings-section" style="background: var(--black30a);">
-                        <div class="polyceph-settings-section-header" id="polyceph_scan_action_toggle" style="background: transparent;">
+                        <div class="polyceph-settings-section-header" id="polyceph_scan_action_toggle"
+                            style="background: transparent;">
                             <b>Historical Scan</b>
                             <i class="fa-solid fa-chevron-down"></i>
                         </div>
                         <div class="polyceph-settings-section-content" id="polyceph_scan_action_content">
                             <div class="polyceph-info-text" style="margin-bottom: 10px;">
-                                Run the active pipeline across a range of chat history in batches. This will <b>not</b> generate chat messages, but Tool/MCP tasks <b>will</b> execute.
+                                Run the active pipeline across a range of chat history in batches. This will <b>not</b>
+                                generate chat messages, but Tool/MCP tasks <b>will</b> execute.
                             </div>
-                            
+
                             <div class="polyceph-slider-row" style="margin-bottom: 10px;">
                                 <div class="polyceph-slider-item">
                                     <label class="polyceph-field-label">Range Start Msg (0-indexed)</label>
-                                    <input type="number" id="polyceph_scan_range_start" class="text_pole polyceph-w-100" min="0" value="0">
+                                    <input type="number" id="polyceph_scan_range_start" class="text_pole polyceph-w-100"
+                                        min="0" value="0">
                                 </div>
                                 <div class="polyceph-slider-item">
                                     <label class="polyceph-field-label">Range End Msg</label>
-                                    <input type="number" id="polyceph_scan_range_end" class="text_pole polyceph-w-100" min="1" value="100">
+                                    <input type="number" id="polyceph_scan_range_end" class="text_pole polyceph-w-100"
+                                        min="1" value="100">
                                 </div>
                             </div>
-                            
+
                             <div class="polyceph-slider-row" style="margin-bottom: 10px;">
                                 <div class="polyceph-slider-item">
                                     <label class="polyceph-field-label">Batch Size (Messages)</label>
-                                    <input type="number" id="polyceph_scan_batch_size" class="text_pole polyceph-w-100" min="1" value="1">
+                                    <input type="number" id="polyceph_scan_batch_size" class="text_pole polyceph-w-100"
+                                        min="1" value="10">
                                 </div>
                                 <div class="polyceph-slider-item">
                                     <label class="polyceph-field-label">Offset (Messages)</label>
-                                    <input type="number" id="polyceph_scan_offset" class="text_pole polyceph-w-100" value="0" title="Positive skips messages, negative overlaps them.">
+                                    <input type="number" id="polyceph_scan_offset" class="text_pole polyceph-w-100"
+                                        value="0" title="Positive skips messages, negative overlaps them.">
                                 </div>
                             </div>
 
-                            <div id="polyceph_scan_warnings" class="polyceph-info-text" style="color: #ffff00; font-weight: bold; margin-bottom: 10px; display: none;">
+                            <div id="polyceph_scan_preview_container" class="polyceph-step-card"
+                                style="background: var(--black30a); padding: 10px; margin-bottom: 10px; display: none;">
+                                <div id="polyceph_scan_warnings" class="polyceph-info-text"
+                                    style="color: #ffff00; font-weight: bold; margin-bottom: 10px;">
+                                </div>
+                                <div class="polyceph-management-row polyceph-w-100 polyceph-gap-2"
+                                    style="align-items: center;">
+                                    <label class="polyceph-field-label" style="margin: 0; white-space: nowrap;">Preview
+                                        Batch #</label>
+                                    <input type="number" id="polyceph_scan_preview_batch" class="text_pole"
+                                        style="width: 60px;" min="1" value="1">
+                                </div>
+                                <button id="polyceph_scan_preview_btn" class="menu_button polyceph-flex-1"
+                                    style="justify-content: center; gap: 8px; width: 100%;">
+                                    <i class="fa-solid fa-eye"></i> Preview Prompt
+                                </button>
                             </div>
 
                             <div class="polyceph-management-row polyceph-w-100" style="margin-bottom: 10px;">
-                                <button id="polyceph_run_scan_btn" class="menu_button polyceph-flex-1 polyceph-text-red" style="font-weight: bold; border-color: #ff4d4d; justify-content: center; display: flex; gap: 8px;">
+                                <button id="polyceph_run_scan_btn" class="menu_button polyceph-flex-1 polyceph-text-red"
+                                    style="font-weight: bold; border-color: #ff4d4d; justify-content: center; display: flex; gap: 8px;">
                                     <i class="fa-solid fa-play"></i> Run Scan Using Active Pipeline
                                 </button>
-                                <button id="polyceph_stop_scan_btn" class="menu_button" style="display: none; justify-content: center; align-items: center; gap: 8px;">
+                                <button id="polyceph_stop_scan_btn" class="menu_button"
+                                    style="display: none; justify-content: center; align-items: center; gap: 8px; width:100%;">
                                     <i class="fa-solid fa-stop"></i> Stop
                                 </button>
                             </div>
 
-                            <textarea id="polyceph_scan_status_output" class="text_pole polyceph-prompt-textarea" style="height: 150px; display: none; margin-top: 10px; font-size: 0.9em;" readonly></textarea>
+                            <textarea id="polyceph_scan_status_output" class="text_pole polyceph-prompt-textarea"
+                                style="height: 150px; display: none; margin-top: 10px; font-size: 0.9em;"
+                                readonly></textarea>
 
                         </div>
                     </div>
