@@ -18,7 +18,7 @@ Standard AI interaction is linear: you send a prompt, and a single model respond
 - **Multi-Step Pipelines**: Chain multiple LLM calls and output collection templates together in sequential steps.
 - **Parallel Tasking**: Run multiple models simultaneously within a single step to gather diverse perspectives.
 - **In-Chat Selector**: Switch between logic pipelines or bypass Polyceph entirely directly from the chat input bar.
-- **Custom Macros**: Use the output of any previous step or task in subsequent prompts using `{{handlebars}}` placeholders/macros.
+- **Custom Macros**: Use the output of any previous step or task in subsequent prompts using `{{handlebars}}` macros.
 - **Silent Reasoning**: Optionally show pipeline tasks blocks in a dedicated, collapsible "Reasoning" UI element.
 - **Native Swipe Support**: Swiping a Polyceph message reruns the entire pipeline batch, keeping all multi-step results in sync.
 - **Agentic Tool Calling**: Supports multi-pass "thought" cycles. If a model generates tool calls, Polyceph will execute them and provide the results back to the model recursively.
@@ -59,9 +59,9 @@ Polyceph leverages SillyTavern's built-in **Connection Profiles**.
 2. Select your desired pipeline (or "None" to chat normally).
 3. Type a message and hit send!
 
-## Macro & Placeholder Reference
+## Macro & Macro Reference
 
-Route data between tasks using these handlebars placeholders/macros:
+Route data between tasks using these handlebars macros/macros:
 - `{{user_input}}`: The original text from the chat box, the last user message.
 - `{{chat_history|last:10|bg_last:2|live:true|no_extensions:true}}`: Advanced history filtering. Automatically filters out system messages and slash commands. Does not include the last user message.
     - `last:N`: Limit total messages to N.
@@ -74,11 +74,33 @@ Route data between tasks using these handlebars placeholders/macros:
 - `{{char}}`, `{{user}}`, `{{persona}}`, `{{personality}}`, etc.: All standard SillyTavern macros.
 - `{{wi}}` or `{{world_info}}`: **Reactive Context**. Automatically scans chat context and injects relevant Lorebook entries. This is performed **per-task**, so updates made to the lorebook during a pipeline are visible to subsequent steps.
     - `{{wi|before}}` / `{{wi|after}}`: Injects only the entries assigned to that specific position in SillyTavern settings.
-- `{{polyceph_prompt}}`: The global Polyceph Prompt defined in extension settings. Evaluated **recursively** (can contain other placeholders).
+- `{{polyceph_prompt}}`: The global Polyceph Prompt defined in extension settings. Evaluated **recursively** (can contain other macros).
 - `{{cc_main_prompt}}`, `{{cc_aux_prompt}}`: Specific Chat Completion prompts.
 - `{{cc_post_history_instructions}}`, `{{cc_enhance_definitions}}`: Other individual CC prompts.
 - `{{cc_all_prompts}}`: **Comprehensive Context**. Rebuilds the *entire* SillyTavern prompt list exactly as configured in your settings. Resolves all enabled markers (Description, Personality, World Info, History, Examples) and all extension injections in their correct order and depth.
 
+
+## Prompt Structuring (Role Tags)
+
+Polyceph allows you to define complex, multi-message prompts within a single task template by using role tags. This is essential for few-shot prompting or separating instructions from user data.
+
+- **Shorthand Syntax**: Use `[[system]]`, `[[user]]`, `[[assistant]]`, or `[[tool]]` as dividers to start a new message block.
+- **Forcing by Default**: Manual tags are **forcing**. Any internal role tags (such as the `[[ROLE:user]]` tags automatically added to macros like `{{user_input}}` or `{{chat_history}}`) are stripped/flattened into the surrounding role.
+- **Permissive Mode**: Use `[[system?]]`, `[[user?]]`, etc., to allow internal macro role tags found within the content to switch roles normally.
+- **Termination**: Use `[[/]]` to end a block and return to the task's default primary role.
+- **Custom Names**: `[[assistant:Nialyn]]` sets both the role and the `name` property for the message (useful for multi-character interactions).
+
+Example:
+```markdown
+[[system]]
+You are an expert summarizer.
+[[user]]
+Please summarize the following:
+[[system]]
+{{user_input}}
+[[/]]
+End of instructions.
+```
 
 ## Postprocessing Tags
 
@@ -116,11 +138,12 @@ Polyceph provides a robust, recursive environment for LLM tools.
 
 When a pipeline task is executed, Polyceph performs the following steps:
 
-1.  **Macro Expansion** (`js/macros.js`): The task's prompt template is resolved. All `{{handlebars}}` placeholders — including `{{chat_history}}`, `{{cc_all_prompts}}`, `{{wi}}`, and standard SillyTavern macros like `{{char}}` — are expanded into their final text. To ensure high-quality context, Polyceph automatically filters out system messages and slash commands before processing history-based macros. For Chat Completion macros like `{{cc_all_prompts}}`, Polyceph reads the active **Prompt Manager** order and resolves each enabled prompt (Main, Persona Description, Character Description, etc.) in the exact sequence configured in your Chat Completion settings.
+1.  **Macro Expansion** (`js/macros.js`): The task's prompt template is resolved. All `{{handlebars}}` macros — including `{{chat_history}}`, `{{cc_all_prompts}}`, `{{wi}}`, and standard SillyTavern macros like `{{char}}` — are expanded into their final text. To ensure high-quality context, Polyceph automatically filters out system messages and slash commands before processing history-based macros. For Chat Completion macros like `{{cc_all_prompts}}`, Polyceph reads the active **Prompt Manager** order and resolves each enabled prompt (Main, Persona Description, Character Description, etc.) in the exact sequence configured in your Chat Completion settings.
 
-2.  **Role Tagging** (`js/engine.js`): The expanded prompt is parsed for `[[ROLE:system]]`, `[[ROLE:user]]`, and `[[ROLE:assistant]]` tags. These are converted into a structured message array (`[{role, content}, ...]`) that Chat Completion APIs expect. If no role tags are present, the entire prompt is sent as a single `system` message. The parser validates tag structure and warns in the console if:
-    -   Content exists outside role tags (will be sent as an implicit `system` message).
-    -   Opening and closing tag counts don't match (possible malformed template).
+2.  **Role Tagging** (`js/engine/parser.js`): The expanded prompt is parsed for role tags (both shorthands like `[[user]]` and canonical tags like `[[ROLE:user]]`). These are converted into a structured message array (`[{role, content, name}, ...]`) that Chat Completion APIs expect. 
+    - **Sequential Parsing**: The parser processes the prompt as a stream, maintaining a state machine to handle "Forced" vs "Permissive" blocks.
+    - **Forced Blocks**: Manual tags ignore internal `[[ROLE:...]]` tags to allow users to override macro-injected roles.
+    - **Dynamic Default**: If no role tags are present, the entire prompt defaults to a role based on the task type (e.g., `user` for character tasks, `system` for others).
 
 3.  **Token Budget Check** (`js/compat-shared.js`): Before sending, Polyceph checks the prompt's token count against the active context window. It reads the live context limit from `oai_settings.openai_max_context` (for Chat Completion) or the global `max_context` (for Text Completion) and warns in the console if the prompt exceeds the available budget after reserving space for the response.
 
@@ -150,4 +173,3 @@ When a pipeline task is executed, Polyceph performs the following steps:
 - **Restore Profile & Preset after Run**: Automatically returns SillyTavern to the connection profile and preset you were using before the pipeline started.
 - **Show Hidden Background Messages**: Toggles the visibility of `<background>` messages in the chat history (displays them with a special separator).
 - **Show Reasoning Blocks**: Toggles the display of collapsible reasoning blocks in chat messages.
-

@@ -2,7 +2,7 @@ import { MODULE_NAME, generationMutexEvents } from './constants.js';
 import { settings, switchProfile, getActivePipeline, availableProfiles, saveSettings, clearProfileState } from './state.js';
 import { generateId, waitForApiReady } from './utils.js';
 import { expandPrompt } from './macros/macros.js';
-import { getMaxContextTokens, getMaxResponseTokens, countTokens, generateViaApi, postMessageToChat, ensureChatSaved, getWorldInfoForChat, getActiveCharacterInfo, getMainSystemPrompt } from './compat-shared.js';
+import { getMaxContextTokens, getMaxResponseTokens, countTokens, postMessageToChat, ensureChatSaved, getWorldInfoForChat, getActiveCharacterInfo, getMainSystemPrompt } from './compat-shared.js';
 import { clearPresetState, applyPreset, getCurrentPresetName } from './compat-presets.js';
 import { logger } from './logger.js';
 
@@ -12,7 +12,7 @@ import { parseOutputTags, parsePromptToMessages } from './engine/parser.js';
 import { captureSessionState, restoreSessionState } from './engine/state-manager.js';
 import { finalizePipelineTeardown } from './engine/teardown.js';
 import { executePipelineSteps } from './engine/orchestrator.js';
-import { generateQuietly } from './engine/generator.js';
+import { generateQuietly } from './engine/generator/generator.js';
 
 // Re-exports for backward compatibility with index.js and other files
 export { forceHideStopButton, startTypingIndicator, removeTypingIndicator, updateTypingIndicator, clearOrphanedIndicators };
@@ -30,10 +30,31 @@ function initMutexTracker() {
     if (context.eventSource) {
         context.eventSource.on(generationMutexEvents.MUTEX_CAPTURED, (data) => {
             currentMutexHolder = data?.extension_name || 'unknown';
+            updateWaitingTaskLabel();
         });
         context.eventSource.on(generationMutexEvents.MUTEX_RELEASED, () => {
             currentMutexHolder = null;
+            updateWaitingTaskLabel();
         });
+    }
+}
+
+/**
+ * Surgically updates the "Waiting for Extensions" label in the typing indicator.
+ */
+function updateWaitingTaskLabel() {
+    const stContext = SillyTavern.getContext();
+    const typingIdx = stContext.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
+    const typingMsg = typingIdx !== -1 ? stContext.chat[typingIdx] : null;
+
+    if (typingMsg && typingMsg.extra.polyceph_active_tasks) {
+        const waitingTask = typingMsg.extra.polyceph_active_tasks.find(t => t.id === 'waiting');
+        if (waitingTask) {
+            waitingTask.label = currentMutexHolder 
+                ? `Waiting for Extensions (${currentMutexHolder})...` 
+                : 'Waiting for Extensions...';
+            updateTypingIndicator();
+        }
     }
 }
 initMutexTracker();
@@ -65,7 +86,6 @@ export function stopPipeline() {
         toastr.warning('Stopping pipeline...', 'Polyceph');
     }
 }
-
 
 export async function startPipeline(text, generateSwipesForBatchId, triggeringUserMesId = -1) {
     try {
@@ -132,7 +152,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
                     id: 'waiting',
                     step: 1,
                     totalSteps: 1,
-                    label: 'Waiting for Extensions...',
+                    label: currentMutexHolder ? `Waiting for Extensions (${currentMutexHolder})...` : 'Waiting for Extensions...',
                     profile: 'System'
                 });
                 updateTypingIndicator();
@@ -148,6 +168,13 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
 
             // Recapture mutex AFTER core events for the actual pipeline execution.
             logger.debug('Recapturing mutex for pipeline execution...');
+
+            // Remove waiting status
+            if (typingMsg && typingMsg.extra.polyceph_active_tasks) {
+                typingMsg.extra.polyceph_active_tasks = typingMsg.extra.polyceph_active_tasks.filter(t => t.id !== 'waiting');
+                updateTypingIndicator();
+            }
+
             await stContext.eventSource.emit(generationMutexEvents.MUTEX_CAPTURED, { extension_name: MODULE_NAME });
 
             logger.debug(`Mutex recaptured. signal.aborted = ${signal.aborted}`);
@@ -175,13 +202,13 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
         // 1. Immediate UI Cleanup
         await removeTypingIndicator();
         forceHideStopButton();
-        
+
         // Give UI a moment to settle
         await new Promise(r => setTimeout(r, 100));
 
         // 2. Restore the user's original session state
         await restoreSessionState();
-        
+
         currentPipelineAbortController = null;
 
         // 3. Final Event Emulation & Mutex Release

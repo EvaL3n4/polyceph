@@ -24,11 +24,11 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: var(--black10a);
+    background: var(--black30a);
 }
 
 .polyceph-placeholders-header:hover {
-    background: var(--black40a);
+    background: var(--black50a);
 }
 
 .polyceph-placeholders-content {
@@ -42,6 +42,56 @@
 }
 
 /* Step and Node List Layout (from former pipeline.css) */
+.polyceph-step-tabs {
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    gap: 8px;
+    padding: 10px 0;
+    margin-bottom: 5px;
+    border-bottom: 1px solid var(--black30a);
+    scrollbar-width: none;
+    /* Firefox */
+    user-select: none;
+    cursor: grab;
+}
+
+.polyceph-step-tabs::-webkit-scrollbar {
+    display: none;
+    /* Chrome, Safari, Opera */
+}
+
+.polyceph-step-tabs:active {
+    cursor: grabbing;
+}
+
+.polyceph-step-tab {
+    padding: 6px 16px;
+    background: var(--black30a);
+    border: 1px solid var(--black30a);
+    border-radius: 4px 4px 0 0;
+    font-size: 0.9em;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    opacity: 0.7;
+}
+
+.polyceph-step-tab:hover {
+    background: var(--black50a);
+    opacity: 1;
+}
+
+.polyceph-step-tab.active {
+    background: var(--black50a);
+    border-bottom: 2px solid var(--SmartThemeQuoteColor);
+    opacity: 1;
+    font-weight: bold;
+}
+
 .polyceph-step-list {
     display: flex;
     flex-direction: column;
@@ -49,14 +99,23 @@
     margin-bottom: 15px;
 }
 
+.polyceph-step-list .polyceph-step-card {
+    display: none;
+    /* Hidden by default inside the list */
+}
+
 .polyceph-step-card {
     background-color: var(--black50a);
     border: 1px solid var(--black30a);
     border-radius: 5px;
     padding: 10px;
-    display: flex;
     flex-direction: column;
     gap: 10px;
+    display: flex;
+}
+
+.polyceph-step-list .polyceph-step-card.active {
+    display: flex;
 }
 
 .polyceph-step-header {
@@ -64,8 +123,6 @@
     justify-content: space-between;
     align-items: center;
     font-weight: bold;
-    border-bottom: 1px solid var(--black30a);
-    padding-bottom: 5px;
 }
 
 .polyceph-nodes-list {
@@ -99,6 +156,10 @@
     width: stretch;
 }
 
+.polyceph-node-header-label-row>i.fa-trash {
+    font-size: 0.9rem;
+}
+
 .polyceph-node-header-controls {
     display: flex;
     gap: 5px;
@@ -121,6 +182,7 @@
     font-family: monospace;
     font-size: 0.85em;
     line-height: 1.4;
+    max-height: 64dvh;
 }
 
 .polyceph-add-node-btn,
@@ -128,7 +190,7 @@
 #polyceph_refresh_profiles,
 #polyceph_preview_prompts_btn {
     width: 100%;
-    margin-top: 10px;
+    gap: 5px;
 }
 
 .polyceph-coming-soon {
@@ -136,3 +198,42 @@
     cursor: not-allowed !important;
 }
 
+.polyceph-textarea-container {
+    position: relative;
+    width: 100%;
+}
+
+.polyceph-textarea-container .editor_maximize,
+.polyceph-textarea-container .polyceph-line-toggle {
+    position: absolute;
+    top: -17px;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+    background: var(--black70a);
+    padding: 4px;
+    border-radius: 4px;
+    z-index: 10;
+    cursor: pointer;
+}
+
+.polyceph-textarea-container .editor_maximize {
+    right: 0px;
+}
+
+.polyceph-textarea-container .polyceph-line-toggle {
+    left: 0px;
+}
+
+.polyceph-textarea-container .editor_maximize:hover,
+.polyceph-textarea-container .polyceph-line-toggle:hover {
+    opacity: 1;
+}
+
+.polyceph-textarea-container textarea {
+    padding-right: 30px;
+    /* Make room for the button */
+}
+
+.polyceph-locked .editor_maximize {
+    display: none !important;
+}

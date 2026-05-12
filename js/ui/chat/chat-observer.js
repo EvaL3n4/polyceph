@@ -1,4 +1,4 @@
-import { renderPolycephThoughts } from './thoughts-renderer.js';
+import { renderPolycephThoughts } from './thoughts/thoughts-renderer.js';
 
 /**
  * Monitors SillyTavern's deletion mode dialog to toggle a helper class on the body.

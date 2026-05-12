@@ -67,7 +67,6 @@ export async function handleCharacterOutput(content, thoughts, charIndex, node, 
     const extraData = {
         polyceph_source: 'polyceph',
         polyceph_batch: batchId,
-        polyceph_input: userInput,
         polyceph_task_id: node.id,
         polyceph_pipeline: pipelineName,
         api: api,
@@ -75,6 +74,7 @@ export async function handleCharacterOutput(content, thoughts, charIndex, node, 
     };
     if (thoughts && thoughts.length > 0) {
         extraData.polyceph_thoughts = thoughts;
+        logger.debug(`Attaching ${thoughts.length} thoughts to character message extraData.`);
     }
 
     if (generateSwipesForBatchId && charIndex < batchCharMessages.length) {
@@ -117,7 +117,7 @@ export async function handleCharacterOutput(content, thoughts, charIndex, node, 
 /**
  * Persists any leftover thoughts into a "Polyceph Reasoning" message.
  */
-export async function persistReasoningMessage(thoughts, batchData, userInput) {
+export async function persistReasoningMessage(thoughts, batchData) {
     const stContext = SillyTavern.getContext();
     const { batchId, batchReasoningMsg, generateSwipesForBatchId } = batchData;
 
@@ -143,7 +143,7 @@ export async function persistReasoningMessage(thoughts, batchData, userInput) {
         postMessageToChat({
             content: '',
             name: 'Polyceph Reasoning',
-            extra: { polyceph_source: 'polyceph', polyceph_batch: batchId, polyceph_input: userInput, polyceph_thoughts: thoughts },
+            extra: { polyceph_source: 'polyceph', polyceph_batch: batchId, polyceph_thoughts: thoughts },
             api: stContext.mainApi,
             model: stContext.model,
         });

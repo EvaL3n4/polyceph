@@ -21,8 +21,6 @@
 }
 
 .polyceph-preview-task-container {
-    border: 1px solid var(--SmartThemeBodyColor);
-    border-radius: 5px;
     padding: 15px;
     background: var(--SmartThemeChatTintColor);
     height: 100%;
@@ -60,16 +58,26 @@
 
 .polyceph-preview-textarea {
     width: 100%;
-    min-height: 250px;
+    flex: 1; /* Fill remaining vertical space */
     font-family: 'Courier New', Courier, monospace;
     font-size: 0.9em;
     background: var(--SmartThemeChatTintColor) !important;
     color: var(--SmartThemeBodyColor);
     line-height: 1.4;
-    resize: vertical;
     border: none;
     padding: 10px;
     text-align: start;
+    overflow: hidden; /* Let CodeMirror handle scrolling */
+}
+
+/* Force CodeMirror to fill the flex container and use internal scrolling */
+.polyceph-preview-cm + .CodeMirror {
+    flex: 1;
+    height: 100% !important;
+}
+
+.polyceph-preview-cm + .CodeMirror .CodeMirror-scroll {
+    height: 100% !important;
 }
 
 .polyceph-preview-div {

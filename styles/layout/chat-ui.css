@@ -79,7 +79,6 @@
     pointer-events: auto !important;
 }
 
-
 .polyceph-chat-pipeline-icon:active {
     transform: scale(0.9);
     opacity: 0.7;
@@ -99,7 +98,6 @@
         /* Larger label for touch */
     }
 }
-
 
 .polyceph-chat-pipeline-selector:hover {
     background-color: var(--SmartThemeBotMesBlurTintColor, rgba(0, 0, 0, 0.4));

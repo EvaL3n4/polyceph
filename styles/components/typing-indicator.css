@@ -68,6 +68,21 @@
     opacity: 0.7;
 }
 
+.polyceph-task-recursion-tag {
+    color: var(--SmartThemeQuoteColor);
+    font-size: 0.9em;
+    margin-left: 4px;
+    font-weight: normal;
+    opacity: 0.9;
+}
+
+.polyceph-task-status-waiting {
+    font-size: 0.9em;
+    opacity: 0.7;
+    font-weight: normal;
+    font-style: italic;
+}
+
 @keyframes polyceph-pulse {
     0% {
         opacity: 0.7;

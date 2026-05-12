@@ -1,7 +1,7 @@
 import { settings } from '../state.js';
 import { syncHiddenMessageVisibility } from './ui-shared.js';
 import { monitorDeletionMode, initChatObserver } from './chat/chat-observer.js';
-import { renderPolycephThoughts } from './chat/thoughts-renderer.js';
+import { renderPolycephThoughts } from './chat/thoughts/thoughts-renderer.js';
 
 import { updateChatSelectorOptions, updateSendButtonVisibility } from './chat-ui.js';
 

@@ -78,7 +78,7 @@
     justify-content: center;
     background: var(--SmartThemeShadowColor);
     border-radius: 4px;
-    color: var(--white);
+    color: var(--SmartThemeBodyColor);
     transition: all 0.2s ease;
 }
 
@@ -105,13 +105,13 @@
 
 .polyceph-page-btn:hover {
     background: var(--black50a);
-    border-color: var(--gold);
+    border-color: var(--SmartThemeQuoteColor);
 }
 
 .polyceph-page-btn.active {
-    background: var(--gold);
-    color: var(--SmartThemeQuoteColor);
-    border-color: var(--gold);
+    background: var(--SmartThemeQuoteColor);
+    color: var(--white);
+    border-color: var(--SmartThemeQuoteColor);
     font-weight: bold;
 }
 

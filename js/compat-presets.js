@@ -79,6 +79,44 @@ export function getAvailablePresets(apiId = '') {
 }
 
 /**
+ * Retrieves the settings object for a specific preset by name.
+ * 
+ * @param {string} name - The display name of the preset.
+ * @param {string} apiId - Optional API ID.
+ * @returns {object|null} The preset settings object or null if not found.
+ */
+export function getPresetSettings(name, apiId = '') {
+    if (!name || name === 'Current') return null;
+
+    const pm = getPresetManagerSafe(apiId);
+    if (!pm) return null;
+
+    try {
+        if (typeof pm.getCompletionPresetByName === 'function') {
+            const settings = pm.getCompletionPresetByName(name);
+            if (settings) {
+                logger.debug(`Fetched settings for preset "${name}":`, Object.keys(settings));
+                return settings;
+            }
+        }
+        
+        // Fallback for older ST versions or if the method above fails
+        const presetValue = pm.findPreset(name);
+        if (presetValue == null) return null;
+        
+        const { presets } = pm.getPresetList() || {};
+        if (presets && presets[presetValue]) {
+            return presets[presetValue];
+        }
+        
+        return null;
+    } catch (e) {
+        logger.warn(`Error fetching settings for preset "${name}" on API "${apiId}":`, e);
+        return null;
+    }
+}
+
+/**
  * Returns the name of the currently selected preset for the active API.
  *
  * @returns {string} Current preset name, or empty string if unavailable.

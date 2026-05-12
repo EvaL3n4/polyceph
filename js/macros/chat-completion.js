@@ -1,5 +1,5 @@
 import { countTokens, getMaxContextTokens, getMaxResponseTokens, getWorldInfoForChat } from '../compat-shared.js';
-import { logger, wrapRole } from './utils.js';
+import { logger, wrapRole, encodeInvocations } from './utils.js';
 import { weaveInjections } from './history.js';
 
 import { getOpenAIModule, getChatCompletionModule, getMessagesModule } from '../compat-st.js';
@@ -135,7 +135,7 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
 
                         let encodedInvocations = '';
                         if (!m.is_injection && m.extra?.tool_invocations && Array.isArray(m.extra.tool_invocations)) {
-                            encodedInvocations = `\n[[INVOCATIONS:${JSON.stringify(m.extra.tool_invocations)}]]`;
+                            encodedInvocations = `\n[[INVOCATIONS:${encodeInvocations(m.extra.tool_invocations)}]]`;
                         }
 
                         return `[[ROLE:${mRole}]]\n${m.mes || ''}${encodedInvocations}\n[[/ROLE]]`;
@@ -224,7 +224,10 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
         for (const entry of promptOrder) {
             if (!entry.enabled) continue;
             const content = await resolveIdentifier(entry.identifier, trimmedChat);
-            if (content.trim()) allPrompts.push(content.trim());
+            if (content.trim()) {
+                logger.debug(`resolveCCMacros: Resolved ${entry.identifier} (len: ${content.length}).`);
+                allPrompts.push(content.trim());
+            }
         }
 
         logger.debug(`CC Macro Resolution - Budget: ${historyBudget}, Overhead: ${shadowTokens}, Context: ${maxContext}`);
@@ -251,6 +254,7 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
 
     // 3. Resolve individual macros (no trimming for specific requests)
     if (result.includes('{{cc_main_prompt}}')) result = result.replace(/\{\{cc_main_prompt\}\}/g, await resolveIdentifier('main', cleanChat));
+    if (result.includes('{{system_prompt}}')) result = result.replace(/\{\{system_prompt\}\}/g, await resolveIdentifier('main', cleanChat));
     if (result.includes('{{cc_aux_prompt}}')) {
         const content = await resolveIdentifier('nsfw', cleanChat);
         result = result.replace(/\{\{cc_aux_prompt\}\}/g, content);

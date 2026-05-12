@@ -1,15 +1,15 @@
 export const MODULE_NAME = 'polyceph';
-export const VERSION = '0.8.8';
+export const VERSION = '0.10.1';
 export const PIPELINE_DATA_VERSION = '1.0.0';
+export const DEFAULT_TOOL_RECURSION_LIMIT = 5; //fallback
 
 export const defaultSettings = {
     delayMs: 250,
     generationTimeoutMs: 60000,
     maxRetries: 3,
+    maxToolRetries: 3,
     retryDelayMs: 2000,
-    enableStreaming: true,
     loopDetectionThreshold: 3,
-    toolRecursionLimit: 5,
     activePipelineId: 'default',
     interceptSend: true,
     enterBehavior: 'all',
@@ -18,6 +18,7 @@ export const defaultSettings = {
     compactSelectorMode: false,
     showHiddenMessages: false,
     showReasoning: true,
+    showOnlyLastRecursion: false,
     stickyTypingIndicator: false,
     restore_after_run: true,
     emulateCoreEvents: true,
@@ -41,8 +42,12 @@ export const defaultSettings = {
                             template: '{{user_input}}',
                             persist: false,
                             isCharacter: false,
+                            outputType: 'internal',
                             stripThink: true,
-                            antiLoop: true
+                            antiLoop: true,
+                            allowTools: true,
+                            hideSuccessResponse: false,
+                            skipSuccessRecursion: false
                         }
                     ]
                 }

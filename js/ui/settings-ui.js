@@ -1,16 +1,20 @@
 import { settings, saveSettings, availableProfiles, availablePresetsByApi, clearProfileState, getAvailableProfiles, getActivePipeline, createPipeline, duplicatePipeline, togglePipelineLock, movePipelineUp, movePipelineDown, addImportedPipeline, deletePipeline, refreshPresets } from '../state.js';
 import { MODULE_NAME, VERSION } from '../constants.js';
 import { generateId } from '../utils.js';
-import { setLogLevel } from '../logger.js';
+import { setLogLevel, logger } from '../logger.js';
+
 import { updateChatSelectorOptions } from './chat-ui.js';
 import { getEl, bindToggle, renderNeoSlider, syncHiddenMessageVisibility, SELECTORS } from './ui-shared.js';
-import { updatePipelineEditorUI, bindStepEvents } from './settings/pipeline-editor.js';
+import { updatePipelineEditorUI, bindStepEvents, setActiveStepIndex, activeStepIndex } from './settings/pipeline-editor/pipeline-editor.js';
+
 import { getExtensionPath, getPopupModule } from '../compat-st.js';
 import { showPromptPreview } from './settings/prompt-preview.js';
 import { exportPipeline, importPipeline } from './settings/import-export.js';
+import { renderPolycephThoughts } from './ui.js';
+import { createPromptEditor } from './settings/prompt-editor.js';
+import { mcpService } from '../engine/generator/services/mcp-service.js';
 
 let Popup = null;
-
 
 /**
  * Updates the entire settings UI.
@@ -37,8 +41,10 @@ function syncSettingsToUI() {
     setChecked('polyceph_show_icon_checkbox', settings.showPipelineIcon !== false);
     setChecked('polyceph_compact_selector_checkbox', settings.compactSelectorMode);
     setChecked('polyceph_show_reasoning_checkbox', settings.showReasoning !== false);
+    setChecked('polyceph_show_only_last_recursion_checkbox', settings.showOnlyLastRecursion);
     setChecked('polyceph_sticky_typing_checkbox', settings.stickyTypingIndicator);
     setChecked('polyceph_show_hidden_checkbox', settings.showHiddenMessages);
+    setChecked('polyceph_continue_on_failure_checkbox', settings.continueOnFailure);
 
     // Behavior Settings
     setChecked('polyceph_restore_after_run_checkbox', settings.restore_after_run);
@@ -53,15 +59,15 @@ function syncSettingsToUI() {
         if (container) container.innerHTML = renderNeoSlider(label, id, val, min, max, step);
     };
 
-    injectSlider('polyceph_tool_recursion_limit_container', 'Tool Recursion Limit', 'polyceph_tool_recursion_limit', settings.toolRecursionLimit || 5, 0, 20, 1);
     injectSlider('polyceph_delay_container', 'Request Delay (ms)', 'polyceph_delay', settings.delayMs || 0, 0, 5000, 50);
     injectSlider('polyceph_generation_timeout_container', 'Model Timeout (ms)', 'polyceph_generation_timeout', settings.generationTimeoutMs !== undefined ? settings.generationTimeoutMs : 60000, 0, 300000, 1000);
-    injectSlider('polyceph_max_retries_container', 'Max Retries', 'polyceph_max_retries', settings.maxRetries !== undefined ? settings.maxRetries : 3, 0, 10, 1);
+    injectSlider('polyceph_max_retries_container', 'Max Attempts', 'polyceph_max_retries', settings.maxRetries !== undefined ? settings.maxRetries : 3, 1, 10, 1);
     injectSlider('polyceph_retry_delay_container', 'Retry Delay (ms)', 'polyceph_retry_delay', settings.retryDelayMs !== undefined ? settings.retryDelayMs : 2000, 0, 10000, 100);
-    injectSlider('polyceph_loop_threshold_container', 'Loop Detection Threshold', 'polyceph_loop_threshold', settings.loopDetectionThreshold !== undefined ? settings.loopDetectionThreshold : 3, 1, 10, 1);
+    injectSlider('polyceph_max_tool_retries_container', 'Tool Call Attempts', 'polyceph_max_tool_retries', settings.maxToolRetries !== undefined ? settings.maxToolRetries : 3, 1, 10, 1);
+    injectSlider('polyceph_loop_threshold_container', 'Streaming Loop Detection Threshold', 'polyceph_loop_threshold', settings.loopDetectionThreshold !== undefined ? settings.loopDetectionThreshold : 3, 1, 10, 1);
 
-    setChecked('polyceph_enable_streaming_checkbox', settings.enableStreaming !== false);
     setValue('polyceph_prompt_input', settings.polycephPrompt || '');
+    setValue('polyceph_mcp_servers_input', settings.mcpServers || '');
 }
 
 /**
@@ -98,11 +104,12 @@ export async function addSettingsUI() {
     // Sync state before binding events
     syncSettingsToUI();
     updateUI();
+    updateMcpStatus();
 
     // Bind Global Settings
     const bindSlider = (id, settingKey) => {
         // We use event delegation or re-query because sliders were just injected
-        const parent = wrapper; 
+        const parent = wrapper;
         const slider = parent.querySelector('#' + id);
         const input = parent.querySelector('#' + id + '_value');
         if (!slider || !input) return;
@@ -126,14 +133,8 @@ export async function addSettingsUI() {
     bindSlider('polyceph_generation_timeout', 'generationTimeoutMs');
     bindSlider('polyceph_max_retries', 'maxRetries');
     bindSlider('polyceph_retry_delay', 'retryDelayMs');
-    bindSlider('polyceph_tool_recursion_limit', 'toolRecursionLimit');
+    bindSlider('polyceph_max_tool_retries', 'maxToolRetries');
     bindSlider('polyceph_loop_threshold', 'loopDetectionThreshold');
-
-    // Enable Streaming toggle
-    getEl('polyceph_enable_streaming_checkbox')?.addEventListener('change', (e) => {
-        settings.enableStreaming = e.target.checked;
-        saveSettings();
-    });
 
     // Global settings toggles
     getEl('polyceph_show_hidden_checkbox')?.addEventListener('change', (e) => {
@@ -142,10 +143,21 @@ export async function addSettingsUI() {
         saveSettings();
     });
 
+    getEl('polyceph_continue_on_failure_checkbox')?.addEventListener('change', (e) => {
+        settings.continueOnFailure = e.target.checked;
+        saveSettings();
+    });
+
     getEl('polyceph_show_reasoning_checkbox')?.addEventListener('change', (e) => {
         settings.showReasoning = e.target.checked;
         syncHiddenMessageVisibility();
         saveSettings();
+    });
+
+    getEl('polyceph_show_only_last_recursion_checkbox')?.addEventListener('change', (e) => {
+        settings.showOnlyLastRecursion = e.target.checked;
+        saveSettings();
+        renderPolycephThoughts(true);
     });
 
     getEl('polyceph_sticky_typing_checkbox')?.addEventListener('change', (e) => {
@@ -200,10 +212,17 @@ export async function addSettingsUI() {
         if (SillyTavern.getContext().eventSource) SillyTavern.getContext().eventSource.emit('polyceph-settings-changed');
     });
 
-    getEl('polyceph_prompt_input')?.addEventListener('input', (e) => {
-        settings.polycephPrompt = e.target.value;
+    createPromptEditor(getEl('polyceph_prompt_input'), (val) => {
+        settings.polycephPrompt = val;
         saveSettings();
     });
+
+    getEl('polyceph_mcp_servers_input')?.addEventListener('input', (e) => {
+        settings.mcpServers = e.target.value;
+        saveSettings();
+    });
+
+    bindToggle('polyceph_mcp_settings_toggle', 'polyceph_mcp_settings_content');
 
     // Pipeline Manager Events
     getEl(SELECTORS.SETTINGS_SELECTOR)?.addEventListener('change', (e) => {
@@ -273,7 +292,6 @@ export async function addSettingsUI() {
         }
     });
 
-
     getEl(SELECTORS.NAME_INPUT)?.addEventListener('input', (e) => {
         const pipeline = getActivePipeline();
         if (pipeline) {
@@ -289,6 +307,7 @@ export async function addSettingsUI() {
     bindToggle('polyceph_placeholders_toggle', 'polyceph_placeholders_content');
     bindToggle('polyceph_ui_settings_toggle', 'polyceph_ui_settings_content');
     bindToggle('polyceph_behavior_settings_toggle', 'polyceph_behavior_settings_content');
+    bindToggle('polyceph_pipeline_settings_toggle', 'polyceph_pipeline_settings_content');
 
     // Pipeline Steps
     getEl('polyceph_add_step_btn')?.addEventListener('click', () => {
@@ -297,12 +316,37 @@ export async function addSettingsUI() {
             id: 'step_' + generateId(),
             tasks: [{ id: 'task_' + generateId(), profile: '', preset: 'Current', template: '{{user_input}}' }]
         });
+        setActiveStepIndex(pipeline.steps.length - 1);
+
         saveSettings();
         updateUI();
     });
 
-    getEl('polyceph_preview_prompts_btn')?.addEventListener('click', async () => {
-        await showPromptPreview();
+    getEl('polyceph_preview_prompts_btn')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        const originalHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Processing...';
+
+        try {
+            const pipeline = getActivePipeline();
+            const currentStepIdx = activeStepIndex;
+            let targetIdx = 0;
+
+            if (pipeline && pipeline.steps[currentStepIdx]) {
+                for (let i = 0; i < currentStepIdx; i++) {
+                    targetIdx += pipeline.steps[i].tasks.length;
+                }
+            }
+
+            await showPromptPreview(targetIdx);
+        } catch (err) {
+            toastr.error('Failed to generate prompt preview.');
+            console.error(err);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        }
     });
 
     getEl('polyceph_refresh_profiles')?.addEventListener('click', async () => {
@@ -312,4 +356,33 @@ export async function addSettingsUI() {
         toastr.success(`Found ${availableProfiles.length} profiles, ${totalPresets} presets.`, 'Polyceph');
         updateUI();
     });
+
+    // Listen for SillyTavern settings changes to update our UI warnings (e.g. Function Calling disabled)
+    const context = SillyTavern.getContext();
+    if (context.eventSource && context.eventTypes) {
+        context.eventSource.on(context.eventTypes.CHAT_COMPLETION_SETTINGS_READY, () => {
+            logger.debug('ST Chat Completion settings ready, refreshing Polyceph UI...');
+            updateUI();
+        });
+    }
 }
+
+/**
+ * Updates the MCP Hub status badge in the settings UI.
+ */
+async function updateMcpStatus() {
+    const badge = getEl('polyceph_mcp_hub_badge');
+    if (!badge) return;
+
+    const available = await mcpService.checkHub();
+    if (available) {
+        badge.textContent = 'Connected';
+        badge.className = 'polyceph-status-badge connected';
+        // Auto-connect to MCP tool hub if found
+        await mcpService.connectToHub();
+    } else {
+        badge.textContent = 'Not Connected';
+        badge.className = 'polyceph-status-badge disconnected';
+    }
+}
+

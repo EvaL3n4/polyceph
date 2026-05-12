@@ -16,7 +16,7 @@ export function forceHideStopButton() {
 
     if (stStopBtn) stStopBtn.style.display = 'none';
     if (polyStopBtn) polyStopBtn.style.display = 'none';
-    
+
     if (stSendBut) {
         stSendBut.style.display = '';
         stSendBut.style.opacity = '1';
@@ -25,7 +25,6 @@ export function forceHideStopButton() {
     }
 
     document.body.classList.remove('polyceph-pipeline-active');
-
 
     if (typeof context.activateSendButtons === 'function') {
         context.activateSendButtons();
@@ -56,6 +55,41 @@ export function updateTypingIndicator() {
     const typingIdx = context.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
     if (typingIdx !== -1 && typeof context.updateMessageBlock === 'function') {
         context.updateMessageBlock(typingIdx, context.chat[typingIdx]);
+    }
+}
+
+/**
+ * Surgically updates a specific task's status in the typing indicator.
+ * @param {string} taskId - The ID of the task to update.
+ * @param {string} status - The new status string (e.g., 'generating', 'waiting').
+ * @param {string} [labelOverride] - Optional new label for the task.
+ * @param {object} [metadata] - Optional additional data (e.g., { turn: 2 }).
+ */
+export function updateTaskStatus(taskId, status, labelOverride = null, metadata = {}) {
+    const currentContext = SillyTavern.getContext();
+    const idx = currentContext.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
+    if (idx !== -1) {
+        const msg = currentContext.chat[idx];
+        if (msg.extra?.polyceph_active_tasks) {
+            const task = msg.extra.polyceph_active_tasks.find(t => t.id === taskId);
+            if (task) {
+                task.status = status;
+                if (labelOverride) task.label = labelOverride;
+                
+                // Merge additional metadata
+                if (metadata && typeof metadata === 'object') {
+                    Object.assign(task, metadata);
+                }
+                
+                updateTypingIndicator();
+            } else {
+                logger.warn(`[UI-Utils] Could not find task ${taskId} in active tasks list:`, msg.extra.polyceph_active_tasks.map(t => t.id));
+            }
+        } else {
+            logger.warn(`[UI-Utils] No polyceph_active_tasks found on typing message ${idx}`);
+        }
+    } else {
+        logger.warn(`[UI-Utils] Could not find active typing indicator message in chat!`);
     }
 }
 

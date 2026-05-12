@@ -22,6 +22,8 @@
 
 import { MODULE_NAME } from './constants.js';
 import { logger } from './logger.js';
+import { getOpenAIModule, getSSEModule } from './compat-st.js';
+import { getActiveApi } from './compat-shared.js';
 
 /**
  * Reads the active Chat Completion generation parameters from SillyTavern.
@@ -85,4 +87,314 @@ export function getChatCompletionParams() {
 export function getChatCompletionMaxPromptTokens() {
     const params = getChatCompletionParams();
     return params.maxContextTokens - params.maxResponseTokens;
+}
+
+/**
+ * Checks if the current or specified API is a Chat Completion (OpenAI-compatible) API.
+ * Uses SillyTavern's internal CONNECT_API_MAP to resolve aliases.
+ *
+ * @param {string|null} apiOverride - Optional API ID to check.
+ * @returns {boolean}
+ */
+export function isChatCompletionApi(apiOverride = null) {
+    let api = apiOverride || getActiveApi();
+    const ctx = SillyTavern.getContext();
+    if (ctx.CONNECT_API_MAP && ctx.CONNECT_API_MAP[api]) {
+        if (ctx.CONNECT_API_MAP[api].selected) {
+            api = ctx.CONNECT_API_MAP[api].selected;
+        }
+    }
+    return api === 'openai';
+}
+
+/**
+ * Sends a message array to SillyTavern's generation API using Chat Completion logic.
+ *
+ * @param {object[]} messages - Array of {role, content, invocations} message objects.
+ * @param {object[]} [tools] - Optional tool definitions.
+ * @param {object|string} [tool_choice] - Optional tool choice setting.
+ * @param {boolean} [noEmissions=false] - Whether to skip extension prompt injection events.
+ * @returns {Promise<object>} The generated response data.
+ */
+export async function generateViaCC(messages, tools = null, tool_choice = null, noEmissions = false, options = {}) {
+    const context = SillyTavern.getContext();
+    const api = context.mainApi;
+
+    // Only chat completion APIs support our robust parameter building path
+    if (api !== 'openai') {
+        logger.debug('Using fallback path for non-openai API:', api);
+        if (typeof context.generateRawData === 'function') {
+            const params = { prompt: messages, systemPrompt: '' };
+            if (tools) params.tools = tools;
+            if (tool_choice) params.tool_choice = tool_choice;
+            return await context.generateRawData(params);
+        }
+        const flattened = messages.map(m => m.content).join('\n\n');
+        return await context.generateQuietPrompt({ quietPrompt: flattened });
+    }
+
+    // Import ST internal module
+    const openaiModule = await getOpenAIModule();
+    if (!openaiModule?.createGenerationParameters) {
+        logger.warn('Required ST generation functions not found. Falling back to simple path.');
+        const flattened = messages.map(m => m.content).join('\n\n');
+        return await context.generateQuietPrompt({ quietPrompt: flattened });
+    }
+
+    const { createGenerationParameters, oai_settings, getChatCompletionModel } = openaiModule;
+
+    // Resolve model
+    const model = typeof getChatCompletionModel === 'function'
+        ? getChatCompletionModel(oai_settings)
+        : (oai_settings?.openai_model || '');
+
+    // Emit CHAT_COMPLETION_PROMPT_READY (unless emissions are disabled)
+    if (!noEmissions && context.eventSource && context.eventTypes?.CHAT_COMPLETION_PROMPT_READY) {
+        const eventData = { chat: messages, dryRun: false };
+        await context.eventSource.emit(context.eventTypes.CHAT_COMPLETION_PROMPT_READY, eventData);
+        messages = eventData.chat;
+    }
+
+    // Build payload using ST's own function
+    const { generate_data } = await createGenerationParameters(oai_settings, model, 'quiet', messages);
+
+    // Override tools if provided by Polyceph's loop
+    if (tools && tools.length > 0) {
+        generate_data.tools = tools;
+        generate_data.tool_choice = tool_choice || 'auto';
+    }
+
+    // Emit CHAT_COMPLETION_SETTINGS_READY (unless emissions are disabled)
+    if (!noEmissions && context.eventSource && context.eventTypes?.CHAT_COMPLETION_SETTINGS_READY) {
+        await context.eventSource.emit(context.eventTypes.CHAT_COMPLETION_SETTINGS_READY, generate_data);
+    }
+
+    // NEW: Polyceph-specific payload event (includes all ST injections)
+    if (!noEmissions && context.eventSource) {
+        if (!generate_data.extra) generate_data.extra = {};
+        generate_data.extra.polyceph_task_id = options.polyceph_task_id || 'unknown';
+        generate_data.extra.polyceph_task_label = options.polyceph_task_label || 'Unnamed Task';
+        context.eventSource.emit('polyceph-task-payload-ready', generate_data);
+        
+        // Remove from the actual API payload - we only want this for the emission
+        delete generate_data.extra.polyceph_task_id;
+        delete generate_data.extra.polyceph_task_label;
+    }
+
+    logger.debug('Non-streaming generation payload:', generate_data);
+
+    const response = await fetch('/api/backends/chat-completions/generate', {
+        method: 'POST',
+        body: JSON.stringify(generate_data),
+        headers: context.getRequestHeaders(),
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Generation request failed with status ${response.status}: ${errorText}`);
+    }
+
+    return await response.json();
+}
+
+/**
+ * Streaming variant of generateViaCC for Chat Completion APIs.
+ *
+ * @param {object[]} messages - Chat-style message array [{role, content}, ...].
+ * @param {AbortSignal} signal - Abort signal for cancellation.
+ * @param {function} onChunk - Called with {text: string, toolCalls: any[], done: boolean} per delta.
+ * @param {object[]} [tools] - Optional tool definitions.
+ * @param {string} [tool_choice] - Optional tool choice.
+ * @param {string} [apiOverride] - Optional API override.
+ * @param {boolean} [noEmissions=false] - Whether to skip extension prompt injection events.
+ * @returns {Promise<object|null>} Accumulated response data, or null if streaming unavailable.
+ */
+export async function generateViaCCStreaming(messages, signal, onChunk, tools = null, tool_choice = null, apiOverride = null, noEmissions = false, options = {}) {
+    const context = SillyTavern.getContext();
+    let api = apiOverride || context.mainApi;
+
+    if (context.CONNECT_API_MAP && context.CONNECT_API_MAP[api]) {
+        if (context.CONNECT_API_MAP[api].selected) {
+            api = context.CONNECT_API_MAP[api].selected;
+        }
+    }
+
+    // Only chat completion APIs support our streaming path
+    if (api !== 'openai') {
+        logger.debug('Streaming not available for non-chat-completion API:', api);
+        return null;
+    }
+
+    // Import ST internal modules
+    const [openaiModule, sseModule] = await Promise.all([
+        getOpenAIModule(),
+        getSSEModule(),
+    ]);
+
+    if (!openaiModule?.createGenerationParameters || !openaiModule?.getStreamingReply || !sseModule?.getEventSourceStream) {
+        logger.warn('Required ST streaming functions not found. Falling back to non-streaming.');
+        return null;
+    }
+
+    const { createGenerationParameters, getStreamingReply, tryParseStreamingError, oai_settings, getChatCompletionModel } = openaiModule;
+    const { getEventSourceStream } = sseModule;
+
+    // Resolve model
+    const model = typeof getChatCompletionModel === 'function'
+        ? getChatCompletionModel(oai_settings)
+        : (oai_settings?.openai_model || '');
+
+    // Emit CHAT_COMPLETION_PROMPT_READY (unless emissions are disabled)
+    if (!noEmissions && context.eventSource && context.eventTypes?.CHAT_COMPLETION_PROMPT_READY) {
+        const eventData = { chat: messages, dryRun: false };
+        await context.eventSource.emit(context.eventTypes.CHAT_COMPLETION_PROMPT_READY, eventData);
+        messages = eventData.chat;
+    }
+
+    // Build payload using ST's own function
+    const { generate_data } = await createGenerationParameters(oai_settings, model, 'quiet', messages);
+
+    // Force stream on
+    generate_data.stream = true;
+
+    // Inject tools if provided
+    if (tools && tools.length > 0) {
+        generate_data.tools = tools;
+        generate_data.tool_choice = tool_choice || 'auto';
+    }
+
+    // Emit CHAT_COMPLETION_SETTINGS_READY (unless emissions are disabled)
+    if (!noEmissions && context.eventSource && context.eventTypes?.CHAT_COMPLETION_SETTINGS_READY) {
+        await context.eventSource.emit(context.eventTypes.CHAT_COMPLETION_SETTINGS_READY, generate_data);
+    }
+
+    // NEW: Polyceph-specific payload event (includes all ST injections)
+    if (!noEmissions && context.eventSource) {
+        if (!generate_data.extra) generate_data.extra = {};
+        generate_data.extra.polyceph_task_id = options.polyceph_task_id || 'unknown';
+        generate_data.extra.polyceph_task_label = options.polyceph_task_label || 'Unnamed Task';
+        context.eventSource.emit('polyceph-task-payload-ready', generate_data);
+        
+        // Remove from the actual API payload - we only want this for the emission
+        delete generate_data.extra.polyceph_task_id;
+        delete generate_data.extra.polyceph_task_label;
+    }
+
+    logger.debug('Streaming generation payload:', generate_data);
+
+    // Set up abort handling
+    const fetchAbortController = new AbortController();
+    const abortHook = () => fetchAbortController.abort(new Error('Cancelled by stop event'));
+
+    if (signal) {
+        if (signal.aborted) fetchAbortController.abort(new Error('Aborted'));
+        else signal.addEventListener('abort', () => fetchAbortController.abort(new Error('Aborted')), { once: true });
+    }
+
+    if (context.eventSource && context.eventTypes?.GENERATION_STOPPED) {
+        context.eventSource.on(context.eventTypes.GENERATION_STOPPED, abortHook);
+    }
+
+    try {
+        const response = await fetch('/api/backends/chat-completions/generate', {
+            method: 'POST',
+            body: JSON.stringify(generate_data),
+            headers: context.getRequestHeaders(),
+            signal: fetchAbortController.signal,
+        });
+
+        if (!response.ok) {
+            if (typeof tryParseStreamingError === 'function') tryParseStreamingError(response, await response.text());
+            throw new Error(`Streaming request failed with status ${response.status}`);
+        }
+
+        const eventStream = getEventSourceStream();
+        response.body.pipeThrough(eventStream);
+        const reader = eventStream.readable.getReader();
+
+        let text = '';
+        const state = { reasoning: '', images: [], signature: '', toolSignatures: {}, toolCalls: [] };
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            if (value.event === 'error') {
+                logger.error('SSE Error:', value.data);
+                continue;
+            }
+
+            if (value.data === '[DONE]') break;
+
+            let parsed;
+            try {
+                parsed = JSON.parse(value.data);
+            } catch (e) {
+                logger.warn('Failed to parse SSE data:', value.data);
+                continue;
+            }
+
+            if (parsed.error) {
+                const err = parsed.error;
+                throw new Error(`API returned error in stream: ${err.message || JSON.stringify(err)} (Code: ${err.code})`);
+            }
+
+            const delta = getStreamingReply(parsed, state);
+
+            // Accumulate tool calls manually for maximum robustness across ST versions
+            const deltaToolCalls = parsed.choices?.[0]?.delta?.tool_calls;
+            if (Array.isArray(deltaToolCalls)) {
+                for (const tc of deltaToolCalls) {
+                    const idx = tc.index;
+                    if (idx === undefined) continue;
+                    
+                    if (!state.toolCalls[idx]) {
+                        state.toolCalls[idx] = {
+                            id: tc.id || '',
+                            type: tc.type || 'function',
+                            function: { name: '', arguments: '' }
+                        };
+                    }
+                    
+                    const existing = state.toolCalls[idx];
+                    if (tc.id) existing.id = tc.id;
+                    if (tc.function?.name) existing.function.name = tc.function.name;
+                    if (tc.function?.arguments) existing.function.arguments += tc.function.arguments;
+                }
+            }
+
+            if (delta || (Array.isArray(deltaToolCalls) && deltaToolCalls.length > 0)) {
+                if (delta) text += delta;
+                if (onChunk) onChunk({ 
+                    text, 
+                    reasoning: state.reasoning,
+                    toolCalls: state.toolCalls.filter(tc => !!tc), 
+                    done: false 
+                });
+            }
+        }
+
+        if (onChunk) onChunk({ 
+            text, 
+            reasoning: state.reasoning,
+            toolCalls: state.toolCalls.filter(tc => !!tc), 
+            done: true 
+        });
+
+        return { 
+            choices: [{ 
+                message: { 
+                    content: text, 
+                    reasoning_content: state.reasoning,
+                    signature: state.signature,
+                    toolSignatures: state.toolSignatures,
+                    tool_calls: state.toolCalls 
+                } 
+            }] 
+        };
+    } finally {
+        if (context.eventSource && context.eventTypes?.GENERATION_STOPPED) {
+            context.eventSource.removeListener(context.eventTypes.GENERATION_STOPPED, abortHook);
+        }
+    }
 }

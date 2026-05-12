@@ -1,6 +1,7 @@
 import { MODULE_NAME, defaultSettings } from './constants.js';
 import { waitForApiReady, generateId } from './utils.js';
-import { capturePresetState, restorePresetState, clearPresetState, getAvailablePresets } from './compat-presets.js';
+import { capturePresetState, restorePresetState, clearPresetState, getAvailablePresets, getCapturedPresetName } from './compat-presets.js';
+export { capturePresetState, restorePresetState, clearPresetState, getAvailablePresets, getCapturedPresetName };
 import { setLogLevel, logger } from './logger.js';
 
 export let settings = { ...defaultSettings };
@@ -97,8 +98,6 @@ export function clearProfileState() {
     _capturedProfileId = null;
 }
 
-
-
 /**
  * Pipeline Management
  */
@@ -167,9 +166,6 @@ export function movePipelineDown(id) {
     return false;
 }
 
-
-
-
 export function deletePipeline(id) {
     if (settings.pipelines.length <= 1) return false;
     const index = settings.pipelines.findIndex(p => p.id === id);
@@ -197,7 +193,6 @@ export function addImportedPipeline(pipelineData) {
     return newPipeline;
 }
 
-
 /**
  * Fetch available connection profiles from ST.
  */
@@ -205,36 +200,38 @@ export async function getAvailableProfiles() {
     try {
         const ctx = SillyTavern.getContext();
         let profilesData = null;
+        let groupsData = null;
 
         // Try to get from SillyTavern context first (most reliable for extensions)
-        if (ctx.extensionSettings?.connectionManager?.profiles) {
-            profilesData = ctx.extensionSettings.connectionManager.profiles;
+        if (ctx.extensionSettings?.connectionManager) {
+            const cm = ctx.extensionSettings.connectionManager;
+            profilesData = cm.profiles;
+            groupsData = cm.groups;
         } else if (ctx.settings?.connection_profiles) {
             profilesData = ctx.settings.connection_profiles;
         }
 
-        if (profilesData) {
-            logger.debug('Found profiles in SillyTavern context:', profilesData);
-            return processProfiles(profilesData);
+        if (profilesData || groupsData) {
+            logger.debug('Found connection data in SillyTavern context:', { profilesData, groupsData });
+            return processProfiles(profilesData, groupsData);
         }
 
         // Fallback: Fetch from API
         logger.debug('Profiles not in context, fetching from API...');
         const response = await fetch('/api/settings/get', { method: 'POST' });
         const data = await response.json();
-        const possibleLocs = [
-            data?.extension_settings?.connectionManager?.profiles,
-            data?.connectionManager?.profiles,
-            data?.connection_profiles,
-            data?.profiles,
-            data?.api?.profiles,
-            data?.connectionProfiles
+        const cm = data?.extension_settings?.connectionManager || data?.connectionManager;
+        const locs = [
+            { p: cm?.profiles, g: cm?.groups },
+            { p: data?.connection_profiles, g: null },
+            { p: data?.profiles, g: null },
+            { p: data?.api?.profiles, g: null }
         ];
 
-        for (const loc of possibleLocs) {
-            if (loc) {
-                logger.debug('Found profiles at location:', loc);
-                return processProfiles(loc);
+        for (const loc of locs) {
+            if (loc.p || loc.g) {
+                logger.debug('Found connection data at location:', loc);
+                return processProfiles(loc.p, loc.g);
             }
         }
     } catch (e) {
@@ -246,30 +243,46 @@ export async function getAvailableProfiles() {
 /**
  * Helper to process profile data into standardized format
  */
-function processProfiles(loc) {
-    if (Array.isArray(loc)) {
-        availableProfiles = loc.map(p => {
-            if (typeof p === 'string') return { id: p, name: p, api: '', model: '' };
-            const api = p.api || p.mode || p.main_api || '';
-            const model = p.model || p.openai_model || '';
-            if (!api) logger.warn('Profile object missing API:', p);
-            return { id: p.id || p.name, name: p.name || p.id, api: api, model: model };
-        });
-    } else if (typeof loc === 'object') {
-        availableProfiles = Object.keys(loc).map(key => {
-            const p = loc[key];
-            const api = p.api || p.mode || p.main_api || '';
-            const model = p.model || p.openai_model || '';
-            if (!api) logger.warn('Profile object missing API:', p);
-            return {
-                id: key,
-                name: p.name || key,
-                api: api,
-                model: model
-            };
-        });
+function processProfiles(profiles, groups) {
+    logger.debug('[State] processProfiles called with:', { profiles, groups });
+    let result = [];
+    
+    // Process Profiles
+    if (profiles) {
+        if (Array.isArray(profiles)) {
+            result = profiles.map(p => {
+                if (typeof p === 'string') return { id: p, name: p, api: '', model: '' };
+                const api = p.api || p.mode || p.main_api || '';
+                const model = p.model || p.openai_model || '';
+                return { id: p.id || p.name, name: p.name || p.id, api: api, model: model };
+            });
+        } else if (typeof profiles === 'object') {
+            result = Object.keys(profiles).map(key => {
+                const p = profiles[key];
+                const api = p.api || p.mode || p.main_api || '';
+                const model = p.model || p.openai_model || '';
+                return { id: key, name: p.name || key, api: api, model: model };
+            });
+        }
     }
-    logger.debug('Extracted profiles:', availableProfiles);
+
+    // Process Groups
+    if (groups) {
+        if (Array.isArray(groups)) {
+            groups.forEach(g => {
+                if (typeof g === 'string') result.push({ id: g, name: g, api: '', model: '' });
+                else result.push({ id: g.id || g.name, name: g.name || g.id, api: '', model: '' });
+            });
+        } else if (typeof groups === 'object') {
+            Object.keys(groups).forEach(key => {
+                const g = groups[key];
+                result.push({ id: key, name: g.name || key, api: '', model: '' });
+            });
+        }
+    }
+
+    availableProfiles = result;
+    logger.debug('[State] Extracted profiles (including groups):', availableProfiles);
     return availableProfiles;
 }
 
@@ -373,11 +386,19 @@ export function loadSettings() {
 
                 // Ensure all tasks have new properties
                 s.tasks.forEach(n => {
+                    // Migration: persist/isCharacter -> outputType
+                    if (n.outputType === undefined) {
+                        if (n.isCharacter) n.outputType = 'character';
+                        else if (n.persist) n.outputType = 'thinking';
+                        else n.outputType = 'internal';
+                    }
+
                     if (n.persist === undefined) n.persist = false;
                     if (n.isCharacter === undefined) n.isCharacter = false;
                     if (n.stripThink === undefined) n.stripThink = false;
                     if (n.preset === undefined) n.preset = 'Current';
                     if (n.antiLoop === undefined) n.antiLoop = true;
+                    if (n.allowTools === undefined) n.allowTools = true;
                 });
             });
         });

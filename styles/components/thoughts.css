@@ -103,6 +103,7 @@ body.polyceph-show-reasoning .polyceph-thoughts {
     border-radius: 5px;
     padding: 8px;
     border-left: 4px solid var(--SmartThemeQuoteColor, #888);
+    margin-bottom: 2px;
 }
 
 .polyceph-silent-thought .polyceph-generated-thought-content {
@@ -133,8 +134,29 @@ body.polyceph-show-reasoning .polyceph-thoughts {
     opacity: 0.5;
     text-transform: none;
     letter-spacing: normal;
+    padding-right: 10px;
+}
+
+.polyceph-item-metadata-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     margin-left: auto;
     padding-right: 10px;
+}
+
+
+.polyceph-item-format-tag {
+    font-size: 0.7em;
+    font-weight: bold;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--black50a);
+    color: var(--SmartThemeQuoteColor);
+    border: 1px solid rgba(14, 106, 106, 0.3);
+    opacity: 0.8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .polyceph-thought-summary-title {
@@ -142,4 +164,254 @@ body.polyceph-show-reasoning .polyceph-thoughts {
     justify-content: space-between;
     width: 100%;
     align-items: center;
+}
+
+/* Tool Call Styling */
+.polyceph-tool-thought {
+    border-left-color: var(--SmartThemeQuoteColor) !important;
+    background-color: var(--SmartThemeUserMesBlurTintColor) !important;
+    border-radius: 8px;
+    border-left: 3px solid var(--SmartThemeBorderColor);
+}
+
+.polyceph-tool-thought .polyceph-generated-thought-name {
+    color: var(--SmartThemeQuoteColor);
+    border-bottom: none;
+    padding-bottom: 0px;
+    margin-bottom: 0px;
+}
+
+.polyceph-tool-details {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    padding: 5px;
+}
+
+.polyceph-tool-section-header {
+    font-weight: bold;
+    font-size: 0.75em;
+    text-transform: uppercase;
+    color: var(--SmartThemeQuoteColor);
+    margin-bottom: 8px;
+    opacity: 0.8;
+    letter-spacing: 1px;
+}
+
+/* JSON Object Viewer */
+.polyceph-json-object {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.polyceph-json-status-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.polyceph-json-status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    background: var(--black50a);
+    font-size: 0.7em;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+}
+
+.polyceph-status-ok {
+    color: var(--SmartThemeQuoteColor);
+}
+
+.polyceph-status-error {
+    color: #ff4d4d;
+}
+
+.polyceph-status-key {
+    opacity: 0.7;
+    margin-right: 2px;
+}
+
+.polyceph-json-field-box {
+    display: flex;
+    padding: 10px;
+    background: var(--black30a);
+    border-radius: 6px;
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+}
+
+/* Reduce background for nested boxes to prevent "double box" look */
+.polyceph-json-value .polyceph-json-field-box,
+.polyceph-json-item-content .polyceph-json-field-box {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.polyceph-json-field-vertical {
+    flex-direction: column;
+    gap: 5px;
+}
+
+.polyceph-json-field-horizontal {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 15px;
+}
+
+.polyceph-json-field-horizontal .polyceph-json-key-container {
+    min-width: 120px;
+    max-width: 40%;
+    flex-shrink: 0;
+}
+
+.polyceph-json-key-container {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    justify-content: space-between;
+}
+
+.polyceph-json-key {
+    font-weight: bold;
+    color: var(--SmartThemeQuoteColor);
+    opacity: 0.9;
+    font-size: 0.8em;
+    text-transform: capitalize;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+
+.polyceph-json-format-mini {
+    font-size: 0.6em;
+    font-weight: bold;
+    padding: 0px 4px;
+    border-radius: 3px;
+    background: var(--black50a);
+    color: var(--SmartThemeQuoteColor);
+    border: 1px solid rgba(14, 106, 106, 0.2);
+    opacity: 0.6;
+    text-transform: uppercase;
+}
+
+.polyceph-json-item-header {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 4px;
+}
+
+.polyceph-json-value {
+    color: var(--SmartThemeBodyColor);
+    font-size: 0.95em;
+    flex-grow: 1;
+}
+
+
+.polyceph-json-string {
+    color: var(--SmartThemeBodyColor);
+    white-space: pre-wrap;
+    display: block;
+    line-height: 1.4;
+}
+
+.polyceph-md-h1, .polyceph-md-h2, .polyceph-md-h3, .polyceph-md-h4, .polyceph-md-h5, .polyceph-md-h6 {
+    font-weight: bold;
+    color: var(--SmartThemeQuoteColor);
+    margin: 12px 0 6px 0;
+    line-height: 1.2;
+}
+
+.polyceph-md-h1 { font-size: 1.4em; border-bottom: 2px solid rgba(255, 255, 255, 0.15); padding-bottom: 5px; }
+.polyceph-md-h2 { font-size: 1.25em; border-bottom: 1px solid rgba(255, 255, 255, 0.12); padding-bottom: 4px; }
+.polyceph-md-h3 { font-size: 1.1em; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 3px; }
+.polyceph-md-h4 { font-size: 1em; opacity: 0.95; }
+.polyceph-md-h5 { font-size: 0.9em; opacity: 0.9; text-transform: uppercase; letter-spacing: 0.5px; }
+.polyceph-md-h6 { font-size: 0.85em; opacity: 0.8; font-style: italic; }
+
+.polyceph-json-string em {
+    font-style: italic;
+    opacity: 0.9;
+}
+
+.polyceph-json-string del {
+    text-decoration: line-through;
+    opacity: 0.6;
+    color: var(--grey50);
+}
+
+.polyceph-json-string u {
+    text-decoration: underline;
+    text-decoration-color: var(--SmartThemeUnderlineColor);
+}
+
+.polyceph-md-code {
+    font-family: var(--SmartThemeMonoFont, monospace);
+    background: var(--black50a);
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    color: var(--SmartThemeUnderlineColor);
+}
+
+.polyceph-md-bullet {
+    display: flex;
+    gap: 8px;
+    margin: 4px 0 4px 10px;
+}
+
+.polyceph-md-bullet span {
+    color: var(--SmartThemeQuoteColor);
+    font-weight: bold;
+}
+
+.polyceph-json-number {
+    color: var(--SmartThemeUnderlineColor);
+}
+
+.polyceph-json-boolean {
+    color: var(--SmartThemeEmColor);
+    font-weight: bold;
+}
+
+.polyceph-json-null {
+    color: var(--grey50);
+    font-style: italic;
+}
+
+.polyceph-json-empty {
+    color: color-mix(in srgb, var(--SmartThemeQuoteColor), transparent 50%);
+    ;
+    font-style: italic;
+    font-size: 0.85em;
+}
+
+.polyceph-json-array {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 5px;
+}
+
+.polyceph-json-item-box {
+    padding: 8px;
+    background: var(--black30a);
+    border-radius: 6px;
+}
+
+.polyceph-tool-args-fallback,
+.polyceph-tool-response-fallback {
+    font-family: var(--SmartThemeMonoFont, monospace);
+    font-size: 0.85em;
+    color: var(--SmartThemeBodyColor);
+    opacity: 0.8;
+    white-space: pre-wrap;
+    word-break: break-all;
+    padding: 10px;
+    background: var(--black30a);
+    border-radius: 6px;
 }

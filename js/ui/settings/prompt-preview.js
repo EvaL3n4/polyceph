@@ -3,14 +3,19 @@ import { expandPrompt } from '../../macros/macros.js';
 import { logger } from '../../logger.js';
 import { countTokens, getMaxContextTokens, getMaxResponseTokens } from '../../compat-shared.js';
 import { initSearchListeners } from './search-manager.js';
+import { createPromptEditor } from './prompt-editor.js';
 
 /**
  * Generates and displays a modal with the assembled prompts for each task in the active pipeline.
  */
-export async function showPromptPreview() {
+export async function showPromptPreview(initialPageIndex = 0) {
     // ... (rest of the setup code remains the same)
     const pipeline = getActivePipeline();
     const stContext = SillyTavern.getContext();
+
+    // Ensure initialPageIndex is within bounds
+    const totalTasks = pipeline.steps.reduce((acc, s) => acc + s.tasks.length, 0);
+    if (initialPageIndex >= totalTasks) initialPageIndex = 0;
 
     // Use the current chat state, excluding typing indicators and system commands
     const cleanChat = stContext.chat.filter(m => m && !m.extra?.polyceph_typing && !m.is_system && !m.mes?.trim().startsWith('/'));
@@ -23,7 +28,8 @@ export async function showPromptPreview() {
         step.tasks.forEach((task, tIdx) => {
             const taskIdIndx = tIdx + 1;
             const label = task.label ? task.label.trim() : `Task ${taskIdIndx}`;
-            const placeholder = `(Output of Task: \{\{${label}\}\})`;
+            // Just use the macro itself as the placeholder
+            const placeholder = `{{${label}}}`;
 
             // Map all standard keys used by the orchestrator
             contextVault[`${step.id}_task_${taskIdIndx}`] = placeholder;
@@ -35,7 +41,7 @@ export async function showPromptPreview() {
 
         // Step combined output
         const stepLabel = step.label ? step.label.trim() : `Step ${stepIdx}`;
-        const stepPlaceholder = `(Combined Output of Step: \{\{${stepLabel}\}\})`;
+        const stepPlaceholder = `{{${stepLabel}}}`;
         contextVault[step.id] = stepPlaceholder;
         contextVault[`s${stepIdx}`] = stepPlaceholder;
         if (step.label) contextVault[step.label.trim()] = stepPlaceholder;
@@ -48,6 +54,15 @@ export async function showPromptPreview() {
     const maxResponse = getMaxResponseTokens();
     const availableBudget = maxContext - maxResponse;
 
+    // Collect all task and step labels for highlighting
+    const allLabels = [];
+    pipeline.steps.forEach(step => {
+        if (step.label) allLabels.push(step.label.trim());
+        step.tasks.forEach(task => {
+            if (task.label) allLabels.push(task.label.trim());
+        });
+    });
+
     for (let sIdx = 0; sIdx < pipeline.steps.length; sIdx++) {
         const step = pipeline.steps[sIdx];
         for (let tIdx = 0; tIdx < step.tasks.length; tIdx++) {
@@ -55,17 +70,11 @@ export async function showPromptPreview() {
             try {
                 const assembled = await expandPrompt(task.template || '', settings, contextVault, cleanChat, stContext, true);
                 const tokens = await countTokens(assembled);
-                const placeholders = (assembled.match(placeholderRegex) || []).length;
-
-                // Escape HTML for safety and wrap placeholders in colored spans
-                const safeContent = assembled.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                const highlightedContent = safeContent.replace(placeholderRegex, (match) => {
-                    return `<span class="polyceph-preview-placeholder">${match}</span>`;
-                });
+                const placeholders = 0; // We don't need to count these manually anymore
 
                 results.push({
                     title: `Step ${sIdx + 1} - ${task.label || `Task ${tIdx + 1}`}`,
-                    content: highlightedContent,
+                    content: assembled,
                     tokens,
                     placeholders,
                     limit: availableBudget
@@ -85,7 +94,8 @@ export async function showPromptPreview() {
 
     // 3. Render HTML
     const html = results.map((res, idx) => `
-        <div class="polyceph-preview-task-container polyceph-preview-page ${idx === 0 ? 'active' : ''}" data-page="${idx}">
+        <div class="polyceph-preview-task-container polyceph-preview-page ${idx === initialPageIndex ? 'active' : ''}" data-page="${idx}">
+
             <div class="polyceph-preview-task-header">
                 <span>${res.title}</span>
                 <div style="display: flex; gap: 15px; font-size: 0.8em; font-weight: normal;">
@@ -98,14 +108,14 @@ export async function showPromptPreview() {
                     </span>` : ''}
                 </div>
             </div>
-            <div class="polyceph-preview-textarea polyceph-preview-div">${res.content}</div>
+            <textarea id="polyceph-preview-task-${idx}" class="polyceph-preview-textarea polyceph-preview-cm" readonly disabled>${res.content}</textarea>
         </div>
     `).join('');
 
     const pagination = `
         <div class="polyceph-preview-pagination">
             ${results.map((_, idx) => `
-                <button class="polyceph-page-btn ${idx === 0 ? 'active' : ''}" data-page="${idx}">${idx + 1}</button>
+                <button class="polyceph-page-btn ${idx === initialPageIndex ? 'active' : ''}" data-page="${idx}">${idx + 1}</button>
             `).join('')}
         </div>
     `;
@@ -144,6 +154,10 @@ export async function showPromptPreview() {
                 ${html}
             </div>
             ${pagination}
+            <!-- Sentinel image to signal DOM readiness -->
+            <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" 
+                 style="display:none;" 
+                 onload="window.polyceph_on_preview_ready()">
         </div>
     `;
 
@@ -154,6 +168,11 @@ export async function showPromptPreview() {
             container.find(`.polyceph-page-btn[data-page="${pageIdx}"]`).addClass('active');
             container.find('.polyceph-preview-page').removeClass('active');
             container.find(`.polyceph-preview-page[data-page="${pageIdx}"]`).addClass('active');
+
+            // Re-refresh CodeMirror for the newly visible page
+            container.find(`.polyceph-preview-page[data-page="${pageIdx}"] .CodeMirror`).each(function () {
+                if (this.CodeMirror) this.CodeMirror.refresh();
+            });
         }
 
         $(document).on('click', '.polyceph-page-btn', function () {
@@ -166,6 +185,16 @@ export async function showPromptPreview() {
         window.polyceph_preview_initialized = true;
     }
 
+    // Global hook for the sentinel
+    window.polyceph_on_preview_ready = () => {
+        console.log(`[Polyceph] Preview modal sentinel triggered. Initializing editors with ${allLabels.length} labels...`);
+        $('.polyceph-preview-cm').each(function () {
+            createPromptEditor(this, null, allLabels);
+        });
+        // Cleanup
+        delete window.polyceph_on_preview_ready;
+    };
+
     if (stContext.Popup) {
         const popup = new stContext.Popup(modalContent, stContext.POPUP_TYPE?.TEXT || 0, undefined, { okButton: 'Close', wider: true, large: true, customClass: 'polyceph-preview-modal' });
         await popup.show();
@@ -176,7 +205,6 @@ export async function showPromptPreview() {
             modalFunc(modalContent, 'Close', null, { large: true });
         } else {
             toastr.error('Native SillyTavern modal API not found. Check console for details.', 'Polyceph');
-            logger.error('Modal API missing. window.callGenericModal:', typeof window.callGenericModal, 'stContext.callGenericModal:', typeof stContext.callGenericModal, 'stContext.Popup:', !!stContext.Popup);
         }
     }
 }

@@ -1,10 +1,11 @@
 import { logger } from '../logger.js';
-import { settings, switchProfile } from '../state.js';
+import { settings, switchProfile, availableProfiles } from '../state.js';
 import { initializePipelineContext } from './context.js';
 import { runTask } from './task-executor.js';
 import { handleBackgroundOutput, handleCharacterOutput, persistReasoningMessage } from './message-manager.js';
 import { postMessageToChat, getActiveCharacterInfo } from '../compat-shared.js';
 import { scrollToBottomIfNear } from '../ui/ui-shared.js';
+import { updateTaskStatus } from './ui-utils.js';
 
 /**
  * Executes the core pipeline logic, including step iteration, task grouping,
@@ -29,6 +30,18 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
     for (let i = 0; i < totalSteps; i++) {
         const step = activePipeline.steps[i];
         const stepIdx = i + 1;
+
+        if (stContext.eventSource) {
+            stContext.eventSource.emit('polyceph-step-started', {
+                stepIdx,
+                totalSteps,
+                stepId: step.id,
+                label: step.label || `Step ${stepIdx}`,
+                tasks: step.tasks.map(t => ({ id: t.id, label: t.label || 'Unnamed Task' })),
+                pipelineId: activePipeline.id,
+                pipelineName: pipelineName
+            });
+        }
 
         if (!step.tasks || step.tasks.length === 0) continue;
 
@@ -56,6 +69,35 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
             // but for character messages it MUST be pre-calculated.
         });
 
+        // 1. Pre-register ALL tasks in the step to the typing indicator as "queued"
+        // This gives the user immediate feedback on what's coming.
+        const currentCtx = SillyTavern.getContext();
+        const typingIdx = currentCtx.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
+        if (typingIdx !== -1) {
+            const typingMsg = currentCtx.chat[typingIdx];
+            if (!typingMsg.extra.polyceph_active_tasks) {
+                typingMsg.extra.polyceph_active_tasks = [];
+            }
+
+            step.tasks.forEach((node, nodeIndex) => {
+                const exists = typingMsg.extra.polyceph_active_tasks.find(t => t.id === node.id);
+                if (!exists) {
+                    const prof = availableProfiles.find(p => p.id === node.profile);
+                    const profileDisplayName = node.profile === 'none' ? '(Template Only)' : (prof ? prof.name : (node.profile || 'Default'));
+                    
+                    typingMsg.extra.polyceph_active_tasks.push({
+                        id: node.id,
+                        label: node.label || `Task ${nodeIndex + 1}`,
+                        profile: profileDisplayName,
+                        status: 'queued',
+                        step: stepIdx,
+                        totalSteps: totalSteps
+                    });
+                }
+            });
+            import('./ui-utils.js').then(m => m.updateTypingIndicator());
+        }
+
         // Process profile groups sequentially
         for (const [profileId, groupNodes] of Object.entries(profileGroups)) {
             if (signal.aborted) return;
@@ -69,6 +111,10 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
             }
 
             // Process tasks in parallel (staggered)
+            const groupResults = new Array(groupNodes.length);
+            const groupThoughts = new Array(groupNodes.length);
+            let anyTaskFailed = false;
+
             await Promise.all(groupNodes.map(async (item, k) => {
                 const { node, nodeIndex } = item;
 
@@ -161,111 +207,239 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                 }
 
                 // 4. Run Task
-                const taskResult = await runTask(node, nodeIndex, stepIdx, totalSteps, contextVault, cleanChat, signal, taskOptions);
-                if (!taskResult || signal.aborted) return;
+                try {
+                    const taskResult = await runTask(node, nodeIndex, stepIdx, totalSteps, contextVault, cleanChat, signal, taskOptions);
+                    if (!taskResult || signal.aborted) return;
 
-                if (taskResult.error) {
-                    throw new Error(`[Task: ${node.label || node.id}] ${taskResult.error}`);
-                }
+                    if (taskResult.error) {
+                        throw new Error(`[Task: ${node.label || node.id}] ${taskResult.error}`);
+                    }
 
-                const { parsedResult, taskApi, taskModel, profileDisplayName } = taskResult;
-                
-                if (parsedResult) {
-                    const { cleanOutput, persistentOutput, thoughts, hiddenBackgrounds } = parsedResult;
+                    const { parsedResult, taskApi, taskModel, profileDisplayName } = taskResult;
                     
-                    // Store in vault
-                    contextVault[`${step.id}_task_${taskResult.taskIdIndx}`] = cleanOutput;
-                    contextVault[`${step.id}_target_${taskResult.taskIdIndx}`] = cleanOutput; // Legacy support
-                    contextVault[`s${stepIdx}k${taskResult.taskIdIndx}`] = cleanOutput;
-                    contextVault[`s${stepIdx}t${taskResult.taskIdIndx}`] = cleanOutput; // Legacy support
-                    if (node.label) contextVault[node.label.trim()] = cleanOutput;
-
-                    // Prepare display result
-                    if (node.profile === 'none' || node.isCharacter) {
-                        resultsByIndex[nodeIndex] = cleanOutput;
-                    } else {
-                        const taskHeader = node.label ? node.label : `Task ${taskResult.taskIdIndx}`;
-                        resultsByIndex[nodeIndex] = `[${taskHeader}]\n${cleanOutput}`;
-                    }
-
-                    accumulatedThoughts.push(...thoughts);
-
-                    // 4. Handle Backgrounds (Sequential access to the counter is fine here as it's within a single task's result processing)
-                    for (const bg of hiddenBackgrounds) {
-                        if (signal.aborted) return;
-                        await handleBackgroundOutput(bg, bgMsgOutputCount++, batchData, taskApi, taskModel);
-                    }
-
-                    // 5. Handle Character Persistence
-                    if (cleanOutput && (node.persist || node.isCharacter)) {
-                        const content = node.isCharacter ? persistentOutput : cleanOutput;
-                        if (node.isCharacter) {
-                            const taskThoughts = accumulatedThoughts;
-                            accumulatedThoughts = [];
-
-                            let streamingHandled = false;
-
-                            // If we already created a streaming placeholder, update it in-place
-                            if (streamMessageIndex !== null && streamMessageIndex !== -1) {
-                                const ctx = SillyTavern.getContext();
-                                const streamMsg = ctx.chat[streamMessageIndex];
-                                if (streamMsg && (streamMsg.extra?.polyceph_streaming || isStreamingSwipe)) {
-                                    streamMsg.mes = content;
-                                    streamMsg.extra.polyceph_streaming = false;
-                                    streamMsg.extra.polyceph_batch = batchData.batchId;
-                                    streamMsg.extra.polyceph_input = userInput;
-                                    streamMsg.extra.polyceph_task_id = node.id;
-                                    streamMsg.extra.polyceph_pipeline = pipelineName;
-                                    streamMsg.extra.api = taskApi;
-                                    streamMsg.extra.model = taskModel;
-
-                                    // Also update the specific swipe entry
-                                    if (Array.isArray(streamMsg.swipes)) {
-                                        streamMsg.swipes[streamMsg.swipe_id] = content;
-                                        if (streamMsg.swipe_info && streamMsg.swipe_info[streamMsg.swipe_id]) {
-                                            streamMsg.swipe_info[streamMsg.swipe_id].extra = { ...streamMsg.extra };
-                                        }
-                                    }
-
-                                    if (taskThoughts.length > 0) {
-                                        streamMsg.extra.polyceph_thoughts = taskThoughts;
-                                        // Also update swipe_info so the renderer (which prioritizes swipes) sees it
-                                        if (streamMsg.swipe_info && streamMsg.swipe_info[streamMsg.swipe_id || 0]) {
-                                            if (!streamMsg.swipe_info[streamMsg.swipe_id || 0].extra) {
-                                                streamMsg.swipe_info[streamMsg.swipe_id || 0].extra = {};
-                                            }
-                                            streamMsg.swipe_info[streamMsg.swipe_id || 0].extra.polyceph_thoughts = taskThoughts;
-                                            streamMsg.swipe_info[streamMsg.swipe_id || 0].extra.polyceph_pipeline = pipelineName;
-                                        }
-                                    }
-
-                                    if (typeof ctx.updateMessageBlock === 'function') {
-                                        ctx.updateMessageBlock(streamMessageIndex, streamMsg);
-                                    }
-                                    await (typeof ctx.saveChat === 'function' ? ctx.saveChat() : Promise.resolve());
-                                    streamingHandled = true;
-                                }
-                            }
-
-                            // Fall back to normal handleCharacterOutput if streaming didn't handle it
-                            if (!streamingHandled) {
-                                await handleCharacterOutput(content, taskThoughts, node._charIndex, node, batchData, taskApi, taskModel, userInput, pipelineName);
-                            }
+                    if (parsedResult) {
+                        let { cleanOutput, persistentOutput, thoughts, hiddenBackgrounds } = parsedResult;
+                        
+                        // Honor the "Hide Success Response" flag
+                        if (node.hideSuccessResponse) {
+                            logger.debug(`Task ${node.id}: hideSuccessResponse is true. Silencing output.`);
+                            cleanOutput = '';
                         }
+
+                        // Handle Backgrounds immediately to keep them moving
+                        for (const bg of hiddenBackgrounds) {
+                            if (signal.aborted) return;
+                            await handleBackgroundOutput(bg, bgMsgOutputCount++, batchData, taskApi, taskModel);
+                        }
+
+                        // Buffer the result for ordered processing
+                        groupResults[k] = { 
+                            node, 
+                            taskResult, 
+                            cleanOutput, 
+                            rawOutput: taskResult.rawResponse,
+                            persistentOutput, 
+                            taskApi, 
+                            taskModel, 
+                            streamMessageIndex, 
+                            isStreamingSwipe 
+                        };
+                        groupThoughts[k] = thoughts.map(t => ({ ...t, taskId: node.id }));
+
+                        // 5. Task Completion Event (Immediate & Parallel-friendly)
+                        if (stContext.eventSource) {
+                            updateTaskStatus(node.id, 'waiting_on_extensions');
+                            logger.debug(`Task "${node.label || node.id}" waiting on extension processing...`);
+                            await stContext.eventSource.emit('polyceph-task-finished', {
+                                taskId: node.id,
+                                label: node.label || 'Unnamed Task',
+                                success: true,
+                                output: cleanOutput,
+                                error: null,
+                                stepIdx,
+                                totalSteps,
+                                pipelineId: activePipeline.id
+                            });
+                            logger.debug(`Task "${node.label || node.id}" extension processing complete.`);
+                        }
+                    }
+                } catch (err) {
+                    if (err.message === 'Aborted') throw err;
+                    logger.error(`Task ${nodeIndex} in step ${stepIdx} failed:`, err);
+                    anyTaskFailed = true;
+                    const partialOutput = err.partialOutput || '';
+                    groupResults[k] = { 
+                        node, 
+                        taskResult: { ...err, node, nodeIndex, taskIdIndx: k + 1 },
+                        rawOutput: partialOutput,
+                        cleanOutput: partialOutput, 
+                        persistentOutput: '', 
+                        error: err.message 
+                    };
+                    if (err.parsedResult) {
+                        groupThoughts[k] = err.parsedResult.thoughts || [];
+                    }
+
+                    if (stContext.eventSource) {
+                        updateTaskStatus(node.id, 'waiting_on_extensions');
+                        logger.debug(`Task "${node.label || node.id}" waiting on extension processing (Error State)...`);
+                        await stContext.eventSource.emit('polyceph-task-finished', {
+                            taskId: node.id,
+                            label: node.label || 'Unnamed Task',
+                            success: false,
+                            output: '',
+                            error: err.message,
+                            stepIdx,
+                            totalSteps,
+                            pipelineId: activePipeline.id
+                        });
+                        logger.debug(`Task "${node.label || node.id}" extension error processing complete.`);
                     }
                 }
             }));
+
+            // Stop pipeline if any task failed and continueOnFailure is false
+            const continueOnFailure = settings.continueOnFailure === true || activePipeline.settings?.continueOnFailure === true;
+            if (anyTaskFailed && !continueOnFailure) {
+                throw new Error(`Pipeline stopped: One or more tasks in step ${stepIdx} failed.`);
+            }
+
+            // After group completion, process results and thoughts in original order
+            for (let i = 0; i < groupNodes.length; i++) {
+                const res = groupResults[i];
+                if (!res) continue;
+
+                const { node, taskResult, cleanOutput, persistentOutput, taskApi, taskModel, streamMessageIndex, isStreamingSwipe } = res;
+                const taskThoughts = groupThoughts[i] || [];
+
+                // Store in vault
+                const taskIdIndx = taskResult ? taskResult.taskIdIndx : (i + 1);
+                const rawOutput = res.rawOutput || cleanOutput;
+
+                // Primary keys default to RAW (history-preserving)
+                contextVault[`${step.id}_task_${taskIdIndx}`] = rawOutput;
+                contextVault[`${step.id}_target_${taskIdIndx}`] = rawOutput;
+                contextVault[`s${stepIdx}k${taskIdIndx}`] = rawOutput;
+                contextVault[`s${stepIdx}t${taskIdIndx}`] = rawOutput;
+
+                // Secondary keys for clean (stripped) output
+                contextVault[`${step.id}_task_${taskIdIndx}_clean`] = cleanOutput;
+                contextVault[`s${stepIdx}k${taskIdIndx}_clean`] = cleanOutput;
+                
+                if (node.label && node.label.trim()) {
+                    const labelKey = node.label.trim();
+                    contextVault[labelKey] = rawOutput;
+                    contextVault[`${labelKey}_clean`] = cleanOutput;
+                }
+
+                // Prepare display result for step summation
+                if (node.profile === 'none' || node.isCharacter) {
+                    resultsByIndex[node.nodeIndex] = cleanOutput;
+                } else {
+                    const taskHeader = node.label ? node.label : `Task ${taskIdIndx}`;
+                    resultsByIndex[node.nodeIndex] = `[${taskHeader}]\n${cleanOutput}`;
+                }
+
+                // Handle Character Persistence
+                if (node.persist || node.isCharacter) {
+                    const content = (node.isCharacter && persistentOutput) ? persistentOutput : cleanOutput;
+                    logger.debug(`Persisting task result: id=${node.id}, type=${node.outputType}, content_len=${content?.length}, isCharacter=${node.isCharacter}`);
+                    
+                    if (node.isCharacter) {
+                        let streamingHandled = false;
+                        
+                        // CONSUME accumulated thoughts (even if content is empty/failed)
+                        const combinedThoughts = [...accumulatedThoughts, ...taskThoughts];
+                        accumulatedThoughts = []; // Clear the global pool
+
+                        if (streamMessageIndex !== null && streamMessageIndex !== -1) {
+                            const ctx = SillyTavern.getContext();
+                            const streamMsg = ctx.chat[streamMessageIndex];
+                            if (streamMsg && (streamMsg.extra?.polyceph_streaming || isStreamingSwipe)) {
+                                logger.debug(`Finalizing streaming message at index ${streamMessageIndex}. Content length: ${content?.length}`);
+                                
+                                streamMsg.mes = content || streamMsg.mes; // Keep existing if content is empty (failure)
+                                streamMsg.extra.polyceph_streaming = false;
+                                streamMsg.extra.polyceph_batch = batchData.batchId;
+                                streamMsg.extra.polyceph_task_id = node.id;
+                                streamMsg.extra.polyceph_pipeline = pipelineName;
+                                streamMsg.extra.api = taskApi;
+                                streamMsg.extra.model = taskModel;
+
+                                if (Array.isArray(streamMsg.swipes)) {
+                                    streamMsg.swipes[streamMsg.swipe_id] = streamMsg.mes;
+                                    if (streamMsg.swipe_info?.[streamMsg.swipe_id]) {
+                                        streamMsg.swipe_info[streamMsg.swipe_id].extra = { ...streamMsg.extra };
+                                    }
+                                }
+
+                                if (combinedThoughts.length > 0) {
+                                    streamMsg.extra.polyceph_thoughts = combinedThoughts;
+                                    if (streamMsg.swipe_info?.[streamMsg.swipe_id || 0]) {
+                                        if (!streamMsg.swipe_info[streamMsg.swipe_id || 0].extra) streamMsg.swipe_info[streamMsg.swipe_id || 0].extra = {};
+                                        streamMsg.swipe_info[streamMsg.swipe_id || 0].extra.polyceph_thoughts = combinedThoughts;
+                                        streamMsg.swipe_info[streamMsg.swipe_id || 0].extra.polyceph_pipeline = pipelineName;
+                                    }
+                                }
+
+                                if (typeof ctx.updateMessageBlock === 'function') {
+                                    ctx.updateMessageBlock(streamMessageIndex, streamMsg);
+                                }
+                                await (typeof ctx.saveChat === 'function' ? ctx.saveChat() : Promise.resolve());
+                                streamingHandled = true;
+                            }
+                        }
+
+                        if (!streamingHandled) {
+                            logger.debug(`Calling handleCharacterOutput for non-streamed/failed content. Content length: ${content?.length}`);
+                            await handleCharacterOutput(content, combinedThoughts, node._charIndex, node, batchData, taskApi, taskModel, userInput, pipelineName);
+                        }
+                    } else {
+                        // For non-character persistent tasks, add thoughts to the global pool
+                        if (taskThoughts.length > 0) {
+                            accumulatedThoughts.push(...taskThoughts);
+                        }
+                    }
+                } else {
+                    // For non-persistent tasks (like thinking-only or internal), always add thoughts to global pool
+                    if (taskThoughts.length > 0) {
+                        accumulatedThoughts.push(...taskThoughts);
+                    }
+                }
+
+                // 6. Cleanup Task from Indicator
+                const postCtx = SillyTavern.getContext();
+                const tIdx = postCtx.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
+                if (tIdx !== -1) {
+                    const tMsg = postCtx.chat[tIdx];
+                    if (tMsg.extra?.polyceph_active_tasks) {
+                        tMsg.extra.polyceph_active_tasks = tMsg.extra.polyceph_active_tasks.filter(t => t.id !== node.id);
+                        import('./ui-utils.js').then(m => m.updateTypingIndicator());
+                    }
+                }
+            }
         }
         // Store step results
-
         const stepResult = resultsByIndex.join('\n\n---\n\n');
         contextVault[step.id] = stepResult;
         contextVault[`s${stepIdx}`] = stepResult;
         if (step.label) contextVault[step.label.trim()] = stepResult;
+
+        // 8. Step Completion Event (Awaited for extension processing)
+        if (stContext.eventSource) {
+            await stContext.eventSource.emit('polyceph-step-finished', {
+                stepIdx,
+                totalSteps,
+                stepId: step.id,
+                label: step.label || `Step ${stepIdx}`,
+                success: true,
+                pipelineId: activePipeline.id
+            });
+        }
     }
 
     // 6. Final Thoughts Persistence
     if (accumulatedThoughts.length > 0 && !signal.aborted) {
-        await persistReasoningMessage(accumulatedThoughts, batchData, userInput);
+        await persistReasoningMessage(accumulatedThoughts, batchData);
     }
 }
