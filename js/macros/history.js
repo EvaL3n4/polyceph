@@ -194,27 +194,32 @@ export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = 
             }
         }
 
-        // Final token-aware trim for the history source itself
-        const finalSource = [];
-        let currentTokens = 0;
-        for (let i = trimmedMessages.length - 1; i >= 0; i--) {
-            const m = trimmedMessages[i];
-
-            // Account for message formatting overhead + invocations
+        // Parallelize token counting for all candidate messages
+        const messageTasks = trimmedMessages.map(async (m) => {
             let mContent = m.mes || '';
             if (m.extra?.tool_invocations && Array.isArray(m.extra.tool_invocations)) {
                 mContent += `\n[[INVOCATIONS:${JSON.stringify(m.extra.tool_invocations)}]]`;
             }
+            const count = await countTokens(mContent, signal);
+            return { m, count };
+        });
 
-            const t = await countTokens(mContent, signal);
-            const overhead = 30; // Estimated formatting overhead (Role markers, Names, separators)
+        const countedMessages = await Promise.all(messageTasks);
 
-            if (currentTokens + t + overhead > usableBudget) {
-                logger.debug(`resolveChatHistory: Budget reached (${currentTokens} + ${t} + ${overhead} > ${usableBudget}). Truncating history.`);
+        // Iterate backwards through counted results and stop when budget is hit
+        const finalSource = [];
+        let currentTokens = 0;
+        const overheadPerMessage = 30; // Estimated formatting overhead (Role markers, Names, separators)
+
+        for (let i = countedMessages.length - 1; i >= 0; i--) {
+            const { m, count } = countedMessages[i];
+
+            if (currentTokens + count + overheadPerMessage > usableBudget) {
+                logger.debug(`resolveChatHistory: Budget reached (${currentTokens} + ${count} + ${overheadPerMessage} > ${usableBudget}). Truncating history.`);
                 break;
             }
             finalSource.unshift(m);
-            currentTokens += t + overhead;
+            currentTokens += count + overheadPerMessage;
         }
 
         logger.debug(`resolveChatHistory: Final source size: ${finalSource.length} messages.`);
@@ -242,7 +247,10 @@ export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = 
 
             const name = m.name || (m.is_user ? 'User' : 'Assistant');
             const messageWithInvocations = `${m.mes || ''}${encodedInvocations}`;
-            const finalContent = (hideSpeakers || m.is_injection) ? messageWithInvocations : `${name}: ${messageWithInvocations}`;
+
+            // Injections and System instructions should NEVER have speaker labels
+            const skipLabel = hideSpeakers || m.is_injection || mRole === 'system';
+            const finalContent = skipLabel ? messageWithInvocations : `${name}: ${messageWithInvocations}`;
 
             if (isCC) {
                 return `[[ROLE:${mRole}]]\n${finalContent}\n[[/ROLE]]`;
