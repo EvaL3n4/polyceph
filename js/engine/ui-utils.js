@@ -114,22 +114,26 @@ export async function removeTypingIndicator() {
     const context = SillyTavern.getContext();
     if (!context.chat) return;
 
-    let modified = false;
+    let modifiedCount = 0;
     context.chat.forEach((msg, idx) => {
         if (msg && msg.extra && (msg.extra.polyceph_typing || msg.extra.polyceph_active_tasks || msg.extra.polyceph_stopping)) {
             delete msg.extra.polyceph_typing;
             delete msg.extra.polyceph_active_tasks;
             delete msg.extra.polyceph_stopping;
-            modified = true;
+            modifiedCount++;
             if (typeof context.updateMessageBlock === 'function') {
                 context.updateMessageBlock(idx, msg);
             }
         }
     });
 
-    if (modified) {
-        logger.debug('Typing indicator(s) and metadata flags removed.');
+    if (modifiedCount > 0) {
+        logger.info(`[Cleanup] Removed ${modifiedCount} orphaned typing indicators.`);
         await ensureChatSaved();
+        
+        // Immediate DOM cleanup
+        $('#polyceph-sticky-container .polyceph-typing-indicator').remove();
+        $('.polyceph-typing-indicator').remove();
     }
 }
 

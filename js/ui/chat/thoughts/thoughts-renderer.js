@@ -17,7 +17,7 @@ export function renderPolycephThoughts(force = false) {
 
     // 0. Global Typing State Check
     const anyTyping = context.chat.some(m => m && m.extra && m.extra.polyceph_typing);
-    if (!anyTyping && settings.stickyTypingIndicator) {
+    if (!anyTyping || !settings.stickyTypingIndicator) {
         $('#polyceph-sticky-container .polyceph-typing-indicator').remove();
     }
 
