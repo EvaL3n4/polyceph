@@ -19,6 +19,10 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
     let accumulatedThoughts = [];
     const totalSteps = activePipeline.steps.length;
     const allResults = [];
+    
+    // Track global indices across steps to ensure swipes match correctly
+    let globalCharIndex = 0;
+    let globalBgIndex = 0;
 
     // 2. Iterate Steps
     for (let i = 0; i < totalSteps; i++) {
@@ -54,13 +58,9 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
         // Pre-calculate message indices for parallel tasks
         step.tasks.forEach(node => {
             if (node.isCharacter || node.persist) {
-                node._charIndex = charMsgOutputCount++;
+                node._charIndex = globalCharIndex++;
             }
-            // Always assign a base background index to keep them ordered
-            node._bgBaseIndex = bgMsgOutputCount;
-            // We don't know how many BGs yet, but we'll use this as a stable anchor
-            // Actually, for BGs it's better to just use a shared counter at the moment of completion
-            // but for character messages it MUST be pre-calculated.
+            node._bgBaseIndex = globalBgIndex; // This will be updated as BGs are emitted
         });
 
         // 1. Pre-register ALL tasks in the step to the typing indicator as "queued"
@@ -223,7 +223,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                         for (const bg of hiddenBackgrounds) {
                             if (signal.aborted) return;
                             if (!options.skipPersistence) {
-                                await handleBackgroundOutput(bg, bgMsgOutputCount++, batchData, taskApi, taskModel);
+                                await handleBackgroundOutput(bg, globalBgIndex++, batchData, taskApi, taskModel);
                             }
                         }
 
