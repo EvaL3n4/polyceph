@@ -105,6 +105,13 @@
                             <option value="4">Debug</option>
                         </select>
                     </div>
+
+                    <div class="polyceph-settings-row" style="margin-top: 15px;">
+                        <div id="polyceph_clear_stuck_btn" class="menu_button polyceph-w-100" style="justify-content: center;">
+                            <i class="fa-solid fa-broom"></i>
+                            <span style="margin-left: 10px;">Clear Stuck Indicators (Emergency)</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -274,8 +281,8 @@
 
                             <i id="polyceph_new_pipeline_btn" class="fa-solid fa-plus polyceph-pointer"
                                 title="Create New Pipeline"></i>
-                            <i id="polyceph_duplicate_pipeline_btn" class="fa-solid fa-copy polyceph-pointer"
-                                title="Duplicate Current Pipeline"></i>
+                            <div id="polyceph_duplicate_pipeline_btn" class="menu_button fa-solid fa-copy"
+                                title="Duplicate Active Pipeline"></div>
                             <i id="polyceph_import_pipeline_btn" class="fa-solid fa-file-import polyceph-pointer"
                                 title="Import Pipeline (JSON)"></i>
                             <i id="polyceph_export_pipeline_btn" class="fa-solid fa-file-export polyceph-pointer"

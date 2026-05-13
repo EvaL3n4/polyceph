@@ -23,7 +23,7 @@ export async function handlePolycephSend(e) {
         if (typeof e.stopPropagation === 'function') e.stopPropagation();
         if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
     }
-    return await processSendAction();
+    return await processSendAction('Polyceph Button');
 }
 
 /**
@@ -58,7 +58,8 @@ export async function interceptSend(e) {
     e.stopPropagation();
     e.stopImmediatePropagation();
 
-    return await processSendAction();
+    const source = e.type === 'keydown' ? 'Enter Key' : 'ST Send Intercept';
+    return await processSendAction(source);
 }
 
 let lastSendTime = 0;
@@ -66,7 +67,13 @@ let lastSendTime = 0;
 /**
  * Core logic for processing a send action.
  */
-async function processSendAction() {
+async function processSendAction(source = 'unknown') {
+    const isRunning = (await import('./js/engine.js')).isPipelineActive();
+    if (isRunning) {
+        logger.warn(`ProcessSendAction: Pipeline already active. Blocking new trigger from ${source}.`);
+        return;
+    }
+
     const now = Date.now();
     if (now - lastSendTime < 500) {
         logger.warn(`Duplicate send action blocked by debouncing.`);

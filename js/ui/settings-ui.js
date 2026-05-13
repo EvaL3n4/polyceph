@@ -250,6 +250,12 @@ export async function addSettingsUI() {
         updateUI();
     });
 
+    getEl('polyceph_clear_stuck_btn')?.addEventListener('click', async () => {
+        const { clearOrphanedIndicators } = await import('../engine.js');
+        await clearOrphanedIndicators();
+        toastr.success('Stuck indicators cleared.', 'Polyceph');
+    });
+
     getEl('polyceph_import_pipeline_btn')?.addEventListener('click', async () => {
         const imported = await importPipeline();
         if (imported) {
