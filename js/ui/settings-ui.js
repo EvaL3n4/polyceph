@@ -76,6 +76,7 @@ function syncSettingsToUI() {
     setValue('polyceph_scan_range_end', settings.scanRangeEnd || 100);
     setValue('polyceph_scan_batch_size', settings.scanBatchSize || 1);
     setValue('polyceph_scan_offset', settings.scanOffset || 0);
+    setValue('polyceph_scan_direction', settings.scanDirection || 'forward');
 }
 
 /**
@@ -337,6 +338,12 @@ export async function addSettingsUI() {
             }
         });
     });
+
+    getEl('polyceph_scan_direction')?.addEventListener('change', (e) => {
+        settings.scanDirection = e.target.value;
+        saveSettings();
+    });
+
     getEl('polyceph_pipeline_selector')?.addEventListener('change', updateScanWarnings);
 
     getEl('polyceph_run_scan_btn')?.addEventListener('click', async () => {
@@ -362,8 +369,9 @@ export async function addSettingsUI() {
         outputEl.value = 'Starting scan...\n';
 
         const pipeline = getActivePipeline();
+        const direction = settings.scanDirection || 'forward';
         
-        await runScan(rangeStart, rangeEnd, batchSize, offset, pipeline, (progress) => {
+        await runScan(rangeStart, rangeEnd, batchSize, offset, direction, pipeline, (progress) => {
             if (progress.status === 'running') {
                 outputEl.value += `Batch ${progress.batchIndex}/${progress.totalBatches} (Msgs ${progress.messageStart}-${progress.messageEnd})...\n`;
                 outputEl.scrollTop = outputEl.scrollHeight;

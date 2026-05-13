@@ -28,6 +28,7 @@ export const defaultSettings = {
     scanRangeEnd: 100,
     scanBatchSize: 1,
     scanOffset: 0,
+    scanDirection: 'forward',
     pipelines: [
         {
             id: 'default',
