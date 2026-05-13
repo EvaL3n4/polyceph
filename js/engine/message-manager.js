@@ -12,8 +12,14 @@ export async function handleBackgroundOutput(bg, bgIndex, batchData, api, model)
         // Update existing background message as a swipe
         const targetBg = batchBgMessages[bgIndex];
         let actualBgIdx = stContext.chat.indexOf(targetBg);
+        
+        // Robust fallback: Find by batchId and index within backgrounds of that batch
         if (actualBgIdx === -1) {
-            actualBgIdx = stContext.chat.findIndex(m => m.extra?.polyceph_batch === batchId && m.extra?.polyceph_hidden && m.mes === targetBg.mes);
+            const batchMsgs = stContext.chat.filter(m => m && m.extra?.polyceph_batch === batchId);
+            const batchBgs = batchMsgs.filter(m => m.extra?.polyceph_hidden);
+            if (bgIndex < batchBgs.length) {
+                actualBgIdx = stContext.chat.indexOf(batchBgs[bgIndex]);
+            }
         }
 
         // Ensure swipes array exists
@@ -80,8 +86,20 @@ export async function handleCharacterOutput(content, thoughts, charIndex, node, 
     if (generateSwipesForBatchId && charIndex < batchCharMessages.length) {
         const targetMessage = batchCharMessages[charIndex];
         let actualMesId = stContext.chat.indexOf(targetMessage);
+        
+        // Robust fallback: Find by batchId and task_id (if available) or index
         if (actualMesId === -1) {
-            actualMesId = stContext.chat.findIndex(m => m.extra?.polyceph_task_id === node.id && m.extra?.polyceph_batch === batchId);
+            const batchMsgs = stContext.chat.filter(m => m && m.extra?.polyceph_batch === batchId);
+            const batchChars = batchMsgs.filter(m => !m.extra?.polyceph_hidden && m.name !== 'Polyceph Reasoning');
+            
+            // Try to find by specific task ID first
+            const byTaskId = batchChars.find(m => m.extra?.polyceph_task_id === node.id);
+            if (byTaskId) {
+                actualMesId = stContext.chat.indexOf(byTaskId);
+            } else if (charIndex < batchChars.length) {
+                // Fallback to index within characters of that batch
+                actualMesId = stContext.chat.indexOf(batchChars[charIndex]);
+            }
         }
 
         if (!Array.isArray(targetMessage.swipes)) {
