@@ -162,6 +162,14 @@ async function processSendAction() {
     } catch (err) {
         logger.error('Pipeline execution failed:', err);
         toastr.error('Pipeline execution failed.', 'Polyceph');
+        
+        // Ensure cleanup if startPipeline fails immediately
+        import('./js/engine/teardown.js').then(m => m.finalizePipelineTeardown(true));
+    } finally {
+        // Double check mutex release if it was captured but not handled by the pipeline
+        if (settings.emulateCoreEvents && context.eventSource && generationMutexEvents) {
+            context.eventSource.emit(generationMutexEvents.MUTEX_RELEASED, { extension_name: MODULE_NAME });
+        }
     }
 }
 

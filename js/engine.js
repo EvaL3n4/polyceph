@@ -65,7 +65,7 @@ export function isPipelineActive() {
     return !!currentPipelineAbortController;
 }
 
-export function stopPipeline() {
+export async function stopPipeline() {
     if (currentPipelineAbortController) {
         logger.info('Pipeline STOP requested.');
         currentPipelineAbortController.abort();
@@ -77,15 +77,25 @@ export function stopPipeline() {
             context.abortGeneration();
         }
 
-        // Mark indicator
+        // Mark indicator as stopping
         const typingIdx = context.chat.findIndex(m => m && m.extra && m.extra.polyceph_typing);
         if (typingIdx !== -1) {
             const userMsg = context.chat[typingIdx];
             userMsg.extra.polyceph_active_tasks = [];
+            userMsg.extra.polyceph_stopping = true;
             updateTypingIndicator();
         }
 
         toastr.warning('Stopping pipeline...', 'Polyceph');
+
+        // Emergency teardown if it takes too long to reach the finally block
+        setTimeout(async () => {
+            if (currentPipelineAbortController) {
+                logger.warn('Pipeline still active after abort. Forcing emergency teardown.');
+                await finalizePipelineTeardown(true);
+                currentPipelineAbortController = null;
+            }
+        }, 500);
     }
 }
 
@@ -141,6 +151,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
 
             // Give extensions a moment to process the "Started" event
             await new Promise(r => setTimeout(r, 100));
+            if (signal.aborted) throw new Error('Aborted');
 
             // Release the early mutex lock from index.js so pre-generation extensions can act
             await stContext.eventSource.emit(generationMutexEvents.MUTEX_RELEASED, { extension_name: MODULE_NAME });
@@ -162,6 +173,7 @@ export async function runPipeline(userInput, generateSwipesForBatchId, triggerin
 
             // Small delay to ensure extension-internal state is synchronized
             await new Promise(r => setTimeout(r, 50));
+            if (signal.aborted) throw new Error('Aborted');
 
             await stContext.eventSource.emit(stContext.eventTypes.GENERATION_AFTER_COMMANDS, 'normal', emulateOptions, false);
 

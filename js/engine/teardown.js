@@ -9,18 +9,22 @@ import { forceHideStopButton } from './ui-utils.js';
  * This function orchestrates the "Event Storm" required to trick ST and other
  * extensions into correctly acknowledging the new message.
  */
-export async function finalizePipelineTeardown() {
+export async function finalizePipelineTeardown(isEmergency = false) {
     const stContext = SillyTavern.getContext();
     if (!stContext.eventSource) {
         logger.warn('Teardown: stContext.eventSource missing. Skipping emulation.');
         return;
     }
 
+    logger.debug(`Teardown: Initiating cleanup (Emergency: ${isEmergency}).`);
+
     // 1. Initial UI cleanup
     forceHideStopButton();
 
-    // 2. Ensure state is committed to disk
-    await ensureChatSaved();
+    // 2. Ensure state is committed to disk (unless emergency/abort)
+    if (!isEmergency) {
+        await ensureChatSaved();
+    }
 
     // 3. Small pause to allow ST background tasks to settle
     await new Promise(resolve => setTimeout(resolve, 200));
@@ -28,19 +32,23 @@ export async function finalizePipelineTeardown() {
     const lastMessageIdx = stContext.chat.length - 1;
     const isPolycephMsg = stContext.chat[lastMessageIdx]?.extra?.polyceph_source === 'polyceph';
 
+    // Always release the mutex if we're here
+    const releaseMutex = async () => {
+        logger.debug('Teardown: Releasing mutex for extension processing.');
+        await stContext.eventSource.emit(generationMutexEvents.MUTEX_RELEASED, { extension_name: MODULE_NAME });
+    };
+
     if (settings.emulateCoreEvents && stContext.eventTypes) {
-        if (isPolycephMsg) {
-            logger.debug('Teardown: Initiating deferred event emulation sequence.');
+        if (isPolycephMsg && !isEmergency) {
+            logger.debug('Teardown: Initiating full event emulation sequence.');
             
             // Re-hide button immediately before events
             forceHideStopButton();
 
-            // A. Release Mutex - DO THIS FIRST so other extensions can process the upcoming events
-            logger.debug('Teardown: Releasing mutex for extension processing.');
-            await stContext.eventSource.emit(generationMutexEvents.MUTEX_RELEASED, { extension_name: MODULE_NAME });
+            // A. Release Mutex
+            await releaseMutex();
 
             // B. Core Message Events
-            logger.debug('Teardown: Firing core message events.');
             await stContext.eventSource.emit(stContext.eventTypes.MESSAGE_RECEIVED, lastMessageIdx);
             await stContext.eventSource.emit(stContext.eventTypes.CHARACTER_MESSAGE_RENDERED, lastMessageIdx);
 
@@ -48,33 +56,28 @@ export async function finalizePipelineTeardown() {
             await new Promise(r => setTimeout(r, 200));
 
             // D. Generation Stop Events
-            logger.debug('Teardown: Firing generation stop events.');
             await stContext.eventSource.emit(stContext.eventTypes.GENERATION_STOPPED, 'normal', { automatic_trigger: true }, false);
             if (stContext.eventTypes.CHARACTER_GENERATION_STOPPED) {
                 await stContext.eventSource.emit(stContext.eventTypes.CHARACTER_GENERATION_STOPPED, lastMessageIdx);
             }
             await stContext.eventSource.emit(stContext.eventTypes.GENERATION_AFTER_DATA, 'normal', { automatic_trigger: true }, false);
-
-            // E. Final Safety Reset
-            setTimeout(() => {
-                forceHideStopButton();
-                stContext.eventSource.emit('polyceph-pipeline-ended');
-            }, 200);
         } else {
-            logger.debug('Teardown: Last message not from Polyceph. Simple release.');
+            logger.debug('Teardown: Simple release sequence.');
             forceHideStopButton();
-            await stContext.eventSource.emit(generationMutexEvents.MUTEX_RELEASED, { extension_name: MODULE_NAME });
+            await releaseMutex();
             await stContext.eventSource.emit(stContext.eventTypes.GENERATION_STOPPED, 'normal', { automatic_trigger: true }, false);
-            stContext.eventSource.emit('polyceph-pipeline-ended');
         }
     } else {
         // No emulation: Just release and signal end
-        logger.debug('Teardown: Emulation disabled. Releasing mutex.');
-        setTimeout(async () => {
-            forceHideStopButton();
-            await stContext.eventSource.emit(generationMutexEvents.MUTEX_RELEASED, { extension_name: MODULE_NAME });
-            await stContext.eventSource.emit(stContext.eventTypes.GENERATION_STOPPED, 'normal', { automatic_trigger: true }, false);
-            stContext.eventSource.emit('polyceph-pipeline-ended');
-        }, 200);
+        logger.debug('Teardown: Emulation disabled or emergency. Releasing mutex.');
+        forceHideStopButton();
+        await releaseMutex();
+        await stContext.eventSource.emit(stContext.eventTypes.GENERATION_STOPPED, 'normal', { automatic_trigger: true }, false);
     }
+
+    // F. Final Safety Reset
+    setTimeout(() => {
+        forceHideStopButton();
+        stContext.eventSource.emit('polyceph-pipeline-ended');
+    }, 100);
 }
