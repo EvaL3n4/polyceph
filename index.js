@@ -276,6 +276,12 @@ async function init() {
 
     const context = SillyTavern.getContext();
     if (context.eventSource && context.eventTypes) {
+        // Scrub orphaned indicators whenever a chat is loaded or character switched
+        context.eventSource.on(context.eventTypes.CHAT_COMPLETED, () => {
+            logger.debug('Chat load detected. Cleaning up orphaned indicators.');
+            clearOrphanedIndicators();
+        });
+
         // Sync chat buttons on settings/state changes
         context.eventSource.on(context.eventTypes.SETTINGS_UPDATED, () => {
             updateChatSelectorOptions();
