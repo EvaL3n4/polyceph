@@ -65,6 +65,19 @@
 
 .polyceph-pointer {
     cursor: pointer;
+    min-width: 32px;
+    min-height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.1s, opacity 0.2s;
+    user-select: none;
+    touch-action: manipulation;
+}
+
+.polyceph-pointer:active {
+    transform: scale(0.9);
+    opacity: 0.7;
 }
 
 .polyceph-field-container {
@@ -153,6 +166,8 @@
     align-items: center;
     justify-content: space-between;
     width: 100%;
+    z-index: 10;
+    position: relative;
 }
 
 .polyceph-management-row {
