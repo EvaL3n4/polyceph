@@ -27,7 +27,7 @@ export function parseMarkdown(text) {
 
     // 3. Italics (*text* or _text_)
     html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
-    html = html.replace(/_(.*?)_/g, '<em>$1</em>');
+    html = html.replace(/\b_(.*?)_\b/g, '<em>$1</em>');
 
     // 4. Strikethrough (~~text~~)
     html = html.replace(/~~(.*?)~~/g, '<del>$1</del>');
