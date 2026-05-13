@@ -242,7 +242,7 @@ export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = 
 
             const name = m.name || (m.is_user ? 'User' : 'Assistant');
             const messageWithInvocations = `${m.mes || ''}${encodedInvocations}`;
-            const finalContent = hideSpeakers ? messageWithInvocations : `${name}: ${messageWithInvocations}`;
+            const finalContent = (hideSpeakers || m.is_injection) ? messageWithInvocations : `${name}: ${messageWithInvocations}`;
 
             if (isCC) {
                 return `[[ROLE:${mRole}]]\n${finalContent}\n[[/ROLE]]`;
