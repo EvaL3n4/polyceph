@@ -86,6 +86,7 @@ export function bindStepEvents() {
         delStepBtn.addEventListener('click', async () => {
             if (activePipeline.isLocked || activePipeline.steps.length === 0) return;
             const step = activePipeline.steps[activeStepIndex];
+            if (!step) return;
             
             const confirmed = !Popup || await Popup.show.confirm(
                 'Delete Step',
