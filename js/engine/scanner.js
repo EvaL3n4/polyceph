@@ -25,7 +25,7 @@ export function stopScan() {
 /**
  * Runs a pipeline across a range of chat messages in batches, without generating chat messages.
  */
-export async function runScan(rangeStart, rangeEnd, batchSize, offset, pipeline, onProgress) {
+export async function runScan(rangeStart, rangeEnd, batchSize, offset, direction, pipeline, onProgress) {
     if (currentScannerAbortController) currentScannerAbortController.abort();
     currentScannerAbortController = new AbortController();
     const signal = currentScannerAbortController.signal;
@@ -60,6 +60,10 @@ export async function runScan(rangeStart, rangeEnd, batchSize, offset, pipeline,
         let batchEnd = Math.min(currentIndex + batchSize, rangeEnd);
         batches.push({ start: currentIndex, end: batchEnd });
         currentIndex += stepSize;
+    }
+
+    if (direction === 'reverse') {
+        batches.reverse();
     }
 
     const totalBatches = batches.length;
