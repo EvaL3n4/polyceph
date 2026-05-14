@@ -16,23 +16,27 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
     if (!ccSettings || !ccSettings.prompts) return text;
 
     // Dynamically import ST's native classes for accurate token management
-    let ChatCompletion, Message;
+    let ChatCompletion, Message, MessageCollection;
     try {
         const oaiModule = await getOpenAIModule();
         ChatCompletion = oaiModule?.ChatCompletion;
         Message = oaiModule?.Message;
+        MessageCollection = oaiModule?.MessageCollection;
 
         if (!ChatCompletion || !Message) {
             const ccModule = await getChatCompletionModule();
             ChatCompletion = ChatCompletion || ccModule?.ChatCompletion;
+            MessageCollection = MessageCollection || ccModule?.MessageCollection;
 
             const msgModule = await getMessagesModule();
             Message = Message || msgModule?.Message;
+            MessageCollection = MessageCollection || msgModule?.MessageCollection;
 
             if (!ChatCompletion || !Message) {
-                throw new Error("SillyTavern native classes (ChatCompletion/Message) could not be resolved from core scripts. Detailed path attempts are available in the console (debug mode).");
+                throw new Error("SillyTavern native classes (ChatCompletion/Message) could not be resolved from core scripts.");
             }
         }
+        logger.debug(`resolveCCMacros: Classes resolved. ChatCompletion: ${!!ChatCompletion}, Message: ${!!Message}, MessageCollection: ${!!MessageCollection}`);
     } catch (err) {
         const errorMsg = `Critical Failure: Could not load native SillyTavern classes for token management. Pipeline aborted to prevent over-budget requests.`;
         logger.error(errorMsg, err);
@@ -186,7 +190,27 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
             if (content.trim()) {
                 const msg = await Message.createAsync('system', content, entry.identifier);
                 if (chatCompletion.canAfford(msg)) {
-                    chatCompletion.add(msg);
+                    // Robust add: handle different ST versions and potential MessageCollection requirement
+                    try {
+                        if (typeof chatCompletion.add === 'function') {
+                            chatCompletion.add(msg);
+                        } else if (chatCompletion.messages && typeof chatCompletion.messages.add === 'function') {
+                            chatCompletion.messages.add(msg);
+                        } else if (chatCompletion.messages && typeof chatCompletion.messages.push === 'function') {
+                            chatCompletion.messages.push(msg);
+                        }
+                    } catch (e) {
+                        if (e.message.includes('MessageCollection') && MessageCollection) {
+                            logger.debug(`Caught MessageCollection error, attempting to wrap message.`);
+                            const collection = new MessageCollection();
+                            if (typeof collection.add === 'function') collection.add(msg);
+                            else if (typeof collection.push === 'function') collection.push(msg);
+                            chatCompletion.add(collection);
+                        } else {
+                            logger.warn(`Failed to add message to ChatCompletion for macro resolution:`, e);
+                            // We still add to staticCCParts so the macro resolves, even if budget tracking failed for this turn
+                        }
+                    }
                     staticCCParts.push(content);
                 }
             }
