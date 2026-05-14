@@ -6,6 +6,11 @@ import { ROLES } from './syntax-definitions.js';
  * Parses raw LLM output to extract special tags like <think>, <ramble>, and <background>.
  */
 export function parseOutputTags(rawOutput, taskId, profileDisplayName, options = {}) {
+    if (typeof rawOutput !== 'string') {
+        logger.warn(`parseOutputTags received non-string input for task ${taskId}:`, rawOutput);
+        rawOutput = String(rawOutput || '');
+    }
+
     const isThinkingTask = options.isThinkingTask || false;
     const isToolTask = options.isToolTask || false;
     const isSilent = options.isSilent || false;

@@ -26,20 +26,28 @@ function _formatHiddenToolHistory(taskMessages, finalResponse, options) {
         }
     }
 
-    // Fallback to role-tagged final response
-    if (finalResponse) {
-        let accumulatedReasoning = '';
-        for (const m of taskMessages) {
-            if (m.role === 'assistant' && m.reasoning_content) {
+    let accumulatedReasoning = '';
+    let accumulatedContent = '';
+
+    for (const m of taskMessages) {
+        if (m.role === 'assistant') {
+            if (m.reasoning_content) {
                 accumulatedReasoning += (accumulatedReasoning ? '\n' : '') + m.reasoning_content;
             }
+            if (m.content) {
+                accumulatedContent += (accumulatedContent ? '\n\n' : '') + m.content;
+            }
         }
+    }
 
+    const finalResult = (accumulatedContent ? (accumulatedContent + '\n\n') : '') + (finalResponse || '');
+
+    if (finalResult.trim() || accumulatedReasoning.trim()) {
         let output = `[[ROLE:assistant]]\n`;
         if (accumulatedReasoning) {
             output += `<think>\n${accumulatedReasoning}\n</think>\n\n`;
         }
-        output += finalResponse;
+        output += finalResult.trim();
 
         // Inject all tool calls
         for (const m of taskMessages) {
@@ -59,8 +67,10 @@ function _formatHiddenToolHistory(taskMessages, finalResponse, options) {
 }
 
 function _formatFullToolHistory(taskMessages, finalResponse, options = {}) {
+    let parts = [];
+
     if (taskMessages.length > 0) {
-        return taskMessages.map(m => {
+        parts = taskMessages.map(m => {
             const role = m.role;
             const roleSuffix = (role === 'tool' && m.tool_call_id) ? `:${m.tool_call_id}` : '';
             let content = m.content || '';
@@ -81,9 +91,16 @@ function _formatFullToolHistory(taskMessages, finalResponse, options = {}) {
                 }
             }
             return `[[ROLE:${role}${roleSuffix}]]\n${content.trim()}\n[[/ROLE]]`;
-        }).join('\n\n');
+        });
     }
     
-    if (finalResponse) return finalResponse;
+    if (finalResponse && finalResponse.trim()) {
+        parts.push(`[[ROLE:assistant]]\n${finalResponse.trim()}\n[[/ROLE]]`);
+    }
+
+    if (parts.length > 0) {
+        return parts.join('\n\n');
+    }
+    
     return "(Generation returned empty)";
 }

@@ -18,7 +18,7 @@ import { reconstructOutput } from './formatters/output-formatter.js';
 export async function generateQuietly(profileName, prompt, api = '', signal = null, options = {}) {
     if (!profileName || profileName === 'none') {
         logger.debug('Template-only task detected (No LLM). Returning expanded template.');
-        return prompt;
+        return { text: prompt };
     }
 
     await waitForApiReady(3000);
