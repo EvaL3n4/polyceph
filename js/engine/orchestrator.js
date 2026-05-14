@@ -13,8 +13,8 @@ import { updateTaskStatus } from './ui-utils.js';
  */
 export async function executePipelineSteps(userInput, generateSwipesForBatchId, signal, options = {}) {
     // 1. Initialize Context
-    const batchData = await initializePipelineContext(userInput, generateSwipesForBatchId, options);
-    const { stContext, activePipeline, pipelineName, contextVault, cleanChat } = batchData;
+    const pipelineContext = await initializePipelineContext(userInput, generateSwipesForBatchId, options);
+    const { stContext, activePipeline, pipelineName, contextVault, cleanChat, batchData } = pipelineContext;
 
     let accumulatedThoughts = [];
     const totalSteps = activePipeline.steps.length;
