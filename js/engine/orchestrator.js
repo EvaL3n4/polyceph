@@ -19,7 +19,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
     let accumulatedThoughts = [];
     const totalSteps = activePipeline.steps.length;
     const allResults = [];
-    
+
     // Track global indices across steps to ensure swipes match correctly
     let globalCharIndex = 0;
     let globalBgIndex = 0;
@@ -78,7 +78,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                 if (!exists) {
                     const prof = availableProfiles.find(p => p.id === node.profile);
                     const profileDisplayName = node.profile === 'none' ? '(Template Only)' : (prof ? prof.name : (node.profile || 'Default'));
-                    
+
                     typingMsg.extra.polyceph_active_tasks.push({
                         id: node.id,
                         label: node.label || `Task ${nodeIndex + 1}`,
@@ -143,7 +143,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                                 if (streamMessageIndex !== -1) {
                                     isStreamingSwipe = true;
                                     const msg = ctx.chat[streamMessageIndex];
-                                    
+
                                     // Initialize swipes if missing
                                     if (!Array.isArray(msg.swipes)) {
                                         msg.swipes = [msg.mes];
@@ -155,7 +155,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                                     msg.swipes.push('...');
                                     msg.swipe_id = msg.swipes.length - 1;
                                     msg.swipe_info.push({ extra: { polyceph_source: 'polyceph', polyceph_batch: batchData.batchId, polyceph_streaming: true } });
-                                    
+
                                     // Set a temp state to indicate we are streaming
                                     msg.extra.polyceph_streaming = true;
 
@@ -210,10 +210,10 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                     }
 
                     const { parsedResult, taskApi, taskModel, profileDisplayName } = taskResult;
-                    
+
                     if (parsedResult) {
                         let { cleanOutput, persistentOutput, thoughts, hiddenBackgrounds } = parsedResult;
-                        
+
                         // Honor the "Hide Success Response" flag
                         if (node.hideSuccessResponse) {
                             logger.debug(`Task ${node.id}: hideSuccessResponse is true. Silencing output.`);
@@ -228,16 +228,16 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                         }
 
                         // Buffer the result for ordered processing
-                        groupResults[k] = { 
-                            node, 
-                            taskResult, 
-                            cleanOutput, 
+                        groupResults[k] = {
+                            node,
+                            taskResult,
+                            cleanOutput,
                             rawOutput: taskResult.rawResponse,
-                            persistentOutput, 
-                            taskApi, 
-                            taskModel, 
-                            streamMessageIndex, 
-                            isStreamingSwipe 
+                            persistentOutput,
+                            taskApi,
+                            taskModel,
+                            streamMessageIndex,
+                            isStreamingSwipe
                         };
                         groupThoughts[k] = thoughts.map(t => ({ ...t, taskId: node.id }));
 
@@ -270,13 +270,13 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                     logger.error(`Task ${nodeIndex} in step ${stepIdx} failed:`, err);
                     anyTaskFailed = true;
                     const partialOutput = err.partialOutput || '';
-                    groupResults[k] = { 
-                        node, 
+                    groupResults[k] = {
+                        node,
                         taskResult: { ...err, node, nodeIndex, taskIdIndx: k + 1 },
                         rawOutput: partialOutput,
-                        cleanOutput: partialOutput, 
-                        persistentOutput: '', 
-                        error: err.message 
+                        cleanOutput: partialOutput,
+                        persistentOutput: '',
+                        error: err.message
                     };
                     if (err.parsedResult) {
                         groupThoughts[k] = err.parsedResult.thoughts || [];
@@ -327,7 +327,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                 // Secondary keys for clean (stripped) output
                 contextVault[`${step.id}_task_${taskIdIndx}_clean`] = cleanOutput;
                 contextVault[`s${stepIdx}k${taskIdIndx}_clean`] = cleanOutput;
-                
+
                 if (node.label && node.label.trim()) {
                     const labelKey = node.label.trim();
                     contextVault[labelKey] = rawOutput;
@@ -346,10 +346,10 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                 if (node.persist || node.isCharacter) {
                     const content = (node.isCharacter && persistentOutput) ? persistentOutput : cleanOutput;
                     logger.debug(`Persisting task result: id=${node.id}, type=${node.outputType}, content_len=${content?.length}, isCharacter=${node.isCharacter}`);
-                    
+
                     if (node.isCharacter) {
                         let streamingHandled = false;
-                        
+
                         // CONSUME accumulated thoughts (even if content is empty/failed)
                         const combinedThoughts = [...accumulatedThoughts, ...taskThoughts];
                         accumulatedThoughts = []; // Clear the global pool
@@ -359,7 +359,7 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
                             const streamMsg = ctx.chat[streamMessageIndex];
                             if (streamMsg && (streamMsg.extra?.polyceph_streaming || isStreamingSwipe)) {
                                 logger.debug(`Finalizing streaming message at index ${streamMessageIndex}. Content length: ${content?.length}`);
-                                
+
                                 streamMsg.mes = content || streamMsg.mes; // Keep existing if content is empty (failure)
                                 streamMsg.extra.polyceph_streaming = false;
                                 streamMsg.extra.polyceph_batch = batchData.batchId;
@@ -446,6 +446,6 @@ export async function executePipelineSteps(userInput, generateSwipesForBatchId, 
     if (accumulatedThoughts.length > 0 && !signal.aborted && !options.skipPersistence) {
         await persistReasoningMessage(accumulatedThoughts, batchData);
     }
-    
+
     return allResults;
 }
