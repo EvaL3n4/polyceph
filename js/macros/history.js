@@ -99,7 +99,7 @@ export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = 
 
         // 1. Select Source
         let source = (options.live === 'true') ?
-            stContext.chat.filter(m => m && !m.extra?.polyceph_typing && !m.is_system && !m.mes?.trim().startsWith('/')) :
+            stContext.chat.filter(m => m && !(m.extra?.polyceph_typing && !m.is_user) && !m.is_system && !m.mes?.trim().startsWith('/')) :
             cleanChat;
 
         // 2. Filter Background Messages

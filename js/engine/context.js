@@ -20,7 +20,7 @@ export async function initializePipelineContext(userInput, generateSwipesForBatc
     const batchId = generateSwipesForBatchId || 'batch_' + generateId();
     
     // Filter out typing indicator from chat for macro resolution to avoid '...' in history
-    const cleanChat = stContext.chat.filter(m => m && !m.extra?.polyceph_typing && !m.is_system && !m.mes?.trim().startsWith('/'));
+    const cleanChat = stContext.chat.filter(m => m && !(m.extra?.polyceph_typing && !m.is_user) && !m.is_system && !m.mes?.trim().startsWith('/'));
 
     // Fetch system prompt
     contextVault['system_prompt'] = getMainSystemPrompt();

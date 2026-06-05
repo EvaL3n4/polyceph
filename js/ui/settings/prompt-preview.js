@@ -18,7 +18,7 @@ export async function showPromptPreview(initialPageIndex = 0) {
     if (initialPageIndex >= totalTasks) initialPageIndex = 0;
 
     // Use the current chat state, excluding typing indicators and system commands
-    const cleanChat = stContext.chat.filter(m => m && !m.extra?.polyceph_typing && !m.is_system && !m.mes?.trim().startsWith('/'));
+    const cleanChat = stContext.chat.filter(m => m && !(m.extra?.polyceph_typing && !m.is_user) && !m.is_system && !m.mes?.trim().startsWith('/'));
 
     // 1. Prepare contextVault with placeholders for task/step outputs
     const contextVault = {};
