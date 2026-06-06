@@ -1,0 +1,78 @@
+{
+  "metadata": {
+    "polyceph_version": "0.10.1.1",
+    "data_version": "1.0.0",
+    "exported_at": "2026-06-06T17:26:16.645Z"
+  },
+  "pipeline": {
+    "name": "Kish\u014dtenketsu (U.Revised)",
+    "steps": [
+      {
+        "id": "step_89n682b",
+        "label": "Tracking",
+        "tasks": [
+          {
+            "id": "task_tcmm118",
+            "profile": "bf3e4cd1-829d-41c9-8288-0705d8c4c283",
+            "preset": "Polyceph Context [3.0.0]",
+            "label": "Tracker",
+            "outputType": "internal",
+            "persist": false,
+            "isCharacter": false,
+            "stripThink": false,
+            "antiLoop": false,
+            "allowTools": false,
+            "template": "[[system]]\nYou track kish\u014dtenketsu arc progression across a roleplay session. You are maintaining a ledger NOT writing the scene.\n\nThe following contains the current context you'll require:\n{{cc_all_prompts}}\n\nThe last few visible chat messages:\n{{chat_history|last:5|no_extensions:true}}\n\nYour job:\n1. Read the Author's Note (<authorsNote></authorsNote>, <note></note>, or similar). Identify the four beats: Ki (introduction/status quo), Sh\u014d (development/escalation), Ten (turn/twist/disruption), Ketsu (resolution/consequence).\n2. Check the previous ledger entries above. What was the LAST completed beat?\n3. Based on recent visible chat, is that beat actually finished, or still in progress? If still in progress, do not advance.\n4. Name the CURRENT beat and the NEXT beat. If this is the first run and no ledger exists, start at Ki.\n5. Write exactly ONE sentence describing what the NEXT beat requires\u2014concrete and active. Not \"tension builds\" but \"Shepherd Nil arrives and destabilizes the status quo.\"\n\nRespond in this exact format:\n\n<ramble>\nCurrent beat: [Ki / Sh\u014d / Ten / Ketsu]\nNext beat: [next beat name]\nStatus: [just started / underway / nearly complete]\nRequirement: [one concrete sentence of what must happen next]\n</ramble>\n\nThe <ramble> block passes to the next step. Do not add anything outside these tags.\n[[/]]",
+            "_bgBaseIndex": 0,
+            "_charIndex": 0
+          }
+        ]
+      },
+      {
+        "id": "step_1",
+        "label": "Director",
+        "tasks": [
+          {
+            "id": "task_1",
+            "label": "Notes",
+            "profile": "bf3e4cd1-829d-41c9-8288-0705d8c4c283",
+            "preset": "Polyceph Context [3.0.0]",
+            "useSystem": false,
+            "outputType": "thinking",
+            "persist": false,
+            "isCharacter": false,
+            "stripThink": true,
+            "antiLoop": false,
+            "allowTools": false,
+            "hideSuccessResponse": false,
+            "skipSuccessRecursion": false,
+            "template": "[[system]]\nYou are a narrative director. You are simply issuing stage directions without writing the scene itself.\n\nThe Author's Note contains the kish\u014dtenketsu arc structure:\n{{authorsNote}}\n\nLorebook context and character definitions:\n{{cc_all_prompts}}\n\nArc tracker report from the previous step:\n{{s1}}\n\nYour job:\n1. The arc tracker above tells you the current beat and what it requires. Trust it.\n2. Issue 1-2 concrete stage directions that advance the scene toward the requirement. Be specific. Not \"the tension rises\" but \"Ryo's accusation lands\" or \"Rin surfaces new information that contradicts what she believed.\"\n3. If the tracker says we are at Ten (the twist), name the conflict explicitly\u2014what breaks, what truth surfaces, how everything that came before recontextualizes. This is the permission the character model needs to act decisively.\n\nRespond with only your stage directions. No analysis, no caveats, no \"perhaps.\" Issue them as orders.\n[[/]]",
+            "_charIndex": 0,
+            "_bgBaseIndex": 0
+          }
+        ]
+      },
+      {
+        "id": "step_qijm8om",
+        "label": "Character",
+        "tasks": [
+          {
+            "id": "task_zsikmp9",
+            "profile": "1794f966-16a9-4ef2-8c29-1621765ef9ec",
+            "preset": "Polyceph Character [3.0.0]",
+            "label": "Final",
+            "outputType": "character",
+            "persist": true,
+            "isCharacter": true,
+            "stripThink": false,
+            "antiLoop": false,
+            "allowTools": false,
+            "template": "{{cc_all_prompts}}\n[[system]]\nNarrative direction for this response:\n{{s2}}\n\nYou MUST advance the scene according to this direction. You will make them happen without hedging, acting passively, or faffing about. The direction above tells you what occurs; your role is to embody the character as it occurs.\n[[/]]",
+            "_charIndex": 0,
+            "_bgBaseIndex": 0
+          }
+        ]
+      }
+    ]
+  }
+}
