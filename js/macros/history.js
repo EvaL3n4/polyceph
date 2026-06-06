@@ -108,17 +108,19 @@ export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = 
             cleanChat;
 
         // 2. Filter Background Messages
+        // When bg_last:N is specified, the macro resolves to ONLY the most recent
+        // N <background> messages. Non-background messages are dropped, and if
+        // there are zero background messages the result is empty — this is the
+        // documented "Keep only the last N background messages" semantic and
+        // makes the macro safe to call in a fresh chat (e.g. the first run of
+        // a Tracker-style step that hasn't yet emitted any ledger entries).
         let filteredMessages = source;
         if (options.bg_last !== undefined) {
             const bgLimit = parseInt(options.bg_last);
-            const backgroundMsgs = source.filter(m => m && m.extra?.polyceph_hidden);
-
-            if (backgroundMsgs.length > bgLimit) {
-                const keepBgs = backgroundMsgs.slice(-bgLimit);
-                filteredMessages = source.filter(m => {
-                    if (!m.extra?.polyceph_hidden) return true;
-                    return keepBgs.includes(m);
-                });
+            if (!isNaN(bgLimit) && bgLimit >= 0) {
+                const backgroundMsgs = source.filter(m => m && m.extra?.polyceph_hidden);
+                const keepBgs = bgLimit === 0 ? [] : backgroundMsgs.slice(-bgLimit);
+                filteredMessages = source.filter(m => m && m.extra?.polyceph_hidden && keepBgs.includes(m));
             }
         }
 

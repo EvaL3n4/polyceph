@@ -65,7 +65,7 @@ Route data between tasks using these handlebars macros/macros:
 - `{{user_input}}`: The original text from the chat box, the last user message.
 - `{{chat_history|last:10|bg_last:2|live:true|no_extensions:true}}`: Advanced history filtering. Automatically filters out system messages and slash commands. Does not include the last user message.
     - `last:N`: Limit total messages to N.
-    - `bg_last:N`: Keep only the last N background messages (interspersed).
+    - `bg_last:N`: Keep ONLY the most recent N `<background>` messages. Non-background messages are dropped. If there are zero `<background>` messages in the chat, the macro resolves to an empty string. Use this to read a Tracker-style cross-run ledger; safe to call on a fresh chat (first run, no ledger yet) — you get empty, not the full history.
     - `live:true`: Use real-time chat (includes earlier pipeline results).
     - `no_extensions:true`: Exclude SillyTavern extension injections (trackers, status bars, etc.). Injections are included by default.
 - `{{s1}}`, `{{s2}}`: The combined output of all tasks in a previous Step.
