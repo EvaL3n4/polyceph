@@ -31,10 +31,17 @@ export async function initializePipelineContext(userInput, generateSwipesForBatc
         if (!m) return false;
         if (m.extra?.polyceph_typing && !m.is_user) return false;
         if (m.is_system) return false;
+        // ST's "Hide from context" toggle. The flag is a global Symbol
+        // (Symbol.for('ignore') == IGNORE_SYMBOL in scripts/constants.js),
+        // not a JSON-serializable property — so it only exists in-memory on
+        // the live chat object. Without this filter, hidden messages stay
+        // in cleanChat, get past the budget trim, and bloat {{cc_all_prompts}}
+        // by tens of thousands of tokens on long chats.
+        if (m.extra?.[Symbol.for('ignore')]) return false;
         if (m.mes?.trim().startsWith('/')) return false;
         // Streaming placeholder: only drop when the message carries a polyceph
         // management flag, so a real character line that happens to read "..."
-        // is left untouched.
+        // is not affected.
         if (m.extra) {
             const isPolycephManaged =
                 m.extra.polyceph_typing ||

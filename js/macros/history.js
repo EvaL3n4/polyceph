@@ -98,8 +98,13 @@ export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = 
         const includeInjections = options.no_extensions !== 'true';
 
         // 1. Select Source
+        // Note: this live-source filter is a one-liner subset of the
+        // cleanChat predicate in engine/context.js. It only handles the
+        // cheap "definitely drop" cases. A full sync with the cleanChat
+        // filter is a known code-smell; the bloat fix here mirrors the
+        // ST 'ignore' symbol that the main filter also checks.
         let source = (options.live === 'true') ?
-            stContext.chat.filter(m => m && !(m.extra?.polyceph_typing && !m.is_user) && !m.is_system && !m.mes?.trim().startsWith('/')) :
+            stContext.chat.filter(m => m && !(m.extra?.polyceph_typing && !m.is_user) && !m.is_system && !m.extra?.[Symbol.for('ignore')] && !m.mes?.trim().startsWith('/')) :
             cleanChat;
 
         // 2. Filter Background Messages
