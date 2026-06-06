@@ -19,8 +19,31 @@ export async function initializePipelineContext(userInput, generateSwipesForBatc
     };
     const batchId = generateSwipesForBatchId || 'batch_' + generateId();
     
-    // Filter out typing indicator from chat for macro resolution to avoid '...' in history
-    const cleanChat = stContext.chat.filter(m => m && !(m.extra?.polyceph_typing && !m.is_user) && !m.is_system && !m.mes?.trim().startsWith('/'));
+    // Filter out typing indicator from chat for macro resolution to avoid '...' in history.
+    // We also drop messages whose `mes` is exactly the streaming placeholder '...' — they
+    // appear on a polyceph swipe that has not yet been streamed into (e.g. the previous
+    // run was aborted, or a swipe placeholder was left in place). Without this guard the
+    // placeholder leaks into {{cc_all_prompts}} / {{chat_history}} and the LLM sees a
+    // stray '...' as the last assistant turn. The `polyceph_*` extra check keeps it
+    // conservative: a real character line that happens to be the literal text "..." is
+    // not affected.
+    const cleanChat = stContext.chat.filter(m => {
+        if (!m) return false;
+        if (m.extra?.polyceph_typing && !m.is_user) return false;
+        if (m.is_system) return false;
+        if (m.mes?.trim().startsWith('/')) return false;
+        // Streaming placeholder: only drop when the message carries a polyceph
+        // management flag, so a real character line that happens to read "..."
+        // is left untouched.
+        if (m.extra) {
+            const isPolycephManaged =
+                m.extra.polyceph_typing ||
+                m.extra.polyceph_streaming ||
+                m.extra.polyceph_source;
+            if (isPolycephManaged && (m.mes || '').trim() === '...') return false;
+        }
+        return true;
+    });
 
     // Fetch system prompt
     contextVault['system_prompt'] = getMainSystemPrompt();
