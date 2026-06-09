@@ -104,7 +104,7 @@ export async function resolveChatHistory(text, cleanChat, stContext, isDryRun = 
         // filter is a known code-smell; the bloat fix here mirrors the
         // ST 'ignore' symbol that the main filter also checks.
         let source = (options.live === 'true') ?
-            stContext.chat.filter(m => m && !(m.extra?.polyceph_typing && !m.is_user) && !m.is_system && !m.extra?.[Symbol.for('ignore')] && !m.mes?.trim().startsWith('/')) :
+            stContext.chat.filter(m => m && !(m.extra?.polyceph_typing && !m.is_user) && !m.is_system && !m.extra?.[Symbol.for('ignore')] && !m.mes?.trim().startsWith('/') && !(m.extra && (m.extra.polyceph_typing || m.extra.polyceph_streaming || m.extra.polyceph_source) && (m.mes || '').trim() === '...')) :
             cleanChat;
 
         // 2. Filter Background Messages

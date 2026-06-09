@@ -65,8 +65,8 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
 
     // Cache World Info for the duration of this macro resolution
     let cachedWI = null;
-    const getCachedWI = async (chatSource) => {
-        if (!cachedWI) cachedWI = await getWorldInfoForChat(chatSource);
+    const getCachedWI = async () => {
+        if (!cachedWI) cachedWI = await getWorldInfoForChat(cleanChat);
         return cachedWI;
     };
 
@@ -115,11 +115,11 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
                     return wrapRole(prompt.role || 'system', desc);
                 }
                 case 'worldInfoBefore': {
-                    const freshWI = await getCachedWI(chatSource);
+                    const freshWI = await getCachedWI();
                     return wrapRole(prompt.role || 'system', freshWI.before || '');
                 }
                 case 'worldInfoAfter': {
-                    const freshWI = await getCachedWI(chatSource);
+                    const freshWI = await getCachedWI();
                     return wrapRole(prompt.role || 'system', freshWI.after || '');
                 }
                 case 'dialogueExamples': return wrapRole(prompt.role || 'system', charFields.mesExamples || char?.mes_example || '');
@@ -266,7 +266,7 @@ export async function resolveCCMacros(text, cleanChat, stContext, wiPrompt, cont
     while ((wiMatch = wiRegex.exec(result)) !== null) {
         const fullMatch = wiMatch[0];
         const part = wiMatch[2];
-        const freshWI = await getCachedWI(cleanChat);
+        const freshWI = await getCachedWI();
         let replacement = '';
         if (part === 'before') replacement = freshWI.before;
         else if (part === 'after') replacement = freshWI.after;

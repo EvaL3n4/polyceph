@@ -381,6 +381,12 @@ test('live filter drops ST "Hide from context" user messages', () => {
     assert.equal(out.length, 0);
 });
 
+test('live filter drops character messages whose mes is the streaming placeholder', () => {
+    const out = liveFilter([fixtures.swipeStreamingPlaceholder]);
+    assert.equal(out.length, 0,
+        '{{chat_history|live:true}} must drop streaming placeholders just like the main cleanChat does');
+});
+
 console.log('');
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
